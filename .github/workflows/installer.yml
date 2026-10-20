@@ -4,10 +4,11 @@
 # Once in the repository's Settings > Pages: Source = GitHub Actions.
 name: Installer
 
+# organvave-1: manual only until the site, the identity and the pictures exist and GitHub Pages is on (the deploy job
+# fails without Pages). Then restore the push trigger:
+#   push: {branches: [main], paths: ["firmware/**", "web/**", "tools/**", "assets/**", "build.sh", "docs/emu/**",
+#          ".github/workflows/installer.yml"]}
 on:
-  push:
-    branches: [main]
-    paths: ["firmware/**", "web/**", "tools/**", "assets/**", "build.sh", "docs/emu/**", "docs/fmini-ad*", ".github/workflows/installer.yml"]
   workflow_dispatch:
 
 permissions:

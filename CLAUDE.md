@@ -14,10 +14,8 @@ toolchain setup.
 - Nothing here has been tested on a real FM-1 unless the owner says so. Say it in the closing message of any firmware change.
 - When something ships, remind the owner of two things: the site is published by the "Installer" GitHub Actions workflow a few
   minutes after the push to `main`; and GitHub Releases are created by the owner by hand (the session's API returns 403).
-- Commit trailers, on every commit (and the pull request footer from the session's reminder):
-  `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` and `Claude-Session: <the session URL given in the system reminder>`.
-- Branches `fmug-1` and `main` are kept equal: `git push origin fmug-1` then `git push origin HEAD:main`. A stop hook refuses to
-  end a session with unpushed commits on `fmug-1`.
+- Commit trailers, on every commit: the `Co-Authored-By` and `Claude-Session` lines the session's reminder gives.
+- organvave-1 has one branch, `main`: `git push origin main`. A stop hook refuses to end a session with unpushed commits.
 - Do not change the project when the owner only asks a question.
 
 ## Commands (from the repository root)
