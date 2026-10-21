@@ -143,6 +143,8 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   crosstalk), per-wheel bus levels in RAM (int16: 1.6 KB per manual). Pruning only if a test shows it inaudible.
 - **Envelopes and click** (`initEnvelopes`): the attack and release envelopes over 128 samples with the noise burst,
   generated in `tools/` with a fixed seed; each wheel keeps its place across four 32-sample blocks.
+  **(owner)** No extras beyond setBfree here: no always-on leakage (the crosstalk above is the only bleed, heard when a
+  contact closes) and no click tone / noise-frequency control (the click stays setBfree's contact bounce).
 - **Percussion**: from the 4' or 2 2/3' bus contact whatever the drawbar, 1' muted while on, single trigger, 1 s / 4 s to
   -60 dB, soft -6 dB, normal lowers the swell (0.605); HIPASS_PERCUSSION and KEYCOMPRESSION as setBfree builds them.
 - **Drawbar law**: **(owner)** linear, as setBfree (8 -> 4 = -6 dB).
