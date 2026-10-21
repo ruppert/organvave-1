@@ -163,6 +163,11 @@ edited in a pop-up as FMini-1's FX page did.
 
 ## Interface
 
+**(owner, 2026-10-21)** The whole interface is drawn after the real console's panel: its look and its controls (drawbars
+with their brown / black / white caps and engraved footages, the rocker tabs of percussion and vibrato, the scanner's
+rotary selector, the wood and the chrome trim, the half-moon rotor switch), not FMini-1's synth panel. The screens are
+mocked up first with the firmware's own drawing code, for the owner's approval, then built in 0.1.0.
+
 27 keys (F3..G5) with OCT- / OCT+; the upper manual on the keys and MIDI, the lower manual and the pedals on MIDI.
 Pages: DRAWBARS (the nine bars drawn; SELECT moves a window of four, KNOB 1..4 set 0..8 with detents), PERC / VIB, the
 effects (above), VOICE (click, crosstalk, tuning 60 / 50 Hz / equal, level), LOWER / PEDAL. A button switches the rotor
@@ -185,7 +190,7 @@ designed one; the static budget of the new functions.
 
 | version | contents |
 | --- | --- |
-| 0.0.x | the house: identity (`FM-1_8XY`), names, README / CREDITS, docs, the workflow manual only; the slimming |
+| 0.0.x | the house: identity (`FM-1_8XY`), names, README / CREDITS, docs, the workflow manual only; the slimming; the UI mock-ups |
 | 0.1.0 | tone generator, upper manual, click, the drawbar page, about 8 presets; FMUG removed |
 | 0.2.0 | percussion, vibrato / chorus |
 | 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive, the effects section |

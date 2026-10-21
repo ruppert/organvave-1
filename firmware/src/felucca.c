@@ -21,10 +21,10 @@
 #define FELUCCA_UART 1           /* TRS MIDI IN on UART1 / PH8 */
 #endif
 #ifndef FELUCCA_ID
-#define FELUCCA_ID "FM-1_900"    /* package identity (build.py: the .fwsc marker string) */
+#define FELUCCA_ID "FM-1_800"    /* package identity (build.py: the .fwsc marker string); organvave-1 is FM-1_8XY */
 #endif
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "v1.6.1" /* Felucca's version: the editor INFO ("FELUCCA ..."); build.py --release X.Y */
+#define FELUCCA_VERSION "v1.6.1" /* Felucca's version: the editor INFO ("FELUCCA ..."); organvave-1's is core.h's */
 #endif
 
 /* ------------------------------------------------------------- HAL --- */

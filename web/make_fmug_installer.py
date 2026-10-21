@@ -27,7 +27,7 @@ def product_of(raw):
 def main(pkg, out, version="1.4.2"):
     raw = Path(pkg).read_bytes()
     product = product_of(raw)
-    if not re.fullmatch(r"FM-1_9\d\d", product) or b"FELUCCA-LOADER-1" not in raw:
+    if not re.fullmatch(r"FM-1_8\d\d", product) or b"FELUCCA-LOADER-1" not in raw:
         raise SystemExit(f"{pkg}: not a Felucca-loader package (identity {product!r})")
     html = (HERE / "site_fmini.html").read_text(encoding="utf-8")
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8")) for f in ("fm1pkg.js", "fm1ota.js", "fm1backup.js"))

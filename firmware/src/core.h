@@ -6,6 +6,12 @@
  * Sections: sizes, parameters, voices and engines, the track and the song, system. */
 #include <stdint.h>
 
+/* organvave-1's version: the splash and ABOUT show it; the workflow, the emulator and the installer read this line;
+ * build.py --release X.Y sets it. (FELUCCA_VERSION in felucca.c is Felucca's: the editor INFO "FELUCCA ...") */
+#ifndef ORGANVAVE_VERSION
+#define ORGANVAVE_VERSION "v0.0.1"
+#endif
+
 /* ------------------------------------------------------------ sizes --- */
 #define NVOICE 12                /* FMini-1: 12 voices when the instrument is set to POLY */
 #define NPART 1                  /* the instrument: one part */

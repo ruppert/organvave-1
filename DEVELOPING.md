@@ -1,4 +1,8 @@
-# Developing FMini-1
+# Developing OrganVave-1
+
+OrganVave-1 (repository `organvave-1`) is a tonewheel-organ firmware seeded from FMini-1; [ORGAN.md](ORGAN.md) is its plan.
+Until 0.1.0 the tree still runs FMini-1's instrument (FMUG) as a scaffold, so most of this guide still describes FMini-1's
+engine and UI; the generic parts (architecture, method, tests, gotchas) hold for the organ.
 
 The guide for whoever (person or Claude) changes this firmware, or starts another one from it. [CLAUDE.md](CLAUDE.md) is the short
 list of rules and commands; [BUILDING.md](BUILDING.md) installs the toolchain; [web/EDITOR_PROTOCOL.md](web/EDITOR_PROTOCOL.md) is the
@@ -194,9 +198,9 @@ first (a test with the number to hit), then the code.
 - The browser emulator: `web/emu/felucca_web.c` compiles the firmware's sources against a simulated FM-1;
   `web/emu/build_wasi.sh` (wasi-sdk 25, no Emscripten) writes `docs/emu/`. The preset lab uses the same wasm.
 - On a push to `main` that touches `firmware/`, `web/`, `tools/`, `assets/`, `docs/emu/`, `docs/fmini-ad*`, `build.sh` or the workflow,
-  `.github/workflows/installer.yml` builds the firmware and publishes the page, the package (`fmini-1-X.Y.Z.fwsc`), the editor and the
-  emulator to <https://ruppert.github.io/fmini-1/> (a few minutes). Documents at the root do not trigger it.
-- **Release checklist:** bump `FMINI_VERSION`; build; run the tests; regenerate `docs/emu` and `docs/index.html`; refresh the
+  `.github/workflows/installer.yml` builds the firmware and publishes the page, the package (`organvave-1-X.Y.Z.fwsc`), the editor and
+  the emulator to <https://ruppert.github.io/organvave-1/>. It is manual only (workflow_dispatch) until GitHub Pages is on (0.5.0).
+- **Release checklist:** bump `ORGANVAVE_VERSION` (`core.h`); build; run the tests; regenerate `docs/emu` and `docs/index.html`; refresh the
   screenshots if screens changed (`tools/readme_shots.c`, then `tools/gen_readme_art.py` and the `assets/site/*.webp` it implies);
   update the protocol doc and the site text; commit; push `main`; give the owner the `.fwsc`. The owner creates the
   GitHub Release by hand. Unless the owner says otherwise, nothing has been tested on a real FM-1: say so.
@@ -218,20 +222,22 @@ first (a test with the number to hit), then the code.
 
 ## 11. Starting another firmware from this base
 
-For example a tonewheel-organ instrument for the FM-1. A checklist, in the order that avoids rework.
+OrganVave-1 is one (ORGAN.md has its plan). A checklist, in the order that avoids rework.
 
 1. **A new repository seeded from this one** (clone it, set a new `origin`, keep the history and `LICENSE`: the code is GPL-3.0-only
    and Felucca's authorship stays in the headers; add the new work to `CREDITS.md`). Use a product name without a trademark.
-2. **Identity**: `FELUCCA_ID` in `firmware/src/felucca.c` is the package identity the installer checks (`FM-1_900` here; the
-   installer page accepts `FM-1_9xx`, `web/make_fmug_installer.py`); give the new firmware its own, then the product name, version
-   (`FMINI_VERSION`), splash (`tools/gen_splash.py`, `assets/`), `web/site_fmini.html`, README and the workflow's Pages URL.
+2. **Identity**: `FELUCCA_ID` in `firmware/src/felucca.c` is the package identity (`FM-1_800` here, release builds `FM-1_8XY`;
+   FMini-1 is `FM-1_9xx`). The update loader always answers `ota-FM-1_900` and the installers compare only the model (the text
+   before `_`), so any FM-1 package installs over any other by design; the installer page refuses a package of another family
+   (`web/make_fmug_installer.py`). Then the product name, the version (`ORGANVAVE_VERSION` in `core.h`), the splash
+   (`tools/gen_splash.py`), the loader's USB name (`usb.c` STR2, and the port filters in `web/fm1ota.js` and
+   `tools/fm1_install.py`), the site, README and the workflow's Pages URL.
 3. **The engine**: a new `eng_<name>.c` included in `engines.c`, a new entry **appended** to `ENGINES[]`, `NENGINES` and an `ENGI_`
    constant; fill `engine_t` (eight EDIT parameters, presets, `note_on`, `render`, `block` for free-running state, `mem` for state
-   that belongs to a part). Start by copying `eng_fmug.c`'s skeleton: its patch bytes, `fmug_set_patch` / `fmug_eff` hand-off,
-   factory table and generated header.
-4. **The UI**: copy `ui_fmug.c` and `fmug_app.c` and change the tables first (pages, knobs, extras), then the drawing. Seven pages of
-   four knobs and a cursor over the extras is the model; a control that does not fit a knob (nine drawbars) is an extra with its own
-   `FK_` kind and its own drawing next to `fa_fader`.
+   that belongs to a part). `eng_fmug.c` shows the patch bytes, the `fmug_set_patch` / `fmug_eff` hand-off, the factory table and
+   the generated header.
+4. **The UI**: change the tables first (pages, knobs, extras), then the drawing. A control that does not fit a knob (nine drawbars)
+   is an extra with its own `FK_` kind and its own drawing.
 5. **The bank**: copy `fmug_bank.py` / `gen_fmug_presets.py` / `preset_lab.py`, keep the physical units, and make the generator
    check its own output.
 6. **Editor and protocol**: new commands take the next free numbers in `EDITOR_PROTOCOL.md`, with an INFO tag so the editor can tell
@@ -239,17 +245,12 @@ For example a tonewheel-organ instrument for the FM-1. A checklist, in the order
 7. **Tests with the code**, and the static budget for the new render functions (`tests/target_budget.py` FUNCS).
 8. **Site, installer, emulator** last: they are generated from the same sources.
 
-**If the instrument is an organ, read `firmware/engines/src/eng_wheel.c` first** (MIT, 297 lines): WHEEL is already a tonewheel-style
-additive organ with nine sine partials at the drawbar footages (16' 5 1/3' 8' 4' 2 2/3' 2' 1 3/5' 1 1/3' 1'; levels 0..8, about
-3 dB a step), 16 registrations plus SUB / BODY / TOP trims (eight knobs cannot hold nine bars), percussion (2nd or 3rd harmonic,
-normal or soft, fast or slow, single trigger, the 1' bar silent as on the real circuit), key click, a per-voice soft overdrive,
-and a cheap rotary speaker (two rotors split near 800 Hz, slow / fast with different ramp times, amplitude and Doppler modulation, all
-folded into per-block gains: no delay line). Free-running wheels and a per-block update are the efficient design (cost per sample and partial: a table lookup and a multiply-add). What its header does not mention, and a dedicated firmware might add (check the code before assuming either way): one shared
-set of generators that every key draws from (WHEEL keeps its free-running phases per part and voice), the real generators' gear-ratio tuning (slightly off equal temperament), crosstalk and leakage between keys and bars, the scanner vibrato / chorus, a preamp
-stage and a rotary speaker with real delay lines. Treat the WHEEL source as a reference and a baseline to beat, with the same
-method as section 10 (circuit, reference measurements, float model, fixed point, tests). Mind the licences: WHEEL is MIT (copying
-it into a GPL-3.0-only tree is fine with its notice kept); setBfree (a B3 emulator in C) is GPL-2.0-or-later as recalled when this
-was written: verify before reusing anything beyond ideas.
+**The organ.** OrganVave-1 does not use Felucca's organ engine (`firmware/engines/src/eng_wheel.c` stays in the submodule, read-only
+and unused, not even as a starting point: owner's decision). The organ and the rotary speaker are ported from setBfree
+(GPL-2.0-or-later, compatible with this GPL-3.0-only tree; keep its notices in the derived files): float model and reference in
+`tools/`, then fixed point, then host tests against the reference, as section 10. Files without a licence header in setBfree
+(`b_overdrive/overdrive.c`, `b_whirl/b_whirl.h`, `src/defaultpgm.h`, `src/memstream.h`) are not copied; the preamp's FIRs are
+designed anew. ORGAN.md has the block-by-block map, the budget and the decisions.
 
 ## 12. Gotchas collected
 

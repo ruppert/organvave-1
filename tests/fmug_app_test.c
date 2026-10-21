@@ -86,7 +86,7 @@ int main(int argc, char **argv)
         if (!same) { printf("splash != ABOUT\n"); return 1; }
         for (i = 0; i < 240u * 240u; i++) {
             uint32_t x = i % 240u, y = i / 240u;
-            if (y >= 218u && y < 232u && x >= 232u - text_w(&AF_S, FMINI_VERSION) && x < 232u && sp[i] != swap16(FMINI_SPLASH_PAL[FMINI_SPLASH[i]])) diff++;
+            if (y >= 218u && y < 232u && x >= 232u - text_w(&AF_S, ORGANVAVE_VERSION) && x < 232u && sp[i] != swap16(ORGANVAVE_SPLASH_PAL[ORGANVAVE_SPLASH[i]])) diff++;
         }
         if (!diff) { printf("splash: no version text\n"); return 1; }
     }

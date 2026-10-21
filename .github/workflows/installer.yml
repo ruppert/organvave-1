@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# FMini-1: builds the firmware and publishes the web installer (web/make_fmug_installer.py: one page with the package
-# inside) on GitHub Pages, at https://ruppert.github.io/fmini-1/.
+# organvave-1: builds the firmware and publishes the web installer (web/make_fmug_installer.py: one page with the package
+# inside) on GitHub Pages, at https://ruppert.github.io/organvave-1/ (the site is FMini-1's until 0.5.0).
 # Once in the repository's Settings > Pages: Source = GitHub Actions.
 name: Installer
 
@@ -46,14 +46,14 @@ jobs:
 
       - name: Make the installer page
         run: |
-          VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/fmug_app.c)
+          VERSION=$(sed -n 's/^#define ORGANVAVE_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
           mkdir -p _site
           python3 web/make_fmug_installer.py build/felucca.fwsc _site/index.html "$VERSION"
-          cp build/felucca.fwsc "_site/fmini-1-$VERSION.fwsc"
+          cp build/felucca.fwsc "_site/organvave-1-$VERSION.fwsc"
           cp docs/fmini-ad.mp4 docs/fmini-ad-poster.jpg _site/
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
           cp -r docs/emu _site/emu                 # the browser emulator (web/emu/build_wasi.sh builds docs/emu)
-          echo "FMini-1 v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "organvave-1 v$VERSION" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-pages-artifact@v3
         with:

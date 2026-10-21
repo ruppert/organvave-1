@@ -1,8 +1,11 @@
 # CLAUDE.md
 
-FMini-1: Minimoog-style firmware for the M-VAVE FM-1 (a fork of [Felucca](https://github.com/hugelton/Felucca), GPL-3.0-only,
-by Leo Kuroshita). Author of the fork: Guilherme Ruppert. Repository: <https://github.com/ruppert/fmini-1>. Site, installer,
-patch editor and browser emulator: <https://ruppert.github.io/fmini-1/>.
+OrganVave-1: a tonewheel-organ firmware for the M-VAVE FM-1 by Guilherme Ruppert, seeded from his FMini-1 (a fork of
+[Felucca](https://github.com/hugelton/Felucca), GPL-3.0-only, by Leo Kuroshita). Repository: <https://github.com/ruppert/organvave-1>
+(the repository and file names are lower case; the product name is written OrganVave-1). The plan is [ORGAN.md](ORGAN.md): the
+organ and the rotary are ported from setBfree; Felucca's `eng_wheel.c` is not used. Until 0.1.0 the firmware still runs
+FMini-1's instrument (FMUG) as a scaffold. Package identity `FM-1_800` (releases `FM-1_8XY`). GitHub Pages is off and the
+Installer workflow is manual only until 0.5.0.
 
 The long guide is [DEVELOPING.md](DEVELOPING.md) (architecture, the filter, presets, editor, tests, release, and how to start a
 new firmware from this base). Read it before changing the engine, the UI or the tests. [BUILDING.md](BUILDING.md) is the
@@ -12,8 +15,9 @@ toolchain setup.
 
 - The owner writes Portuguese (pt-BR): answer in Portuguese. Code, comments, commit messages and documents are English.
 - Nothing here has been tested on a real FM-1 unless the owner says so. Say it in the closing message of any firmware change.
-- When something ships, remind the owner of two things: the site is published by the "Installer" GitHub Actions workflow a few
-  minutes after the push to `main`; and GitHub Releases are created by the owner by hand (the session's API returns 403).
+- When something ships, remind the owner: the site will be published by the "Installer" workflow once GitHub Pages is on
+  (until then the workflow is manual only and nothing is published); GitHub Releases are created by the owner by hand (the
+  session's API returns 403).
 - Commit trailers, on every commit: the `Co-Authored-By` and `Claude-Session` lines the session's reminder gives.
 - organvave-1 has one branch, `main`: `git push origin main`. A stop hook refuses to end a session with unpushed commits.
 - Do not change the project when the owner only asks a question.
@@ -28,7 +32,8 @@ python3 tools/fmug_filter.py                # regenerate firmware/src/eng_fmug_f
 python3 tools/gen_fmug_presets.py           # regenerate firmware/src/eng_fmug_presets.h from tools/fmug_bank.py
 python3 tools/preset_lab.py --wasm docs/emu/felucca.wasm --out DIR     # render and measure the 100 factory patches
 WASI_SDK=<wasi-sdk-25.0 dir> sh web/emu/build_wasi.sh                    # docs/emu (the browser emulator)
-python3 web/make_fmug_installer.py build/felucca.fwsc docs/index.html X.Y.Z  # the installer page (docs/index.html)
+python3 web/make_fmug_installer.py build/felucca.fwsc docs/index.html X.Y.Z  # the installer page (only with a real SDK's package)
+python3 tools/gen_splash.py                 # firmware/src/organvave_splash.h from docs/organvave-splash.png
 ```
 
 A single host test is one `cc` line (they are in `tests/run_tests.sh`); `tests/fmug_filter_test.c` and `tests/fmug_app_test.c`
@@ -48,8 +53,10 @@ BUILDING.md has the SDK clone). If a download is refused by the network allowlis
   a conversion of the bank (`tools/fmug_retune.py` is the pattern) and new levels (`tools/fmug_levels.json`).
 - Raw CUTOFF / EMPHASIS bytes changed meaning in 1.7.0: a stored patch, user preset, sound file or library entry from 1.6.x sounds
   different. Any change of a stored value's meaning needs a note in `web/EDITOR_PROTOCOL.md` and, if possible, a migration.
-- The version is `FMINI_VERSION` in `firmware/src/fmug_app.c`; the workflow, the emulator and the installer read it from there.
-  (`FELUCCA_VERSION` in `felucca.c` is Felucca's and stays.) After a version bump rebuild `docs/emu` and `docs/index.html`.
+- The version is `ORGANVAVE_VERSION` in `firmware/src/core.h`; the workflow, the emulator and `build.py --release` use it.
+  (`FELUCCA_VERSION` in `felucca.c` is Felucca's and stays: the editor INFO.) After a version bump rebuild `docs/emu`.
+- The interface is drawn after the real console's panel (owner): drawbars, rocker tabs, the vibrato selector, wood and chrome.
+- No trademarks in product, patch or screen names.
 - New source files carry `SPDX-License-Identifier: GPL-3.0-only`. Credit outside work in `CREDITS.md`.
 - New tests are registered in `tests/run_tests.sh`. `tests/target_budget.txt` (static loop-instruction cost of the render
   functions) and `tests/golden.txt` (render hashes) change only on purpose: `BUDGET_UPDATE=1 python3 tests/target_budget.py

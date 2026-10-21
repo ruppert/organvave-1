@@ -2,8 +2,18 @@
 
 Felucca is Leo Kuroshita's ([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)). It uses and
 thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICENSING.md](LICENSING.md) and [LICENSES/](LICENSES/)).
-organvave-1 is built on FMini-1 and Felucca with Felucca's other engines, its sample sets and its second core taken
-out; the credits for those parts stay below, marked "(Felucca: not in this firmware)".
+OrganVave-1 (Guilherme Ruppert) is built on FMini-1 and Felucca with Felucca's other engines, its sample sets and its
+second core taken out; the credits for those parts stay below, marked "(Felucca: not in this firmware)".
+
+- OrganVave-1's organ and rotary speaker (in development, ORGAN.md) are ported from [setBfree](https://github.com/pantherb/setBfree)
+  by Fredrik Kilander, Robin Gareus, Ken Restivo and Will Panther (GPL-2.0-or-later): its tone generator, keys and buses,
+  tapering and crosstalk, envelopes and key click, percussion, scanner vibrato / chorus, preamp curve and the rotary speaker
+  `whirl.c`, rewritten in integer C with the same algorithms and data; the derived files keep its copyright notices. setBfree's
+  rotary cites, and its constants come from: J. Herrera, C. Hanson, J. S. Abel, "Discrete Time Emulation of the Leslie
+  Speaker", AES 127th Convention, 2009 (speeds and time constants); J. Smith, S. Serafin, J. Abel, D. Berners, "Doppler
+  simulation and the Leslie", DAFx-02, 2002 (the horn's angle-dependent impulse responses, read off a figure by setBfree's
+  author)
+- The splash picture is the owner's
 
 - **[Hügelton Instruments](https://hugelton.com)** (Leo Kuroshita, [@kurogedelic](https://github.com/kurogedelic)):
   Felucca itself; (not in this firmware: the PHASE engine's waveforms (a C port of the oscillator of

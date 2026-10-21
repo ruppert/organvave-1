@@ -251,7 +251,7 @@ typedef char cfg_len_ok[sizeof CFG_DESC == CFG_LEN ? 1 : -1];
 static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
 static const uint8_t STR1[] = {36, 3, 'G', 0, 'u', 0, 'i', 0, 'l', 0, 'h', 0, 'e', 0, 'r', 0, 'm', 0, 'e', 0, ' ', 0, 'R', 0, 'u', 0, 'p', 0, 'p', 0, 'e', 0, 'r', 0, 't', 0};   /* the manufacturer */
 #ifdef FELUCCA_LOADER
-static const uint8_t STR2[] = {30, 3, 'F', 0, 'M', 0, 'i', 0, 'n', 0, 'i', 0, '-', 0, '1', 0, ' ', 0, 'U', 0, 'p', 0, 'd', 0, 'a', 0, 't', 0, 'e', 0};
+static const uint8_t STR2[] = {38, 3, 'O', 0, 'r', 0, 'g', 0, 'a', 0, 'n', 0, 'V', 0, 'a', 0, 'v', 0, 'e', 0, '-', 0, '1', 0, ' ', 0, 'U', 0, 'p', 0, 'd', 0, 'a', 0, 't', 0, 'e', 0};   /* OrganVave-1 Update (the loader's name) */
 #else
 static const uint8_t STR2[] = {20, 3, 'F', 0, 'M', 0, '-', 0, '1', 0, ' ', 0, 'M', 0, 'i', 0, 'd', 0, 'i', 0};   /* FM-1 Midi (the MIDI / audio device's name) */
 #endif

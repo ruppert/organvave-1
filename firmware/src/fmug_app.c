@@ -697,7 +697,6 @@ static uint32_t fa_sound_keys(void)
  * with the version).
  * SELECT picks a line, ALGORITHM changes it (or opens MIDI CC / ABOUT); GLO goes back, then closes. The settings are
  * kept in the flash settings record (settings.c set_bytes, rows 7 and 8). */
-#define FMINI_VERSION "v1.7.0"
 #define FA_NPG 44u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+8+4+4+4+8) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
@@ -1162,8 +1161,8 @@ static void fa_draw(void)
     }
 }
 
-#include "fmini_splash.h"
-static void fa_splash(void)                              /* the picture (assets/fmini-splash.png), the version bottom right: power-on (3 s, main.c) and ABOUT */
+#include "organvave_splash.h"
+static void fa_splash(void)                              /* the picture (docs/organvave-splash.png), the version bottom right: power-on (3 s, main.c) and ABOUT */
 {
     uint32_t band, x, y;
     for (band = 0; band < 2u; band++) {
@@ -1171,8 +1170,8 @@ static void fa_splash(void)                              /* the picture (assets/
         cv_oy = -(int32_t)band * 120;
         for (y = band * 120u; y < band * 120u + 120u; y++)
             for (x = 0; x < 240u; x++)
-                cv_pset((int32_t)x, (int32_t)y, FMINI_SPLASH_PAL[FMINI_SPLASH[y * 240u + x]]);
-        cv_text_on(232 - text_w(&AF_S, FMINI_VERSION), 220, &AF_S, FMINI_VERSION, FA_CR, 0);
+                cv_pset((int32_t)x, (int32_t)y, ORGANVAVE_SPLASH_PAL[ORGANVAVE_SPLASH[y * 240u + x]]);
+        cv_text_on(232 - text_w(&AF_S, ORGANVAVE_VERSION), 220, &AF_S, ORGANVAVE_VERSION, FA_CR, 0);
         cv_oy = 0;
         cv_blit(0, band * 120u);
     }

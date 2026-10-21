@@ -121,7 +121,7 @@ export class Updater {
     for (const input of this.access.inputs.values()) {
       if (input.state === "disconnected") continue;
       // never probe other gear: by name, unless the player picked a port (a firmware that names its USB device differently)
-      if (this.portName ? input.name !== this.portName : !/fm-1|fmini|felucca|ota|composite|sinco|usb-midi/i.test(input.name || "")) continue;
+      if (this.portName ? input.name !== this.portName : !/fm-1|fmini|felucca|organvave|ota|composite|sinco|usb-midi/i.test(input.name || "")) continue;
       const output = outs.find((o) => o.name === input.name && o.state !== "disconnected");
       if (!output) continue;
       try { await input.open(); await output.open(); } catch (_) { continue; }
@@ -176,7 +176,7 @@ export class Updater {
   async install(image, product, onStep) {
     const step = onStep || (() => {});
     const dev = await this.find((id) => !IS_OTA(id));
-    this.portName = null;                          // (the picked port was for the running firmware: the loader is ours, FMini-1 Update)
+    this.portName = null;                          // (the picked port was for the running firmware: the loader is ours, OrganVave-1 Update)
     if (!dev) throw fail("notfound", "FM-1 not found (USB cable, and no other app using it?)");
     const [model] = product.split("_");
     if (dev.id.model !== model) { dev.link.close(); throw fail("model", `the device is ${dev.id.text}, the package is for ${product}`); }
