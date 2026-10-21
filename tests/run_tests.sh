@@ -11,6 +11,7 @@
 #                   that never ends, a hang), the voice budget, the host CPU per sample against tests/cpu_baseline.txt.
 #                   GOLDEN_UPDATE=1 / BUDGET_UPDATE=1 rewrite them: merge only the lines you mean to change.
 # target cost (tests/target_budget.py): the render loops in the pi32v2 disassembly against tests/target_budget.txt.
+# the organ: tests/organ_test.c (the tone generator against numbers from setBfree's: tools/setbfree_ref/compare.py).
 # the instrument: tests/fmug_app_test.c (every screen, SAVE / PRESETS, the factory patches' extras), fmug_filter_test.c
 #                   (the ladder), fmug_fx_test.c (reverbs, delays, choruses, TUBE, OUTPUT), speaker_test.c (SPEAKER EQ),
 #                   audio_test.c (overload protection, fades, DMA diagnostics).
@@ -66,6 +67,8 @@ run "update loader: other app -> this build" "$OUT/ldr_test" "$OUT/old.fwsc" bui
 
 $HC -o "$OUT/fmug_app_test" tests/fmug_app_test.c -lm
 run "the instrument's app: the screen of every page, SAVE / PRESETS over 100 factory and the user patches, each patch its ARP, LFO, FX, LEVEL and octave, a new preset goes HOME" "$OUT/fmug_app_test" "$OUT/fa"
+$HC -O2 -o "$OUT/organ_test" tests/organ_test.c -lm
+run "the organ's tone generator against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases' levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence" "$OUT/organ_test"
 $HC -O2 -o "$OUT/fmug_filter_test" tests/fmug_filter_test.c -lm
 run "the filter (Minimoog ladder): sings a sine from silence (pitch, THD, 1 V/oct over the keys, KBD 0), the CUTOFF dial's singing pitches, the EMPHASIS dial's passband loss and peak, no runaway" "$OUT/fmug_filter_test"
 $HC -O2 -o "$OUT/fmug_fx_test" tests/fmug_fx_test.c -lm
