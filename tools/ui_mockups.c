@@ -194,61 +194,98 @@ static void footer(const char *s)
 }
 
 /* the drawbars' colours by footage, as on the console: brown 16' 5 1/3', white the octaves, black the mutations */
-static const char *const FOOT_A[9] = {"16", "5", "8", "4", "2", "2", "1", "1", "1"};
-static const char *const FOOT_B[9] = {"", "1/3", "", "", "2/3", "", "3/5", "1/3", ""};
+static const char *const FOOT[9] = {"16'", "5", "8'", "4'", "2", "2'", "1", "1", "1'"};
+static const char *const FRAC[9] = {"", "1/3", "", "", "2/3", "", "3/5", "1/3", ""};   /* (the mutations' fractions, a line below) */
 static int32_t bar_kind(int32_t k) { return k < 2 ? 0 : (k == 4 || k == 6 || k == 7) ? 2 : 1; }   /* 0 brown 1 white 2 black */
 
-/* one drawbar hanging from the slot at y0: its stem out by `v` (0..8) steps of `step` px with the numbers on it, the cap */
+/* one drawbar hanging under the wood at y0, as on the console: a dark stem with two light rails and the numbers v .. 1 on
+ * it (v = how far it is pulled, 0..8, `step` px each), then the cap: a block with a lit top face and a darker front with
+ * its finger notch. The cap's colour by footage (brown, white, black); its footage engraved small on the top face */
 static void drawbar(int32_t cx, int32_t y0, int32_t v, int32_t step, int32_t w, int32_t k, int hot, int compact)
 {
-    static const uint16_t BODY[3] = {C_BROWN, C_WHITE, C_BLACK}, EDGE[3] = {C_BROWN2, C_WHITE2, C_BLACK2},
-                          NUM[3] = {C_CREAM, C_BLACK, C_CREAM};
-    int32_t kind = bar_kind(k), sw = w - 6, x = cx - sw / 2, len = v * step, capw = w, caph = compact ? 14 : 20, i;
+    static const uint16_t TOP[3] = {RGB565(0x7a, 0x52, 0x46), RGB565(0xf4, 0xf1, 0xea), RGB565(0x5a, 0x5a, 0x5a)},
+                          FRONT[3] = {RGB565(0x4c, 0x2c, 0x24), RGB565(0xc4, 0xc0, 0xb6), RGB565(0x2c, 0x2c, 0x2c)},
+                          NOTCH[3] = {RGB565(0x30, 0x1a, 0x14), RGB565(0x9a, 0x96, 0x8e), RGB565(0x18, 0x18, 0x18)},
+                          ENGR[3] = {RGB565(0xc8, 0xa8, 0x98), RGB565(0x6a, 0x66, 0x5e), RGB565(0xa8, 0xa8, 0xa8)};
+    int32_t kind = bar_kind(k), sw = w * 2 / 3, x = cx - sw / 2, len = v * step, caph = compact ? 16 : 28, ct = caph * 11 / 20, i;
     char n[2] = {0, 0};
-    if (len) {
-        cv_rect(x, y0, sw, len, BODY[kind]);
-        cv_rect(x, y0, 1, len, EDGE[kind]);
-        cv_rect(x + sw - 1, y0, 1, len, mix(BODY[kind], C_SLOT, 120));
-        for (i = 1; i <= v && !compact; i++) {                /* the numbers 1..8 on the stem */
-            n[0] = (char)('0' + i);
-            ctext(cx, y0 + (i - 1) * step + (step - 7) / 2, &AF_X, n, NUM[kind], BODY[kind]);
-            cv_rect(x + 2, y0 + i * step - 1, sw - 4, 1, mix(BODY[kind], NUM[kind], 60));
+    if (len) {                                                /* the stem */
+        cv_rect(x, y0, sw, len, RGB565(0x24, 0x22, 0x20));
+        cv_rect(x + 1, y0, 1, len, RGB565(0xd8, 0xd4, 0xcc));
+        cv_rect(x + sw - 2, y0, 1, len, RGB565(0xd8, 0xd4, 0xcc));
+        cv_rect(x, y0, 1, len, RGB565(0x10, 0x0f, 0x0e));
+        cv_rect(x + sw - 1, y0, 1, len, RGB565(0x10, 0x0f, 0x0e));
+        for (i = 0; i < v && !compact; i++) {                 /* v at the top .. 1 above the cap */
+            n[0] = (char)('0' + v - i);
+            ctext(cx, y0 + i * step + (step - 7) / 2, &AF_X, n, RGB565(0xe8, 0xe4, 0xdc), RGB565(0x24, 0x22, 0x20));
         }
     }
-    rrect_v(cx - capw / 2, y0 + len, capw, caph, 3, mix(EDGE[kind], C_CREAM, kind == 1 ? 0 : 40), BODY[kind]);
-    if (hot)
-        rrect(cx - capw / 2 - 2, y0 + len + caph + 2, capw + 4, 2, 1, C_ORANGE);
-    if (!compact) {                                           /* the footage engraved on the cap */
-        ctext(cx, y0 + len + (FOOT_B[k][0] ? 3 : 6), &AF_X, FOOT_A[k], NUM[kind], BODY[kind]);
-        if (FOOT_B[k][0])
-            ctext(cx, y0 + len + 11, &AF_X, FOOT_B[k], NUM[kind], BODY[kind]);
-    } else {
-        ctext(cx, y0 + len + 4, &AF_X, FOOT_A[k], NUM[kind], BODY[kind]);
+    {   /* the cap: a shadow, the lit top face, the front, the notch */
+        int32_t xc = cx - w / 2, yc = y0 + len;
+        rrect(xc + 1, yc + 1, w, caph, 2, RGB565(0x06, 0x05, 0x05));
+        rrect_v(xc, yc, w, ct, 2, mix(TOP[kind], RGB565(0xff, 0xff, 0xff), 40), TOP[kind]);
+        rrect_v(xc, yc + ct - 2, w, caph - ct + 2, 2, FRONT[kind], mix(FRONT[kind], RGB565(0, 0, 0), 60));
+        cv_rect(xc + 1, yc + ct - 2, w - 2, 1, mix(FRONT[kind], RGB565(0xff, 0xff, 0xff), 50));
+        rrect(cx - w / 4, yc + ct + 1, w / 2, caph - ct - 4, 1, NOTCH[kind]);
+        (void)ENGR;
+        if (hot)
+            rrect(xc - 1, yc + caph + 3, w + 2, 2, 1, C_ORANGE);
     }
 }
-/* the black slot the bars come out of, with its chrome lips */
+/* the shadow the wood rail casts on the black panel, where the bars come out */
 static void bar_slot(int32_t x, int32_t y, int32_t w)
 {
-    cv_rect(x, y, w, 6, C_SLOT);
-    chrome(x, y - 2, w, 2);
-    cv_rect(x, y + 6, w, 1, C_CHR_LO);
+    int32_t j;
+    for (j = 0; j < 5; j++)
+        cv_rect(x, y + j, w, 1, mix(RGB565(0x02, 0x02, 0x02), C_PANEL, j * 50));
 }
 
-/* a rocker tab (the console's white stop tabs): `down` = its lower half pressed in; two lines of engraved text */
-static void tab(int32_t x, int32_t y, int32_t w, int32_t h, const char *l1, const char *l2, int down, int hot)
+/* a rocker tab as on the console: tall, cream, the upper word, the function in the middle, the lower word; `up` = the
+ * upper half pressed in (that word is the one in force, drawn dark, the other grey); the pressed half darker */
+static void tab3(int32_t x, int32_t y, int32_t w, int32_t h, const char *top, const char *m1, const char *m2, const char *bot,
+                 int up, int hot)
 {
-    rrect(x - 1, y - 1, w + 2, h + 2, 4, hot ? C_ORANGE : C_SLOT);
-    if (down)
-        rrect_v(x, y, w, h, 3, C_TAB, C_TABDN);
-    else
-        rrect_v(x, y, w, h, 3, C_TABDN, C_TAB);
-    if (!l2[0]) {                                             /* one line: centred */
-        ctext(x + w / 2, y + (h - 7) / 2, &AF_X, l1, C_BLACK, mix(C_TAB, C_TABDN, 128));
-        return;
+    uint16_t lit = RGB565(0xf0, 0xec, 0xe0), mid = RGB565(0xd2, 0xcc, 0xbe), dark = RGB565(0xa8, 0xa2, 0x94), ink = RGB565(0x2a, 0x28, 0x24),
+             off = RGB565(0x8a, 0x86, 0x7e);
+    int32_t hh = h / 2;
+    rrect(x - 3, y - 3, w + 6, h + 6, 4, hot ? C_ORANGE : RGB565(0x06, 0x06, 0x06));
+    rrect(x - 1, y - 1, w + 2, h + 2, 3, RGB565(0x30, 0x2e, 0x2a));
+    rrect_v(x, y, w, hh + 2, 3, up ? dark : lit, up ? mid : mid);         /* the upper half */
+    rrect_v(x, y + hh, w, h - hh, 3, up ? mid : mid, up ? lit : dark);    /* the lower half */
+    ctext(x + w / 2, y + 6, &AF_X, top, up ? ink : off, up ? dark : lit);
+    if (m2[0]) {
+        ctext(x + w / 2, y + hh - 10, &AF_X, m1, ink, mid);
+        ctext(x + w / 2, y + hh + 2, &AF_X, m2, ink, mid);
+    } else {
+        ctext(x + w / 2, y + hh - 4, &AF_X, m1, ink, mid);
     }
-    ctext(x + w / 2, y + 6, &AF_X, l1, C_BLACK, down ? C_TAB : C_TABDN);
-    ctext(x + w / 2, y + 17, &AF_X, l2, C_BLACK, down ? mix(C_TAB, C_TABDN, 128) : C_TAB);
+    ctext(x + w / 2, y + h - 13, &AF_X, bot, up ? off : ink, up ? lit : dark);
 }
+
+/* a slide switch on an engraved grey plate (the rotary speaker's SLOW STOP FAST, the horn's character): a glossy black
+ * ball in a slot, the positions' names below; pos 0 .. n-1 */
+static void slide_switch(int32_t x, int32_t y, int32_t w, const char *title, const char *const *names, int32_t n, int32_t pos, int hot)
+{
+    uint16_t plate = RGB565(0x3c, 0x3a, 0x37), plate2 = RGB565(0x2c, 0x2a, 0x28), engr = RGB565(0xb8, 0xb4, 0xac);
+    int32_t h = 58, sx0 = x + 22, sx1 = x + w - 22, sy = y + 30, k, bx;
+    rrect(x - 2, y - 2, w + 4, h + 4, 5, hot ? C_ORANGE : RGB565(0x08, 0x08, 0x08));
+    rrect_v(x, y, w, h, 4, plate, plate2);
+    cv_rect(x + 3, y + 1, w - 6, 1, RGB565(0x5a, 0x58, 0x54));
+    ctext(x + w / 2, y + 5, &AF_S, title, engr, plate);
+    rrect(sx0 - 8, sy - 7, sx1 - sx0 + 16, 14, 7, RGB565(0x14, 0x13, 0x12));          /* the slot */
+    rrect(sx0 - 6, sy - 1, sx1 - sx0 + 12, 2, 1, RGB565(0x6c, 0x6a, 0x66));
+    for (k = 0; k < n; k++) {
+        int32_t lx = sx0 + (sx1 - sx0) * k / (n - 1);
+        ctext(lx, y + h - 13, &AF_X, names[k], k == pos ? C_AMBER : engr, mix(plate, plate2, 200));
+    }
+    bx = sx0 + (sx1 - sx0) * pos / (n - 1);
+    disc(bx + 1, sy + 2, 11, RGB565(0x05, 0x05, 0x05));                               /* the ball: shadow, body, gloss */
+    disc(bx, sy, 11, RGB565(0x1c, 0x22, 0x20));
+    disc4(4 * bx - 2, 4 * sy - 2, 4 * 8, RGB565(0x2c, 0x34, 0x31));
+    disc4(4 * bx - 10, 4 * sy - 12, 4 * 4, RGB565(0x7a, 0x86, 0x82));
+    disc4(4 * bx - 12, 4 * sy - 14, 6, RGB565(0xd8, 0xe4, 0xe0));
+}
+
 /* a chickenhead knob with a chrome skirt (the vibrato selector, the amplifier's knobs): pointer angle in degrees, 0 = up */
 static void knob(int32_t cx, int32_t cy, int32_t r, int32_t deg, int hot)
 {
@@ -286,35 +323,43 @@ static void lamp(int32_t x, int32_t y, const char *label, int on)
 /* ------------------------------------------------------------ screens --- */
 static const int8_t REG[9] = {8, 8, 8, 0, 0, 0, 0, 0, 0};    /* the patch shown: a classic gospel registration */
 
+/* a row of drawbars under the wood: `n` bars from footage k0, the hot ones (the knobs' four) marked, their footages below */
+static void bar_row(int32_t x0, int32_t pitch, int32_t w, int32_t step, const int8_t *v, int32_t k0, int32_t n, int32_t hot0,
+                    int32_t ylab)
+{
+    int32_t i;
+    bar_slot(x0 - pitch / 2, 26, pitch * n);
+    for (i = 0; i < n; i++) {
+        int32_t cx = x0 + i * pitch, hot = i >= hot0 && i < hot0 + 4;
+        drawbar(cx, 26, v[i], step, w, k0 + i, hot, 0);
+        ctext(cx, ylab, &AF_X, FOOT[k0 + i], hot ? C_ORANGE : C_DIM, C_PANEL);
+        if (FRAC[k0 + i][0])
+            ctext(cx, ylab + 9, &AF_X, FRAC[k0 + i], hot ? C_ORANGE : C_DIM, C_PANEL);
+    }
+}
+
 static void scr_drawbars(void)
 {
-    int32_t k, x0 = 12, pitch = 24;
     static const int8_t R[9] = {8, 8, 8, 6, 0, 0, 0, 0, 4};
     header("UPPER", "07 GOSPEL");
-    bar_slot(4, 34, 232);
-    for (k = 0; k < 9; k++)
-        drawbar(x0 + 4 + k * pitch, 40, R[k], 16, 20, k, k >= 2 && k <= 5, 0);
-    for (k = 2; k <= 5; k++) {                                /* the four the knobs move, numbered over the slot */
-        char n[2] = {(char)('1' + k - 2), 0};
-        ctext(x0 + 4 + k * pitch, 27, &AF_X, n, C_ORANGE, C_PANEL);
-    }
-    ctext(120, 206, &AF_N, "888 6000 4", C_CREAM, C_PANEL);
-    footer("KNOBS: BARS 3-6   SELECT: MOVE THE FOUR");
+    bar_row(20, 25, 22, 15, R, 0, 9, 2, 180);
+    ctext(120, 203, &AF_N, "888 6000 4", C_CREAM, C_PANEL);
+    footer("KNOBS: THE FOUR MARKED   SELECT: MOVE THEM");
 }
 
 static void scr_home(void)
 {
     int32_t k;
     header("ORGAN", "UPPER");
-    ctext(120, 34, &AF_L, "07", C_AMBER, C_PANEL);
-    ctext(120, 70, &AF_M, "GOSPEL", C_CREAM, C_PANEL);
-    bar_slot(48, 96, 144);
+    ctext(120, 36, &AF_L, "07", C_AMBER, C_PANEL);
+    ctext(120, 72, &AF_M, "GOSPEL", C_CREAM, C_PANEL);
+    cv_rect(44, 94, 152, 1, C_PANEL2);
     for (k = 0; k < 9; k++)
-        drawbar(56 + k * 16, 102, REG[k], 6, 14, k, 0, 1);
-    lamp(22, 178, "PERC 3RD", 1);
-    lamp(22, 194, "VIB C3", 1);
-    lamp(130, 178, "ROTOR FAST", 1);
-    lamp(130, 194, "DRIVE 4", 0);
+        drawbar(56 + k * 16, 100, REG[k], 7, 14, k, 0, 1);
+    lamp(22, 182, "PERC 3RD", 1);
+    lamp(22, 198, "VIB C3", 1);
+    lamp(130, 182, "ROTOR FAST", 1);
+    lamp(130, 198, "DRIVE 4", 0);
     footer("PRESETS: CHOOSE   OCT- / OCT+: OCTAVE");
 }
 
@@ -323,66 +368,39 @@ static void scr_percvib(void)
     static const char *const L[6] = {"V1", "C1", "V2", "C2", "V3", "C3"};
     int32_t k;
     header("PERC / VIB", "07 GOSPEL");
-    ltext(10, 33, &AF_X, "PERCUSSION", C_DIM, C_PANEL);
-    cv_rect(66, 36, 166, 1, C_PANEL2);
-    tab(8, 44, 52, 30, "PERC", "ON", 1, 1);
-    tab(66, 44, 52, 30, "VOLUME", "SOFT", 0, 0);
-    tab(124, 44, 52, 30, "DECAY", "FAST", 1, 0);
-    tab(182, 44, 52, 30, "HARMONIC", "THIRD", 1, 0);
-    ltext(10, 94, &AF_X, "VIBRATO", C_DIM, C_PANEL);
-    cv_rect(54, 97, 178, 1, C_PANEL2);
-    tab(8, 108, 52, 30, "VIBRATO", "UPPER", 1, 0);
-    tab(66, 108, 52, 30, "VIBRATO", "LOWER", 0, 0);
+    tab3(10, 36, 48, 74, "ON", "PERCUS-", "SION", "OFF", 1, 1);
+    tab3(68, 36, 48, 74, "SOFT", "PERC", "VOLUME", "NORMAL", 0, 0);
+    tab3(126, 36, 48, 74, "FAST", "PERC", "DECAY", "SLOW", 1, 0);
+    tab3(184, 36, 48, 74, "THIRD", "PERC", "HARM", "SECOND", 1, 0);
+    tab3(10, 130, 48, 74, "ON", "VIBRATO", "UPPER", "OFF", 1, 0);
+    tab3(68, 130, 48, 74, "ON", "VIBRATO", "LOWER", "OFF", 0, 0);
     {   /* the scanner's selector: V1 C1 V2 C2 V3 C3 around a chickenhead knob, pointing at C3 */
-        int32_t cx = 180, cy = 150, r = 34;
+        int32_t cx = 178, cy = 172, r = 34;
+        ctext(cx, 126, &AF_X, "VIBRATO & CHORUS", C_DIM, C_PANEL);
         for (k = 0; k < 6; k++) {
             int32_t a = -100 + 40 * k, tx = cx + (r * sin8(a) >> 8), ty = cy - (r * cos8(a) >> 8);
             ctext(tx, ty - 3, &AF_X, L[k], k == 5 ? C_AMBER : C_CREAM, C_PANEL);
         }
         knob(cx, cy, 18, 100, 0);
     }
-    footer("KNOBS: THE TABS   ALGO: SELECTOR");
+    footer("KNOBS: THE FOUR TABS   ALGO: SELECTOR");
 }
 
 static void scr_rotary(void)
 {
+    static const char *const SPD[3] = {"SLOW", "STOP", "FAST"}, *const HORN[3] = {"DEFAULT", "MELLOW", "SHARP"};
     header("ROTARY", "07 GOSPEL");
-    {   /* the half-moon switch: SLOW left, FAST right, the lever thrown to FAST */
-        int32_t cx = 120, cy = 92, r = 40, x, y;
-        for (y = cy - r; y <= cy; y++)                         /* the half disc */
-            for (x = cx - r; x <= cx + r; x++) {
-                int32_t a, b, n = 0;
-                for (b = 0; b < 4; b++)
-                    for (a = 0; a < 4; a++) {
-                        int32_t dx = 4 * x + a - 4 * cx - 2, dy = 4 * y + b - 4 * cy - 2;
-                        n += dx * dx + dy * dy <= 16 * r * r && dy <= 0;
-                    }
-                px_blend(x, y, mix(C_BLACK2, C_BLACK, (cy - y) * 256 / r), n * 16);
-            }
-        chrome(cx - r - 4, cy + 1, 2 * r + 8, 3);
-        thick(4 * cx + 2, 4 * cy - 2, 4 * (cx + 28) + 2, 4 * (cy - 22), 7, C_CHR);
-        disc(cx + 28, cy - 22, 5, C_CHR_HI);
-        disc(cx, cy - 1, 4, C_CHR_LO);
-        rtext(cx - r - 8, cy - 12, &AF_S, "SLOW", C_DIM, C_PANEL);
-        ltext(cx + r + 8, cy - 12, &AF_S, "FAST", C_AMBER, C_PANEL);
-    }
-    {   /* MODEL and HORN: two rows of tabs, the lit one in */
-        ltext(10, 116, &AF_X, "MODEL", C_DIM, C_PANEL);
-        tab(58, 110, 54, 26, "CLASSIC", "", 1, 1);
-        tab(116, 110, 54, 26, "LIGHT", "", 0, 0);
-        ltext(10, 148, &AF_X, "HORN", C_DIM, C_PANEL);
-        tab(58, 142, 54, 26, "DEFAULT", "", 1, 0);
-        tab(116, 142, 54, 26, "MELLOW", "", 0, 0);
-        tab(174, 142, 54, 26, "SHARP", "", 0, 0);
-    }
+    slide_switch(30, 34, 180, "ROTARY SPEAKER", SPD, 3, 2, 1);
+    tab3(12, 108, 48, 74, "CLASSIC", "MODEL", "", "LIGHT", 1, 0);
+    slide_switch(74, 112, 156, "HORN", HORN, 3, 0, 0);
     {   /* balance: horn against drum */
-        int32_t x = 58, w = 170, v = 60;
-        ltext(10, 186, &AF_X, "BALANCE", C_DIM, C_PANEL);
-        rrect(x, 186, w, 6, 3, C_SLOT);
-        rrect(x, 186, w * v / 100, 6, 3, C_AMBER);
-        disc(x + w * v / 100, 189, 6, C_CHR);
-        ltext(x, 198, &AF_X, "DRUM", C_DIM, C_PANEL);
-        rtext(x + w, 198, &AF_X, "HORN", C_DIM, C_PANEL);
+        int32_t x = 74, w = 154, v = 60;
+        ltext(12, 196, &AF_X, "BALANCE", C_DIM, C_PANEL);
+        rrect(x, 196, w, 6, 3, C_SLOT);
+        rrect(x, 196, w * v / 100, 6, 3, C_AMBER);
+        disc(x + w * v / 100, 199, 6, C_CHR);
+        ltext(x, 208, &AF_X, "DRUM", C_DIM, C_PANEL);
+        rtext(x + w, 208, &AF_X, "HORN", C_DIM, C_PANEL);
     }
     footer("KNOBS: SPEED MODEL HORN BALANCE");
 }
@@ -429,21 +447,19 @@ static void scr_voice(void)
 
 static void scr_lower(void)
 {
-    int32_t k;
-    static const int8_t L[9] = {0, 0, 8, 8, 8, 0, 0, 0, 0};
+    static const int8_t L[9] = {0, 0, 8, 8, 8, 0, 0, 0, 0}, P[2] = {6, 3};
     header("LOWER / PEDAL", "MIDI CH 2 / 3");
-    ltext(8, 31, &AF_X, "LOWER", C_DIM, C_PANEL);
-    bar_slot(4, 44, 170);
-    for (k = 0; k < 9; k++)
-        drawbar(13 + k * 19, 50, L[k], 14, 16, k, k >= 2 && k <= 5, 0);
-    ltext(186, 31, &AF_X, "PEDAL", C_DIM, C_PANEL);
-    bar_slot(182, 44, 54);
-    drawbar(196, 50, 6, 14, 16, 0, 0, 0);
-    {   /* the pedal's 8' bar: a white cap */
-        drawbar(222, 50, 3, 14, 16, 2, 0, 0);
-    }
-    ctext(88, 206, &AF_N, "008 880 000", C_CREAM, C_PANEL);
-    ctext(209, 206, &AF_N, "63", C_CREAM, C_PANEL);
+    bar_row(12, 19, 17, 13, L, 0, 9, 2, 167);
+    bar_slot(184, 26, 52);
+    drawbar(198, 26, P[0], 13, 17, 0, 0, 0);                  /* the pedals: 16' (brown) and 8' (white) */
+    drawbar(222, 26, P[1], 13, 17, 2, 0, 0);
+    ctext(198, 167, &AF_X, "16'", C_DIM, C_PANEL);
+    ctext(222, 167, &AF_X, "8'", C_DIM, C_PANEL);
+    cv_rect(178, 30, 1, 150, C_PANEL2);
+    ctext(88, 190, &AF_X, "LOWER", C_DIM, C_PANEL);
+    ctext(210, 190, &AF_X, "PEDAL", C_DIM, C_PANEL);
+    ctext(88, 205, &AF_N, "008 880 000", C_CREAM, C_PANEL);
+    ctext(210, 205, &AF_N, "63", C_CREAM, C_PANEL);
     footer("SELECT: MOVE THE FOUR   ALGO: PEDAL");
 }
 

@@ -166,7 +166,11 @@ edited in a pop-up as FMini-1's FX page did.
 **(owner, 2026-10-21)** The whole interface is drawn after the real console's panel: its look and its controls (drawbars
 with their brown / black / white caps and engraved footages, the rocker tabs of percussion and vibrato, the scanner's
 rotary selector, the wood and the chrome trim, the half-moon rotor switch), not FMini-1's synth panel. The screens are
-mocked up first with the firmware's own drawing code, for the owner's approval, then built in 0.1.0.
+mocked up first with the firmware's own drawing code, for the owner's approval, then built in 0.1.0. The owner's references (2026-10-21):
+the drawbars as on the console (a dark stem with light rails and the numbers 8 .. 1, a block cap with a lit top face and a
+finger notch), the toggles as the console's tall cream rocker tabs (upper word, function, lower word), the rotary speed as
+a slide switch with a glossy black ball on an engraved grey plate (SLOW / STOP / FAST). `tools/ui_mockups.c` draws them;
+`docs/mockups/` holds the current set.
 
 27 keys (F3..G5) with OCT- / OCT+; the upper manual on the keys and MIDI, the lower manual and the pedals on MIDI.
 Pages: DRAWBARS (the nine bars drawn; SELECT moves a window of four, KNOB 1..4 set 0..8 with detents), PERC / VIB, the
