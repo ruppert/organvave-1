@@ -4,8 +4,8 @@ OrganVave-1: a tonewheel-organ firmware for the M-VAVE FM-1 by Guilherme Ruppert
 [Felucca](https://github.com/hugelton/Felucca), GPL-3.0-only, by Leo Kuroshita). Repository: <https://github.com/ruppert/organvave-1>
 (the repository and file names are lower case; the product name is written OrganVave-1). The plan is [ORGAN.md](ORGAN.md): the
 organ and the rotary are ported from setBfree; Felucca's `eng_wheel.c` is not used. Until 0.1.0 the firmware still runs
-FMini-1's instrument (FMUG) as a scaffold. Package identity `FM-1_800` (releases `FM-1_8XY`). GitHub Pages is off and the
-Installer workflow is manual only until 0.5.0.
+FMini-1's instrument (FMUG) as a scaffold. Package identity `FM-1_800` (releases `FM-1_8XY`). GitHub Pages is on; until 0.5.0 the
+Installer workflow publishes only a placeholder page (`web/placeholder.html`, the splash), no firmware.
 
 The long guide is [DEVELOPING.md](DEVELOPING.md) (architecture, the filter, presets, editor, tests, release, and how to start a
 new firmware from this base). Read it before changing the engine, the UI or the tests. [BUILDING.md](BUILDING.md) is the
@@ -15,8 +15,8 @@ toolchain setup.
 
 - The owner writes Portuguese (pt-BR): answer in Portuguese. Code, comments, commit messages and documents are English.
 - Nothing here has been tested on a real FM-1 unless the owner says so. Say it in the closing message of any firmware change.
-- When something ships, remind the owner: the site will be published by the "Installer" workflow once GitHub Pages is on
-  (until then the workflow is manual only and nothing is published); GitHub Releases are created by the owner by hand (the
+- When something ships, remind the owner: until 0.5.0 the site is only the placeholder page (the "Installer" workflow
+  publishes it when `web/placeholder.html` or the splash changes; no firmware is published); GitHub Releases are created by the owner by hand (the
   session's API returns 403).
 - Commit trailers, on every commit: the `Co-Authored-By` and `Claude-Session` lines the session's reminder gives.
 - organvave-1 has one branch, `main`: `git push origin main`. A stop hook refuses to end a session with unpushed commits.

@@ -199,7 +199,7 @@ first (a test with the number to hit), then the code.
   `web/emu/build_wasi.sh` (wasi-sdk 25, no Emscripten) writes `docs/emu/`. The preset lab uses the same wasm.
 - On a push to `main` that touches `firmware/`, `web/`, `tools/`, `assets/`, `docs/emu/`, `docs/fmini-ad*`, `build.sh` or the workflow,
   `.github/workflows/installer.yml` builds the firmware and publishes the page, the package (`organvave-1-X.Y.Z.fwsc`), the editor and
-  the emulator to <https://ruppert.github.io/organvave-1/>. It is manual only (workflow_dispatch) until GitHub Pages is on (0.5.0).
+  the emulator to <https://ruppert.github.io/organvave-1/>. Until 0.5.0 it publishes only the placeholder page (`web/placeholder.html` and the splash).
 - **Release checklist:** bump `ORGANVAVE_VERSION` (`core.h`); build; run the tests; regenerate `docs/emu` and `docs/index.html`; refresh the
   screenshots if screens changed (`tools/readme_shots.c`, then `tools/gen_readme_art.py` and the `assets/site/*.webp` it implies);
   update the protocol doc and the site text; commit; push `main`; give the owner the `.fwsc`. The owner creates the
