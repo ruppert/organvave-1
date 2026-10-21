@@ -24,7 +24,7 @@
 # Sanitizers (ASan + UBSan when the compiler has them; SANITIZE=0 skips): the stores, the protocols and a short fuzz of
 #                   the editor (tests/fuzz_ed.c; longer: build/host/asan/fuzz_ed 300000 7).
 # web: the installer's JS (web/test_web.mjs, web/test_backup.mjs, node), the browser emulator (web/emu: built with
-#                   WASI_SDK set, its native twin always; node web/emu/emu_test.mjs). (The organ's patch editor: 0.5.0.)
+#                   WASI_SDK set, its native twin always; node web/emu/emu_test.mjs). (The organ's patch editor and the site: web/test_editor_organ.mjs, web/test_site.mjs.)
 set -e
 export AC79_SDK="${AC79_SDK:-$HOME/fw-AC79_AIoT_SDK}"
 cd "$(dirname "$0")/.."
@@ -129,6 +129,10 @@ run "installer CLI (fm1_install.py) against a simulated FM-1" python3 tests/inst
 if command -v node >/dev/null 2>&1; then
     run "web: package builder, update protocol" node web/test_web.mjs
     run "web backup: capture, validation before writes, restore order" node web/test_backup.mjs
+    $HC -o "$OUT/editor_bridge" tests/editor_bridge.c -lm
+    run "organ patch editor against the firmware's editor: the INFO tag, ORG_GET / ORG_PUT, a refusal" node web/test_editor_organ.mjs "$OUT/editor_bridge"
+    python3 web/make_site.py build/felucca.fwsc "$OUT/site" "$(sed -n 's/^#define ORGANVAVE_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)" >/dev/null
+    run "site: the installer page (markers, scripts, the embedded package)" node web/test_site.mjs "$OUT/site/index.html"
 else
     echo "== skip web tests (no node)"
 fi

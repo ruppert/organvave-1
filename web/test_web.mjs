@@ -4,7 +4,7 @@
 //   node web/test_web.mjs
 // - fm1pkg.js: productOf and logicalImage on build/felucca.fwsc (skipped without a build)
 // - fm1ota.js: a full install and an unplug during the write against a simulated FM-1
-// (fm1backup.js: web/test_backup.mjs; the patch editor: web/test_editor_fmini.py)
+// (fm1backup.js: web/test_backup.mjs; the organ patch editor: web/test_editor_organ.mjs; the site: web/test_site.mjs)
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

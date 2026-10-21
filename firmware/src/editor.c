@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments; Guilherme Ruppert (FMini-1, organvave-1) */
-/* Editor protocol: SysEx for the web editor (web/EDITOR_PROTOCOL.md; the organ's editor comes in 0.5.0): INFO GET SET
+/* Editor protocol: SysEx for the web editor (web/EDITOR_PROTOCOL.md; the organ's web editor is web/editor_organ.html): INFO GET SET
  * DUMP DESC PRESET NAMES, the user presets (UP_LIST GET STORE LOAD ERASE), live sync (WATCH, the CHANGED / RELOAD
  * pushes, PING), TRACK, and the organ patch (85, 86: editor_organ.c).
  * Felucca's other commands (steps, projects, samples, the mixer, songs, motion, backups, menus, palettes, MIDI LEARN,

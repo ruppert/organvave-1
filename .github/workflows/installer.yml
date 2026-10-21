@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # OrganVave-1's site on GitHub Pages, at https://ruppert.github.io/organvave-1/ (Settings > Pages: Source = GitHub Actions).
+# The site: the installer page (web/make_site.py with the firmware's package), the patch editor (editor/), the browser
+# emulator (emu/), the splash. Each push that changes what the site is built from publishes it.
 name: Installer
 
-# Until 0.5.0 it publishes only the placeholder page (web/placeholder.html with the splash): no firmware build, no package.
-# From 0.5.0: the installer job below (restore its steps and its paths: firmware/**, tools/**, assets/**, build.sh, docs/emu/**).
 on:
   push:
     branches: [main]
-    paths: ["web/placeholder.html", "docs/organvave-splash.png", ".github/workflows/installer.yml"]
+    paths: ["firmware/**", "tools/**", "assets/**", "web/**", "docs/emu/**", "docs/organvave-splash.png", "build.sh", ".github/workflows/installer.yml"]
   workflow_dispatch:
 
 permissions:
@@ -24,27 +24,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive        # firmware/engines (the MIT engine headers) is a submodule
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: The placeholder page
+      # the JieLi toolchain (pkgman.jieliapp.com, via tools/get_toolchain.sh) and the AC79 SDK (the version BUILDING.md names)
+      - name: Toolchain and SDK
         run: |
-          pip install Pillow
-          mkdir -p _site
-          cp web/placeholder.html _site/index.html
-          python3 -c "from PIL import Image; Image.open('docs/organvave-splash.png').convert('RGB').resize((900, 900), Image.LANCZOS).save('_site/splash.webp', quality=86)"
-          echo "OrganVave-1 placeholder page" >> "$GITHUB_STEP_SUMMARY"
+          pip install Pillow fonttools
+          sh tools/get_toolchain.sh "$HOME/.jieli"
+          git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"
+          echo "JIELI_TOOLCHAIN=$HOME/.jieli/toolchain" >> "$GITHUB_ENV"
+          echo "AC79_SDK=$HOME/fw-AC79_AIoT_SDK" >> "$GITHUB_ENV"
 
-      # 0.5.0 (the installer, the editor, the emulator): Python packages (Pillow fonttools); the JieLi toolchain
-      # (tools/get_toolchain.sh) and the AC79 SDK (git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13
-      # https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"); ./build.sh; then
-      #   VERSION=$(sed -n 's/^#define ORGANVAVE_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
-      #   python3 web/make_fmug_installer.py build/felucca.fwsc _site/index.html "$VERSION"
-      #   cp build/felucca.fwsc "_site/organvave-1-$VERSION.fwsc"
-      #   mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html
-      #   cp -r docs/emu _site/emu
+      - name: Firmware
+        run: ./build.sh
+
+      - name: The site
+        run: |
+          VERSION=$(sed -n 's/^#define ORGANVAVE_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
+          python3 web/make_site.py build/felucca.fwsc _site "$VERSION"
+          python3 -c "from PIL import Image; Image.open('docs/organvave-splash.png').convert('RGB').resize((900, 900), Image.LANCZOS).save('_site/splash.webp', quality=86)"
+          mkdir -p _site/editor && cp web/editor_organ.html _site/editor/index.html
+          cp -r docs/emu _site/emu
+          echo "OrganVave-1 v$VERSION: the installer, the patch editor and the emulator" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-pages-artifact@v3
         with:

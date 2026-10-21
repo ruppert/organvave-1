@@ -199,7 +199,7 @@ designed one; the static budget of the new functions.
 | 0.2.0 | percussion, vibrato / chorus |
 | 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive, the effects section |
 | 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |
-| 0.5.0 | editor, site, installer, emulator, GitHub Pages on |
+| 0.5.0 | editor, site, installer, emulator, GitHub Pages on (the site, the installer and the patch editor came early, with 0.1.0's firmware, at the owner's request) |
 | 0.9.x | beta |
 | 1.0.0 | after the owner tests it on the hardware |
 

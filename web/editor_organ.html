@@ -1,0 +1,251 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     OrganVave-1's patch editor (0.5.0): the organ's drawbars, tuning and crosstalk over USB MIDI, with the protocol of
+     web/EDITOR_PROTOCOL.md "Organ patch (85-86)". Standalone: no library; open it from the site's editor/ folder. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>OrganVave-1 · patch editor</title>
+<style>
+  :root { --bg: #0b0806; --wood: #6b3a1f; --wood2: #8a4b26; --chrome: #c9c4bb; --cream: #efe6d2; --orange: #ff6a13; --dim: #a59a88;
+          --panel: #1a120c; --warn: #e0a030; --ok: #8fbf6a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--cream); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; } h1 b { color: var(--orange); font-style: italic; }
+  h2 { font-size: 16px; margin: 0 0 10px; color: var(--orange); letter-spacing: .03em; }
+  a { color: var(--orange); }
+  .rail { height: 10px; margin: 0 0 18px; border-radius: 3px; background: linear-gradient(180deg, var(--wood2), var(--wood) 60%, #3d2010); }
+  .panel { background: var(--panel); border: 1px solid #3a2a1c; border-radius: 6px; padding: 14px 16px; margin: 12px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+  button { background: #2a1d12; color: var(--cream); border: 1px solid #5a4330; border-radius: 4px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button.go { background: var(--orange); color: #1a0a02; border-color: var(--orange); font-weight: 700; }
+  button:disabled { opacity: .45; cursor: default; }
+  select { background: #120c07; color: var(--cream); border: 1px solid #5a4330; border-radius: 4px; padding: 6px; font: inherit; }
+  .status { min-height: 1.5em; color: var(--dim); font-size: 14px; margin: 6px 0 0; }
+  .status.bad { color: var(--warn); } .status.ok { color: var(--ok); }
+  .bars { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+  .bar { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--dim); }
+  .bar input { writing-mode: vertical-lr; direction: rtl; width: 26px; height: 150px; accent-color: var(--orange); margin: 4px 0; }
+  .bar output { color: var(--cream); font-weight: 700; }
+  .set { margin-top: 14px; } .set h3 { font-size: 13px; margin: 0 0 4px; color: var(--chrome); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+  .note { font-size: 13px; color: var(--dim); }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; }
+  @media (max-width: 520px) { .bar input { height: 120px; } .bars { gap: 3px; } .bar { font-size: 10px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>Organ</b>Vave-1 · patch editor</h1>
+  <div class="rail"></div>
+  <div class="panel">
+    <h2>Device</h2>
+    <div class="row">
+      <button id="connect" class="go">Connect</button>
+      <select id="ports" hidden></select>
+      <span id="dev" class="note">not connected</span>
+    </div>
+    <p id="status" class="status" role="status">Connect the FM-1 with its USB cable. Chrome or Edge, on https or localhost.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Patch</h2>
+    <div class="row">
+      <label>Source
+        <select id="source" disabled>
+          <option value="0">Instrument (the live patch)</option>
+          <option value="2:0">Factory 1</option><option value="2:1">Factory 2</option><option value="2:2">Factory 3</option>
+          <option value="2:3">Factory 4</option><option value="2:4">Factory 5</option><option value="2:5">Factory 6</option>
+          <option value="2:6">Factory 7</option><option value="2:7">Factory 8</option>
+        </select>
+      </label>
+      <button id="read" disabled>Read</button>
+      <button id="send" class="go" disabled>Send to instrument</button>
+    </div>
+    <p class="note">Reading a factory patch copies it here; "Send to instrument" writes the drawbars, tuning and crosstalk into the
+      instrument's live patch. It does not save anything to flash: a user preset keeps its patch when you store it on the device.</p>
+
+    <div class="set"><h3>Upper manual</h3><div class="bars" id="upper"></div></div>
+    <div class="set"><h3>Lower manual (stored; sounds with 0.4.0)</h3><div class="bars" id="lower"></div></div>
+    <div class="set"><h3>Pedals (stored; sounds with 0.4.0)</h3><div class="bars" id="pedal"></div></div>
+
+    <div class="set row">
+      <label>Tuning
+        <select id="temp">
+          <option value="0">Gear 60 Hz</option><option value="1">Gear 50 Hz</option><option value="2">Equal temperament</option>
+        </select>
+      </label>
+      <label class="chk"><input type="checkbox" id="xtalk"> Crosstalk (setBfree's model)</label>
+    </div>
+  </div>
+</main>
+
+<script>
+// ---- the protocol (web/EDITOR_PROTOCOL.md): F0 7D 46 4C <cmd> <args> F7
+const CMD = { INFO: 1, ORG_GET: 85, ORG_PUT: 86 };
+const ORG_PSIZE = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, PUT_MAX = 48;
+const FOOT = ["16′", "5⅓′", "8′", "4′", "2⅔′", "2′", "1⅗′", "1⅓′", "1′"];
+const $ = (id) => document.getElementById(id);
+
+let dev = null;           // { input, output, name }
+let waiter = null;        // { cmd, resolve, timer } for the one request in flight
+let patch = null;         // the 64 bytes last read or edited (the sanitized layout is the device's)
+let busy = false;
+
+const say = (text, kind = "") => { $("status").textContent = text; $("status").className = "status " + kind; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function onMidi(e) {
+  // a SysEx arrives whole; MIDI realtime bytes may sit inside it and are dropped
+  const d = [...e.data].filter((b) => b < 0xF8 || b === 0xF7 || b === 0xF0);
+  if (d[0] !== 0xF0 || d[1] !== 0x7D || d[2] !== 0x46 || d[3] !== 0x4C || !waiter || waiter.cmd !== d[4]) return;
+  const w = waiter; waiter = null; clearTimeout(w.timer);
+  w.resolve(d.slice(5, d.indexOf(0xF7, 5) < 0 ? d.length : d.indexOf(0xF7, 5)));
+}
+
+// one request, one reply with the same command; no reply within 1.2 s is an error
+function request(cmd, args = [], ms = 1200) {
+  return new Promise((resolve, reject) => {
+    if (!dev) return reject(new Error("not connected"));
+    const timer = setTimeout(() => { waiter = null; reject(new Error("no reply from the device")); }, ms);
+    waiter = { cmd, resolve, timer };
+    try { dev.output.send([0xF0, 0x7D, 0x46, 0x4C, cmd, ...args, 0xF7]); }
+    catch (err) { clearTimeout(timer); waiter = null; reject(err); }
+  });
+}
+
+const RC = { 1: "the device refused the arguments", 2: "that patch is not an organ patch" };
+
+async function connect() {
+  if (!navigator.requestMIDIAccess) return say("This browser has no Web MIDI. Use Chrome or Edge.", "bad");
+  let access;
+  try { access = await navigator.requestMIDIAccess({ sysex: true }); }
+  catch (_) { return say("MIDI access was refused. Allow it in the browser and try again.", "bad"); }
+  const pairs = [];
+  for (const input of access.inputs.values()) {
+    const output = [...access.outputs.values()].find((o) => o.name === input.name && o.state !== "disconnected");
+    if (output && input.state !== "disconnected") pairs.push({ input, output, name: input.name });
+  }
+  // the FM-1 by name first; otherwise the player picks the port
+  const likely = pairs.filter((p) => /fm-1|fmini|felucca|organvave|usb-midi|composite|sinco/i.test(p.name || ""));
+  const choice = likely.length === 1 ? likely[0] : (likely[0] || pairs[0]);
+  if (!choice) return say("No MIDI port found. Plug the FM-1 in with its USB cable.", "bad");
+  if (pairs.length > 1) {
+    const sel = $("ports"); sel.hidden = false; sel.innerHTML = "";
+    pairs.forEach((p, i) => { const o = document.createElement("option"); o.value = i; o.textContent = p.name; sel.appendChild(o); });
+    sel.value = pairs.indexOf(choice);
+    sel.onchange = () => open(pairs[Number(sel.value)]);
+  }
+  await open(choice);
+}
+
+async function open(p) {
+  if (dev) dev.input.onmidimessage = null;
+  dev = null; setEnabled(false);
+  try { await p.input.open(); await p.output.open(); } catch (_) { return say("Could not open the MIDI port.", "bad"); }
+  p.input.onmidimessage = onMidi;
+  dev = p;
+  // INFO's tail says the firmware has the organ patch: 4F 01 ORG_PSIZE at the end of the reply (the F7 is not in r)
+  try {
+    const info = await request(CMD.INFO, [], 1500);
+    const n = info.length;
+    if (!(info[n - 3] === 0x4F && info[n - 2] === 1 && info[n - 1] === ORG_PSIZE)) {
+      dev = null; return say("The device answers, but its firmware has no organ patch. Install OrganVave-1 0.1.0 or later.", "bad");
+    }
+  } catch (err) { dev = null; return say("The device did not answer: " + err.message + ". Check the cable and the port.", "bad"); }
+  $("dev").textContent = p.name;
+  setEnabled(true);
+  await readPatch();
+}
+
+function setEnabled(on) {
+  for (const id of ["source", "read", "send"]) $(id).disabled = !on || busy;
+  $("connect").textContent = on ? "Reconnect" : "Connect";
+}
+
+// ORG_GET: target, index. Reply: target, index, rc, then the 64 bytes when rc = 0
+async function fetchPatch(target, index) {
+  const r = await request(CMD.ORG_GET, [target, index]);
+  if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
+  return r.slice(3, 3 + ORG_PSIZE);
+}
+
+async function readPatch() {
+  if (busy || !dev) return;
+  busy = true; setEnabled(true);
+  try {
+    // the source: "0" the instrument's patch (target 0), "2:n" factory patch n (target 2)
+    const parts = $("source").value.split(":").map(Number);
+    const target = parts.length === 2 ? parts[0] : 0, index = parts.length === 2 ? parts[1] : 0;
+    patch = await fetchPatch(target, index);
+    showPatch();
+    say("Read " + $("source").selectedOptions[0].textContent + ".", "ok");
+  } catch (err) { say("Read failed: " + err.message, "bad"); }
+  finally { busy = false; setEnabled(!!dev); }
+}
+
+// the sliders: the nine drawbars of each manual, 0 out .. 8 full, then the tuning and the crosstalk
+function buildBars() {
+  for (const [id, base] of [["upper", 0], ["lower", OP_LB], ["pedal", OP_PB]]) {
+    const host = $(id);
+    host.innerHTML = "";
+    FOOT.forEach((f, k) => {
+      const w = document.createElement("label"); w.className = "bar";
+      const out = document.createElement("output");
+      const inp = document.createElement("input");
+      inp.type = "range"; inp.min = 0; inp.max = 8; inp.step = 1; inp.dataset.index = base + k;
+      inp.setAttribute("aria-label", id + " " + f);
+      inp.oninput = () => { if (!patch) return; patch[base + k] = Number(inp.value); out.textContent = inp.value; };
+      w.append(out, inp, f);
+      host.appendChild(w);
+      w._out = out; w._inp = inp;
+    });
+  }
+}
+
+function showPatch() {
+  if (!patch) return;
+  for (const id of ["upper", "lower", "pedal"]) {
+    for (const w of $(id).children) {
+      const v = patch[Number(w._inp.dataset.index)];
+      w._inp.value = v; w._out.textContent = v;
+    }
+  }
+  $("temp").value = String(patch[OP_TEMP] ?? 0);
+  $("xtalk").checked = !!patch[OP_XTALK];
+}
+
+// the edits from the controls back into the patch (the device sanitizes what it stores)
+function fromControls() {
+  if (!patch) return;
+  patch[OP_TEMP] = Number($("temp").value);
+  patch[OP_XTALK] = $("xtalk").checked ? 1 : 0;
+}
+
+// ORG_PUT: target 0, offset, count, count bytes (count <= 48). One write of the 29 used bytes; reply: target, offset, rc
+async function sendPatch() {
+  if (busy || !dev || !patch) return;
+  busy = true; setEnabled(true);
+  try {
+    fromControls();
+    const used = OP_XTALK + 1;
+    const r = await request(CMD.ORG_PUT, [0, 0, used, ...patch.slice(0, used)]);
+    if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
+    say("Sent. The instrument plays this patch now; it is not saved to flash.", "ok");
+  } catch (err) { say("Send failed: " + err.message, "bad"); }
+  finally { busy = false; setEnabled(!!dev); }
+}
+
+buildBars();
+$("connect").onclick = connect;
+$("read").onclick = readPatch;
+$("send").onclick = sendPatch;
+$("source").onchange = readPatch;
+$("temp").onchange = () => { fromControls(); };
+$("xtalk").onchange = () => { fromControls(); };
+if (!navigator.requestMIDIAccess) say("This browser has no Web MIDI. Use Chrome or Edge.", "bad");
+</script>
+</body>
+</html>

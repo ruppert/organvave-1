@@ -34,7 +34,7 @@ Budget (`./build.sh` prints these and fails when they do not fit): image 277,640
 | `tools/` | Python generators and the measuring tools (floating point lives here); `build.py` is what `build.sh` runs |
 | `tools/setbfree_ref/` | setBfree's tone generator as the reference: `sbf_ref.c`, the dump the tables come from, `compare.py` |
 | `tests/` | host tests (`run_tests.sh`), the harnesses `host.h` and `editor_host.h`, goldens, budgets |
-| `web/` | the installer's JavaScript and page generator (0.5.0), `EDITOR_PROTOCOL.md`, `emu/` (the browser emulator) |
+| `web/` | the site (`site_organ.html`, `make_site.py`), the installer's JavaScript, the patch editor (`editor_organ.html`), `EDITOR_PROTOCOL.md`, `emu/` (the browser emulator) |
 | `docs/` | what the site serves that is checked in: `index.html` (generated), `emu/` (generated wasm), the splash |
 | `.github/workflows/installer.yml` | builds the firmware and publishes the site to GitHub Pages on a push to `main` |
 
@@ -113,8 +113,12 @@ repository.
 
 ## 6. Site, installer, emulator, release
 
-- The site, the installer page and the editor are 0.5.0. Until then the workflow publishes only `web/placeholder.html` and the
-  splash, and no firmware. `web/make_fmug_installer.py` and `web/site_fmini.html` are FMini-1's and are rewritten for 0.5.0.
+- The site is `web/make_site.py build/felucca.fwsc OUTDIR VERSION`: the installer page (`web/site_organ.html`, with the package
+  embedded and the installer's JavaScript from `fm1pkg.js` and `fm1ota.js`), the package beside it, and the patch editor
+  (`web/editor_organ.html`, copied to `editor/`), the emulator (`docs/emu/`, copied to `emu/`) and the splash. The Installer
+  workflow builds it on every push that touches what the site is made of and publishes it (Settings > Pages: Source = GitHub
+  Actions). Its tests: `web/test_site.mjs` and `web/test_editor_organ.mjs` (the editor against the firmware, through
+  `tests/editor_bridge.c`).
 - The browser emulator: `web/emu/felucca_web.c` compiles the firmware's sources against a simulated FM-1;
   `web/emu/build_wasi.sh` (wasi-sdk 25, no Emscripten) writes `docs/emu/`. Rebuild it after every version bump.
 - **Release checklist:** bump `ORGANVAVE_VERSION` (`core.h`); build; run the tests; regenerate `docs/emu` (and `docs/index.html`

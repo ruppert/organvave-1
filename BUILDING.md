@@ -123,7 +123,7 @@ Or, to install your own build from the web installer, make a local copy of the s
 (Web MIDI needs a secure context):
 
 ```
-mkdir -p /tmp/site && python3 web/make_fmug_installer.py build/felucca.fwsc /tmp/site/index.html dev
+python3 web/make_site.py build/felucca.fwsc /tmp/site 0.1.0      # VERSION = ORGANVAVE_VERSION in firmware/src/core.h
 cd /tmp/site && python3 -m http.server 8000
 # open http://localhost:8000/
 ```
