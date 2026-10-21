@@ -34,9 +34,14 @@ source with the submodule's files in it. The build stops with "firmware/engines 
   tools/get_toolchain.sh            # installs to ~/.jieli/toolchain
   ```
 
-- The JieLi AC79 SDK, version V1.2.0 (Apache-2.0; the release archive `AC79NN_SDK_V1_2_0`). The package uses three of its
-  files (`cpu/wl82/tools/uboot.boot`, `cfg_tool.bin`, `cfg/eq_cfg_hw.bin`); they are not part of this tree. `tools/build.py`
-  checks their SHA-256 against V1.2.0 and warns when they differ. Put the SDK in `~/fw-AC79_AIoT_SDK` or set `AC79_SDK`.
+- The JieLi AC79 SDK, version V1.2.1 (Apache-2.0). The package uses three of its files
+  (`cpu/wl82/tools/uboot.boot`, `cfg_tool.bin`, `cfg/eq_cfg_hw.bin`); they are not part of this tree. `tools/build.py`
+  checks their SHA-256 against V1.2.1 and warns when they differ.
+
+  ```
+  git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+      https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK
+  ```
 
 - Node.js (optional, for the web tests).
 - wasi-sdk 25 (optional, `WASI_SDK`: the browser emulator, `web/emu/`).
