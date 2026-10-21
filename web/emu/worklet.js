@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
-// Felucca in an AudioWorklet: felucca.wasm is the whole FM-1 firmware against a simulated FM-1
+// The instrument in an AudioWorklet: felucca.wasm is the whole FM-1 firmware against a simulated FM-1
 // (web/emu/felucca_web.c). Each render quantum asks it for 128 frames, which runs the device's clock forward;
 // between quanta the page's input goes in and, about 30 times a second (4 when the page is hidden), the screen,
 // the lights and any changed flash go out. After X0X's web/emu/worklet.js (charlesvestal/fm1-x0x, GPL-3.0).
 
-// The flash the page keeps: storage.c's areas (projects, user presets and their FM6 patches, the user sample
-// slots 0x97000..0xDFFFF; the autosave 0xE5000..0xE6FFF (1.2) and FM6's voice bank 0xE7000 (1.4.1); the settings and
-// the second FM6 copy 0xFC000..0xFFFFF), only the sectors that hold something (an erased sector is all 0xFF). {offset: bytes}
-export const STORE_AREAS = [[0x97000, 0xE0000], [0xE5000, 0xE8000], [0xFC000, 0x100000]];
+// The flash the page keeps: storage.c's objects (the user presets' patches 0x9F000 and 0xFE000, the user presets
+// 0xDC000..0xDFFFF, the autosave 0xE5000..0xE6FFF, the settings 0xFC000..0xFDFFF), only the sectors that hold something
+// (an erased sector is all 0xFF). {offset: bytes}
+export const STORE_AREAS = [[0x9F000, 0xA0000], [0xDC000, 0xE0000], [0xE5000, 0xE7000], [0xFC000, 0xFF000]];
 export function storeSectors(nor) {
   const out = {};
   for (const [a, b] of STORE_AREAS)

@@ -23,7 +23,7 @@ toolchain setup.
 ```
 export JIELI_TOOLCHAIN=<dir with pi32v2/bin/clang>   AC79_SDK=<AC79 SDK checkout with cpu/wl82/tools/uboot.boot>
 ./build.sh                                  # build/felucca.bin, build/loader/ota.bin, build/felucca.fwsc (~30 s)
-sh tests/run_tests.sh > /tmp/tests.log 2>&1 # the whole host suite, 20-30 minutes; run it in the background
+sh tests/run_tests.sh > /tmp/tests.log 2>&1 # the whole host suite, a few minutes; run it in the background
 python3 tools/fmug_filter.py                # regenerate firmware/src/eng_fmug_filter.h (filter laws and tables)
 python3 tools/gen_fmug_presets.py           # regenerate firmware/src/eng_fmug_presets.h from tools/fmug_bank.py
 python3 tools/preset_lab.py --wasm docs/emu/felucca.wasm --out DIR     # render and measure the 100 factory patches
@@ -56,20 +56,18 @@ BUILDING.md has the SDK clone). If a download is refused by the network allowlis
   build/felucca.dis tests/target_budget.txt`; for goldens run `build/host/regress` against a scratch copy with `GOLDEN_UPDATE=1`
   and merge only the lines you mean to change.
 
-## The test suite today (1.7.0): what fails and is not yours
+## The test suite today (after the Oct 2026 slimming): what fails and is not yours
 
-Seven sections fail at 1.7.0. Four were confirmed on the untouched v1.6.1 with identical output: `fm4` (the DIGITAL conversion) and the
-three `regress` sections (the golden hashes of Felucca's other engines: 76 differ; the 100 FMUG hashes are current). The other
-three were not rerun on 1.6.1 but have causes the filter does not touch: `union_test` (all 720 engine-switch hashes differ),
-`ui_render` (126 lint findings, all label ellipses and overlaps on the CTRL and FILT screens), `web pages` (3 FAIL lines: the mock
-tables lack the FMUG engine, percent values, the DIGITAL conversion). Do not chase them unless asked. The runner's `run()` only
-sets a flag and does not name the failing section: to find one, copy the script, change `run()` to print the section on a non-zero
-exit, and read the log. A test that prints nothing and fails is a `return 1` with no message: run the binary alone.
-`web/test_editor_fmini.py` can fail once when the machine is busy; run it alone before believing it. A new failure outside this
-list is yours.
+The tree holds only what the instrument uses (one FMUG part, 16 steps; Felucca's other engines, samples, UI, projects,
+second core and serial console are gone; DEVELOPING.md section 1). The suite takes a few minutes. With a real AC79 SDK
+everything should pass. With the measuring SDK stand-in (no real `uboot.boot`) four sections fail and are not yours: the
+M-UPGRADE entry and the update loader, plain and under ASan (they check the package itself). A failing section prints
+`SECTION FAILED: <name>`. A test that prints nothing and fails is a `return 1` with no message: run the binary alone.
+`web/test_editor_fmini.py` can fail once when the machine is busy; run it alone before believing it. A new failure outside
+this list is yours.
 
 ## Before saying a change is done
 
 Build, run the tests that touch the change (and the whole suite for anything shared), regenerate the emulator and the installer
-if the firmware or the site changed, commit with the trailers, push both branches, and give the owner the `.fwsc`
+if the firmware or the site changed, commit with the trailers, push `main`, and give the owner the `.fwsc`
 (`SendUserFile`) with the standing reminders above.

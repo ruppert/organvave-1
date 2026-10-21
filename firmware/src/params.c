@@ -53,15 +53,11 @@ static const char *const N_MIDI_INPUT[] = {"USB", "TRS"};
 static const char *const N_ROUTE[] = {"CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16", "TRACK"};
 static const char *const N_NOTE[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static const char *const N_DASH[] = {"--"};
-#if FELUCCA_FMUG_ONLY
 /* FMini-1: G_RTYPE's five models (the FX > REVERB > TYPE list; fx.c rev_run runs them) */
 static const char *const N_RTYPE[] = {"ROOM", "HALL", "PLATE", "SPRING", "CLOUD"};
 static const char *const N_DLYTYPE[] = {"ANALOG", "DIGITAL", "TAPE", "P-PONG", "MULTI", "SLAP", "REVERSE"};   /* G_DTIME's use */
 static const char *const N_CHOTYPE[] = {"STEREO", "JUNO", "MULTI"};                                       /* G_ENGGO's use */
 static const char *const N_DRVTYPE[] = {"SOFT", "TUBE"};                                                  /* G_INFO's use */
-#else
-static const char *const N_RTYPE[] = {"ROOM", "SPRING", "HALL"};   /* G_RTYPE: the reverb bus's model (fx.c) */
-#endif
 static const char *const N_GO[] = {"--", "GO"};
 static const char *const N_SLCR[] = {"OFF", "GATE", "STUT"};             /* SL_OFF .. SL_STUT (slicer.c) */
 static const char *const N_SLDIV[] = {"1/8", "1/16", "1/32", "8T", "16T", "32T"};   /* SL_DEN */
@@ -78,12 +74,8 @@ static const char *const N_IRATE[] = {"689", "919", "1.1k", "1.4k", "1.8k", "2.2
 static const char *const N_MSRC[] = {"OFF", "LFO", "ENV", "VEL", "KEY", "RAND", "MODW", "AT", "EXPR", "S&H", "SLEW"};
 static const char *const N_MDST[] = {"OFF", "PITCH", "CUT", "SHP", "AMP", "PAN", "DIST", "CHO", "DLY", "REV", "RATE",
                                      "VIB", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "DEPTH", "VEL", "TIME"};
-static const char *const N_ENGNAME[] = {"ANALOG", FELUCCA_FM4 ? "DIGITAL" : "-", "PHASE", "LOFI", "SAMPLE", "VOICE", "TRIO", "WHEEL", "GRAIN", "PHYS",
-                                             "DRUM", "NOISE", "FM6",
-#if FELUCCA_SLICE
-                                             "SLICE",
-#endif
-};
+static const char *const N_ENGNAME[NENGINES] = {"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
+                                                 "FMUG"};   /* (0..13: retired, engines.c) */
 
 #define PD(l, f, mn, mx, df) {l, f, mn, mx, df, 0, 0}
 #define PE(l, n, df) {l, F_ENUM, 0, (int16_t)(sizeof(n) / sizeof(n[0]) - 1), df, n, 0}
@@ -199,57 +191,33 @@ static const param_desc_t GP[G_COUNT] = {
     [G_SWING] = PD("SWG", F_PCT, 0, 100, 0),
     [G_CLOCK] = PE("CLK", N_CLOCK, 0),
     [G_TUNE] = PD("TUNE", F_INT, -50, 50, 0),     /* cents; edited on MENU > AUDIO TUNE (1.2: menu_items.c MI_TUNE) */
-#if FELUCCA_FMUG_ONLY
     [G_DTIME] = PE("TYPE", N_DLYTYPE, 0),         /* FMini-1: the DELAY's TYPE (the tempo time is not used: G_DRREV is the time in ms) */
-#else
-    [G_DTIME] = PE("TIME", N_DTIME, 1),
-#endif
     [G_DFDBK] = PD("FDBK", F_PCT, 0, 120, 60),
     [G_DCOLOR] = PD("COLR", F_PCT, 0, 127, 70),
     [G_DMIX] = PD("MIX", F_PCT, 0, 127, 90),
     [G_RSIZE] = PD("SIZE", F_PCT, 0, 127, 90),
-#if FELUCCA_FMUG_ONLY
     [G_RDAMP] = PD("TONE", F_PCT, 0, 127, 67),    /* FMini-1: the REVERB's TONE (a high cut: 127 open; fx.c uses 127 - TONE as the damping) */
-#else
-    [G_RDAMP] = PD("DAMP", F_PCT, 0, 127, 60),
-#endif
     [G_CRATE] = PD("CRT", F_LFOHZ, 0, 127, 40),
     [G_CDEPTH] = PD("DEPTH", F_PCT, 0, 127, 60),
     /* G_MIDI, G_SYNC, G_INFO: the old SYSTEM page's (gone in 1.2), on no page: MIDI's value was never read (its card
      * showed the USB state), SYNC was a placeholder, CPU a reading; the USB state and the CPU load are MENU > SYSTEM >
      * INFO's now (ui_menu.c). Kept: the ids and G_COUNT are fixed by the formats and the protocol */
-#if FELUCCA_FMUG_ONLY
     [G_MIDI] = PD("OUT", F_PCT, 0, 127, 64),      /* FMini-1: the DRIVE's OUTPUT level (64 = as before, up to +6 dB) */
-#else
-    [G_MIDI] = PE("MIDI", N_MIDI_INPUT, 0),
-#endif
     [G_SYNC] = PE("SYNC", N_DASH, 0),
     /* MIDI IN's routing, edited on MENU > MIDI > MIDI IN (1.2: menu_items.c MI_MIDIIN; up to 1.1.5 GLO > SYSTEM ROUT),
      * stored with the project as before. (was "--": stored 0 = CH1-4, as MIDI IN always was) */
     [G_ROUTE] = PE("ROUT", N_ROUTE, 0),
-#if FELUCCA_FMUG_ONLY
     [G_INFO] = PE("TYPE", N_DRVTYPE, 0),          /* FMini-1: the DRIVE's TYPE */
-#else
-    [G_INFO] = PD("CPU", F_INT, 0, 0, 0),
-#endif
     [G_SLOT] = PD("SLOT", F_INT, 1, 4, 1),
     [G_NAME] = PE("NAME", N_DASH, 0),
     [G_LOAD] = PE("LOAD", N_GO, 0),
     [G_SAVE] = PE("SAVE", N_GO, 0),
     [G_ENGSEL] = PE("ENG", N_ENGNAME, 0),
-#if FELUCCA_FMUG_ONLY
     [G_ENGGO] = PE("TYPE", N_CHOTYPE, 0),         /* FMini-1: the CHORUS's TYPE */
-#else
-    [G_ENGGO] = PE("SET", N_GO, 0),
-#endif
     [G_CLRSEQ] = PE("CLRSQ", N_GO, 0),
     [G_INITSND] = PE("INIT", N_GO, 0),
     /* the reverb's model on the REVERB page: the id of the old GM drum channel (G_DRCH, inert since 1.0) */
-#if FELUCCA_FMUG_ONLY
     [G_RTYPE] = PE("TYPE", N_RTYPE, 1),         /* FMini-1: HALL (index 1 of the six) */
-#else
-    [G_RTYPE] = PE("TYPE", N_RTYPE, 2),
-#endif         /* HALL at power-on since 1.2 (ROOM before; projects keep theirs) */
     /* inert: they set the GM drum part (level, reverb send), which is gone (drums are the DRUM engine
      * on any part). On no page; kept so the ids and G_COUNT, which the project format and the
      * editor protocol depend on, do not move */
@@ -278,46 +246,8 @@ static const param_desc_t *param_desc_of(uint32_t e, uint32_t id)
     return id >= P_E0 ? &ENGINES[e]->edit[id - P_E0] : &TP[id];
 }
 
-/* a retired F_ENUM value kept as an alias, so stored values stay valid: SAMPLE SET and GRAIN SRC 1, once
- * TRANH, and 4, once PERC (a SAMPLE sound of it loads as DRUM: core.h drum_from_perc), play PIANO
- * (tools/gen_samples.py SMP_SET_ORIG); DRUM KIT 1..3, once HAND CYM H+CYM, play 66 10 77 (eng_drum.c DK_PLAYS).
- * It shows the original's name; knobs step over it and the editor's SET lands on the original. -> the value v
- * stands for */
-static int32_t enum_orig(const param_desc_t *d, int32_t v)
-{
-    if (d->names == N_DRUM_KIT)
-        return v >= 0 && v < DK_COUNT ? (int32_t)DK_PLAYS[v] : v;
-    return d->names == SMP_ALL_NAMES && v >= 0 && v < SMP_NSETS ? SMP_SET_ORIG[v] : v;
-}
-
-/* a stored value as the parameter takes it (projects, user presets, motion): inside d's range, and a retired
- * DRUM KIT (1..3) as the kit it plays, so KIT never holds one again. (SAMPLE / GRAIN's aliases keep their
- * number: they are what the sound was saved with, and play the original anyway.) FM6's SLOT is never stored as a
- * bank slot: 9..40 (1.4.1's B1..B32; 1.0.2's B1..B27 were 8..34) is 8, OWN, and the patch comes with what is loaded */
-static int32_t param_fit(const param_desc_t *d, int32_t v)
-{
-    v = clamp(v, d->min, d->max);
-    if (d->names == N_FM6_PATCH)
-        return v > (int32_t)FM6_OWN ? (int32_t)FM6_OWN : v;
-    return d->names == N_DRUM_KIT ? enum_orig(d, v) : v;
-}
-
-/* v is a value a knob passes over: an alias, or one of FM6's bank slots without a voice */
-static int enum_skip(const param_desc_t *d, int32_t v)
-{
-    return enum_orig(d, v) != v || (d->names == N_FM6_PATCH && !fm6_slot_ok(v));
-}
-/* a knob moved an F_ENUM from `from` to v: past any value it skips in that direction; with none left to the end, the
- * last one it does not skip on the way from `from` (else `from`) */
-static int32_t enum_step(const param_desc_t *d, int32_t from, int32_t v)
-{
-    int32_t dir = v > from ? 1 : -1, w = v;
-    while (w != from && enum_skip(d, w))
-        w = w + dir > d->max || w + dir < d->min ? from : w + dir;
-    while (w == from && v != from && enum_skip(d, v))
-        v -= dir;
-    return w == from ? v : w;
-}
+/* a stored value as the parameter takes it (user presets, motion, the editor): inside d's range */
+static int32_t param_fit(const param_desc_t *d, int32_t v) { return clamp(v, d->min, d->max); }
 
 /* #48: the note divisions in the order of their length, longest first (triplets between their neighbours), on the
  * knobs and the gauges; the stored values (N_DIV, N_SLDIV indices: projects, presets, the editor protocol) stay.
@@ -339,7 +269,7 @@ static int32_t enum_rank(const param_desc_t *d, int32_t v)   /* v's place in the
             break;
     return o ? r + d->min : v;
 }
-/* a knob turned `steps` (signed) from v: clamped, over the shown order, past aliases (enum_step) */
+/* a knob turned `steps` (signed) from v: clamped, over the shown order */
 static int32_t param_turn(const param_desc_t *d, int32_t v, int32_t steps)
 {
     const uint8_t *o = enum_order(d);
@@ -349,7 +279,7 @@ static int32_t param_turn(const param_desc_t *d, int32_t v, int32_t steps)
         int32_t k = clamp((int32_t)esync_idx(v) + steps, 0, ESYNC_N - 1);
         return (k * 128 + ESYNC_N - 1) / ESYNC_N;
     }
-    return enum_step(d, v, clamp(v + steps, d->min, d->max));
+    return clamp(v + steps, d->min, d->max);
 }
 
 static uint8_t fmt_named;        /* the last param_format was a name (F_ENUM, even "4"): ui_draw.c's digits do not roll it */
@@ -572,23 +502,3 @@ static const page_t PAGES[] = {
 #define NPAGES (sizeof(PAGES) / sizeof(PAGES[0]))
 static uint8_t mod_ui_slot;      /* the MOD page: the matrix slot (0..3) KNOB 2..4 edit */
 
-static const param_desc_t *page_desc(const page_t *pg, uint32_t slot, int16_t **valp)
-{
-    uint32_t id = pg->id[slot];
-    if (id == 0xFFu) {
-        *valp = 0;
-        return 0;
-    }
-    if (pg->scope == SC_STEP || pg->scope == SC_TRK) {
-        *valp = 0;
-        return 0;
-    }
-    if (pg->scope == SC_GLOBAL) {
-        *valp = &song.g[id];
-        return &GP[id];
-    }
-    if (pg->graph == GR_MOD)                          /* SRC DST AMT of the slot shown */
-        id += 3u * mod_ui_slot;
-    *valp = &TSEL->p[id];
-    return track_desc(TSEL, id);
-}

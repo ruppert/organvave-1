@@ -1,9 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * FMini-1 screen: renders every page of fmug_app.c with the real drawing code to PPMs (OUT/fa_<page>.ppm) and
  * checks that the screen draws and that SELECT / ALGORITHM / PRESETS reach every control. */
-#define UI_TEST_NO_MAIN 1
-#define FELUCCA_FMUG_ONLY 1
-#include "ui_test.c"
+#include "host.h"
 #include "../firmware/src/fmug_app.c"
 #include <stdio.h>
 static void dump(const char *dir, int n)
@@ -115,7 +113,7 @@ int main(int argc, char **argv)
         fa_sv_do();
         if (fa_sv || fa_nuser() != 1 || !fa_on_user() || TSEL->user != 1) { printf("save: not stored\n"); return 1; }
         up_name(0, nm);
-        if (!str_eq(nm, "MY PATCH")) { printf("save: name %s\n", nm); return 1; }
+        if (strcmp(nm, "MY PATCH")) { printf("save: name %s\n", nm); return 1; }
         apply_preset_to(TSEL, 7);
         TSEL->user = 0;
         TSEL->p[P_E7] = (int16_t)(FMUG_NFACTORY - 1u);
@@ -261,12 +259,12 @@ int main(int argc, char **argv)
         if (song.g[G_BPM] != 117) { printf("bank: a patch changed the tempo (%d)\n", song.g[G_BPM]); bad++; }
         if (bad) return 1;
         song.g[G_BPM] = bpm0;                            /* (a Program Change brings the same: ui.c midi_pc_load) */
-        ui.mpc[0] = (uint8_t)(0x80u | 14u);              /* 14 RAVE ARP */
+        midi_pc = (uint8_t)(0x80u | 14u);              /* 14 RAVE ARP */
         midi_pc_poll();
         if (TSEL->p[P_E7] != 14 || TSEL->p[P_AMODE] != FMUG_X[14].arp[1] || song.g[G_RSIZE] != FMUG_X[14].fx[1] || song.octave != 0) {
             printf("Program Change 14: slot %d arp %d\n", TSEL->p[P_E7], TSEL->p[P_AMODE]); return 1;
         }
-        ui.mpc[0] = (uint8_t)(0x80u | 55u);              /* 55 BRASS SWELL: OCT-1 */
+        midi_pc = (uint8_t)(0x80u | 55u);              /* 55 BRASS SWELL: OCT-1 */
         midi_pc_poll();
         if (TSEL->p[P_E7] != 55 || song.octave != -1 || TSEL->p[P_AMODE] != 0) { printf("Program Change 55: octave %d\n", song.octave); return 1; }
         song.octave = 0;
@@ -292,7 +290,7 @@ int main(int argc, char **argv)
         }
         fa_page = 4;
         fmg_force_page = 4;
-        ui.mpc[0] = (uint8_t)(0x80u | 33u);
+        midi_pc = (uint8_t)(0x80u | 33u);
         fframes(48);
         if (TSEL->p[P_E7] != 33 || fa_page != 0) { printf("HOME: Program Change -> slot %d page %d\n", TSEL->p[P_E7], fa_page); return 1; }
         fa_page = 2;
@@ -664,7 +662,6 @@ int main(int argc, char **argv)
                 t0->p[P_DEC] = dq ? 90 : 60;
                 t0->p[P_SUS] = 64;
                 t0->p[P_REL] = rr ? 127 : 0;                 /* no longer matters */
-                esync_coef(t0);
                 vv.stage = 1;
                 while (vv.stage == 1 && n++ < 100000) env_tick(t0, &vv);
                 if (vv.stage != 2) { printf("adsr: attack never ends\n"); return 1; }
@@ -692,7 +689,6 @@ int main(int argc, char **argv)
         double sec;
         memset(&vv, 0, sizeof vv);
         t0->p[P_ATK] = 127; t0->p[P_DEC] = 127; t0->p[P_SUS] = 0; t0->p[P_REL] = 0;
-        esync_coef(t0);
         vv.stage = 1;
         while (vv.stage == 1 && n < 2000000) { env_tick(t0, &vv); n++; }
         sec = (double)n * CTL / FS;
@@ -731,7 +727,6 @@ int main(int argc, char **argv)
             int32_t n = 0;
             memset(&vv, 0, sizeof vv);
             t0->p[P_ATK] = 0; t0->p[P_DEC] = 127; t0->p[P_SUS] = k ? 100 : 0; t0->p[P_REL] = 0;
-            esync_coef(t0);
             sus = (int32_t)t0->p[P_SUS] << 17;
             vv.stage = 1;
             while (vv.stage == 1) env_tick(t0, &vv);

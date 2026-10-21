@@ -16,7 +16,6 @@
  * A.ENV), LFO (CTRL), EDIT (OSC), SCL (MIX), GLO (FILT) open a page; OCT- / OCT+ the keys' octave. The keys, MIDI
  * and the MASTER pot play and sound as in Felucca. Track 1 is the instrument; the other tracks are muted.
  * Included by felucca.c before main.c. */
-#if FELUCCA_FMUG_ONLY
 #define FA_RGB(r, g, b) ((uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3)))
 #define FA_OR FA_RGB(0xE0, 0x75, 0x2B)                   /* orange: values, curves, the active tab */
 #define FA_CR FA_RGB(0xEC, 0xE4, 0xD0)                   /* cream: labels */
@@ -131,7 +130,6 @@ static void fa_knob_draw(int32_t cx, int32_t cy)
 
 /* ------------------------------------------------------------- text --- */
 static int32_t fa_cap_y(const aafont_t *f) { return f == &AF_L ? AF_L_CAP_Y : f == &AF_N ? AF_N_CAP_Y : f == &AF_X ? AF_X_CAP_Y : f == &AF_S ? AF_S_CAP_Y : AF_M_CAP_Y; }
-static int32_t fa_cap_h(const aafont_t *f) { return f == &AF_L ? AF_L_CAP_H : f == &AF_N ? AF_N_CAP_H : f == &AF_X ? AF_X_CAP_H : f == &AF_S ? AF_S_CAP_H : AF_M_CAP_H; }
 /* text with its capitals starting at row ytop, centred on cx */
 static void fa_ctext(int32_t cx, int32_t ytop, const aafont_t *f, const char *s, uint16_t fg)
 {
@@ -359,67 +357,7 @@ static const char *const FA_TINY6[][7] = {
     {"T", "#####", "..#..", "..#..", "..#..", "..#..", "..#.."},
     {"Y", "#...#", "#...#", ".#.#.", "..#..", "..#..", "..#.."},
 };
-static int32_t fa_tiny_w(char ch)
-{
-    uint32_t k;
-    for (k = 0; k < NELEM(FA_TINY6); k++)
-        if (FA_TINY6[k][0][0] == ch)
-            return (int32_t)str_len(FA_TINY6[k][1]);
-    return 3;
-}
-static void fa_tiny_text(int32_t cx, int32_t y, const char *s, uint16_t fg)
-{
-    int32_t w = -1, x, r, c;
-    const char *p;
-    for (p = s; *p; p++)
-        w += fa_tiny_w(*p) + 1;
-    x = cx - w / 2;
-    for (p = s; *p; p++) {
-        uint32_t k;
-        int32_t gw = fa_tiny_w(*p);
-        for (k = 0; k < NELEM(FA_TINY6); k++)
-            if (FA_TINY6[k][0][0] == *p) {
-                for (r = 0; r < 6; r++)
-                    for (c = 0; c < gw; c++)
-                        if (FA_TINY6[k][1 + r][c] == '#')
-                            cv_pset(x + c, y + r, fg);
-                break;
-            }
-        if (k == NELEM(FA_TINY6) && *p >= 'A' && *p <= 'Z') {
-            uint32_t g = FA_TINY[*p - 'A'];
-            for (r = 0; r < 5; r++)
-                for (c = 0; c < 3; c++)
-                    if ((g >> (14 - (r * 3 + c))) & 1u)
-                        cv_pset(x + c, y + r, fg);
-        }
-        x += gw + 1;
-    }
-}
 
-/* the minimal horizontal fader of the FX page (DECAY / TIME / RATE / TONE): a small label, a thin track filled up to
- * the value, the value below */
-static void fa_fader(uint32_t pg, uint32_t i, int32_t cx, int hot)
-{
-    const char *lb, *un;
-    char val[16];
-    int32_t ratio, x = cx - 22, y = 168, fw;
-    uint32_t ic;
-    const fmgf_t *f = fmg_field(pg, i);
-    fmg_card_at(pg, i, -1, &lb, val, &un, &ratio, &ic);
-    fw = (ratio < 0 ? 0 : ratio) * 42 / 1000;
-    if (hot)
-        cv_frame(x - 3, y - 4, 50, 15, FA_OR);
-    cv_rect(x, y, 44, 7, FA_LINE);
-    cv_rect(x + 1, y + 1, 42, 5, FA_BOX);
-    cv_rect(x + 1, y + 1, fw, 5, FA_OR);
-    cv_rect(x + 1 + fw - (fw > 1 ? 1 : 0), y - 1, 2, 9, FA_RGB(0xF6, 0xF1, 0xE3));     /* the cap */
-    fa_tiny_text(cx, 152, lb, hot ? FA_OR : FA_RGB(0xA6, 0x9C, 0x88));
-    if (f->kind != FK_NAME && (f->kind != FK_GLB || GP[f->a].fmt == F_PCT))
-        fa_val(val, ratio, f);
-    else if (f->a == G_CRATE)                              /* RATE in Hz */
-        str_cpy(val + str_len(val), "Hz", 4);
-    fa_ctext(cx, 186, &AF_S, val, FA_OR);
-}
 
 /* the FX page's EDIT button under each effect: a beige frame, a dark inside, EDIT; the cursor an orange frame */
 static void fa_edit_btn(int32_t cx, int hot)
@@ -624,8 +562,6 @@ static void fa_ar_turn(uint32_t row, int32_t s)
         const param_desc_t *d = track_desc(t, FA_AR_ID[row]);
         int16_t *vp = &t->p[FA_AR_ID[row]];
         *vp = (int16_t)param_turn(d, *vp, s);
-        motion_capture(t, FA_AR_ID[row], *vp);
-        ml_knob(t, FA_AR_ID[row]);
     } else {
         song.g[G_BPM] = (int16_t)clamp(song.g[G_BPM] + fmg_acc(EN_ALGO, s, 200), GP[G_BPM].min, GP[G_BPM].max);
     }
@@ -760,7 +696,7 @@ static uint32_t fa_sound_keys(void)
  * controller while the list is open is taken for the highlighted line), PITCH BEND (the range) and ABOUT (the splash
  * with the version).
  * SELECT picks a line, ALGORITHM changes it (or opens MIDI CC / ABOUT); GLO goes back, then closes. The settings are
- * kept in the flash settings record (favorites.factory rows 7 and 8: no engine of this firmware uses them). */
+ * kept in the flash settings record (settings.c set_bytes, rows 7 and 8). */
 #define FMINI_VERSION "v1.7.0"
 #define FA_NPG 44u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+8+4+4+4+8) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
@@ -788,7 +724,7 @@ static int fa_cc_valid(uint32_t cc) { return cc == 0u || ml_free_cc(cc); }
 
 /* the FX pop-ups' other globals (the settings still keep their bytes; a factory patch, a saved one and the autosave set them) */
 static const uint8_t FA_GID2[8] = {G_RTYPE, G_RDAMP, G_DTIME, G_DFDBK, G_ENGGO, G_CDEPTH, G_INFO, G_MIDI};
-static uint8_t *fa_cfg_byte(uint32_t i) { return &favorites.factory[7u + i / 32u][i % 32u]; }
+static uint8_t *fa_cfg_byte(uint32_t i) { return &set_bytes[7u + i / 32u][i % 32u]; }
 static void fa_cfg_load(void)
 {
     uint32_t i;
@@ -1491,10 +1427,8 @@ static void fa_input(void)
     uint32_t pressed = fm1_input_edges(0), k;
     int32_t s;
     (void)fm1_input_note_edges();
-    midi_take();                                            /* MIDI IN notes */
     midi_pc_poll();                                         /* Program Change: a patch */
     fmug_poll();                                            /* SLOT turned: its patch */
-    settings_later_poll();
     if (TSEL->eng_req != ENGI_FMUG) {                       /* an old autosave: the instrument is FMUG */
         set_engine_of(TSEL, ENGI_FMUG);
         apply_preset_to(TSEL, 0);
@@ -1706,4 +1640,3 @@ static void fa_init(void)
     fa_primed = 1;
     ui.force = 1;
 }
-#endif /* FELUCCA_FMUG_ONLY */

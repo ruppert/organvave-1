@@ -1,26 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* FELUCCA: one compilation unit (the HAL is header-only). Each file uses what the files above it
+/* The firmware: one compilation unit (the HAL is header-only). Each file uses what the files above it
  * define, so the order matters. */
 
 /* ---------------------------------------------------- build options --- */
-/* build.py: FELUCCA_<NAME>=0 / 1 in the environment overrides these. Elsewhere: FELUCCA_SLICE, FELUCCA_FM4
- * (core.h: the SLICE engine, the DIGITAL engine), FELUCCA_ICONS (icons.c, the parameter icons; on by default),
- * FELUCCA_OTA_RAMONLY (ota.c). */
-#ifndef FELUCCA_FMUG_ONLY
-#define FELUCCA_FMUG_ONLY 1     /* FMini-1: only the synth's own screen and controls (fmug_app.c); 0 = Felucca's whole UI */
-#endif
-#ifndef FELUCCA_FLASH
-#define FELUCCA_FLASH 1          /* flash driver + storage.c: settings, projects, user presets */
-#endif
+/* build.py: FELUCCA_<NAME>=0 / 1 in the environment overrides these. Elsewhere: FELUCCA_OTA_RAMONLY (ota.c). */
 #ifndef FELUCCA_OTA
-#define FELUCCA_OTA 1            /* M-UPGRADE update entry and the editor SysEx; needs FELUCCA_FLASH */
+#define FELUCCA_OTA 1            /* M-UPGRADE update entry and the editor SysEx */
 #endif
 #ifndef FELUCCA_OTA_DRYRUN
 #define FELUCCA_OTA_DRYRUN 0     /* 1 = stage, ask "success", then undo: no record, no reset */
-#endif
-#ifndef FELUCCA_CDC
-#define FELUCCA_CDC 1            /* USB CDC-ACM serial console */
 #endif
 #ifndef FELUCCA_UAC
 #define FELUCCA_UAC 1            /* USB audio input: the master output, 16-bit stereo 44.1 kHz (usb.c) */
@@ -34,19 +23,8 @@
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_900"    /* package identity (build.py: the .fwsc marker string) */
 #endif
-#ifndef FELUCCA_CPU2
-#define FELUCCA_CPU2 1           /* 1 (1.6.1): the second core is built in and renders some parts when MENU > SYSTEM >
-                                  * 2ND CORE is ON (BETA; OFF by default: one core, as 1.6; hal/fm1_cpu1.h, fx.c
-                                  * mix_block). 0 (FELUCCA_CPU2=0 build.py): none of it (no core 1 stack, waiting loop,
-                                  * buffers or menu row). (The same default: core.h) */
-#endif
-#define FM1_CPU1_USED FELUCCA_CPU2   /* hal/fm1_sys.h: the second core is built in; every reset holds it first (its
-                                      * waiting loop is in RAM the ROM and the SPL use at boot) */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "v1.6.1" /* shown in the menu, the console and the editor; build.py --release X.Y */
-#endif
-#if FELUCCA_OTA && !FELUCCA_FLASH
-#error "FELUCCA_OTA needs FELUCCA_FLASH"
+#define FELUCCA_VERSION "v1.6.1" /* Felucca's version: the editor INFO ("FELUCCA ..."); build.py --release X.Y */
 #endif
 
 /* ------------------------------------------------------------- HAL --- */
@@ -55,12 +33,6 @@
 #include "fm1_sys.h"
 #include "fm1_irq.h"
 #include "fm1_guard.h"
-#if FELUCCA_CPU2
-#include "fm1_cpu1.h"
-#define C1_ON() fm1_c1_on                    /* fx.c mix_block: a second core is answering */
-#define C1_RUN(fn, arg) fm1_cpu1_run(fn, arg)
-#define C1_WAIT() fm1_cpu1_wait()
-#endif
 #include "fm1_input.h"
 #include "fm1_timer.h"
 #include "fm1_audio.h"
@@ -75,11 +47,9 @@
 
 /* ----------------------------------------------------------- sound --- */
 #include "core.h"
-#include "engines.c"             /* dsp.c, the eng_*.c files, the factory patterns */
+#include "engines.c"             /* dsp.c, the engines */
 #include "params.c"
-#include "mod.c"               /* the modulation matrix, used by voice.c and fx.c */
 #include "voice.c"
-#include "slicer.c"              /* per-track SLICER insert, used by fx.c */
 #include "fx.c"
 
 /* ------------------------------------------------- MIDI, sequencer --- */
@@ -87,36 +57,27 @@
 #if FELUCCA_UART
 #include "midi_uart.c"
 #endif
-#include "song_chain.c"
-#include "seq.c"
+#include "seq.c"                 /* keys, arpeggiator, sequencer, MIDI IN (midi_control.c) */
 #include "audio.c"
 
-/* -------------------------------------------------------------- UI --- */
+/* ---------------------------------------------------- panel, storage --- */
 #include "panel.c"
-#include "ui.c"
-#include "menu_items.c"          /* MENU's rows and settings (ui_menu.c, editor_menu.c) */
-#include "icons.c"               /* parameter icons (FELUCCA_ICONS), used by ui_draw.c */
-#include "ui_graph.c"
-#include "ui_draw.c"
-#include "ui_menu.c"
-#include "ui_input.c"
-#include "ui_layer.c"              /* the quick layers (FX GLO SCL EDIT REC held; SEQ TOOLS: ui_tools.c) */
-
-/* --------------------------------------------- storage, update, editor --- */
-#if FELUCCA_FLASH
 #include "fm1_flash.h"
 #include "storage_hw.c"
 #include "storage.c"
-#endif
-#include "upreset.c"             /* user presets (RAM mirror; flash with FELUCCA_FLASH) */
-#include "project.c"
+
+/* -------------------------------------------------------------- UI --- */
+#include "ui.c"                  /* the UI's state, sound loads, LEDs, calibration */
+#include "ui_icons.h"            /* the icon ids the FMUG pages name (tools/gen_aa_icons.py) */
+#include "ui_fmug.c"             /* FMUG's pages (fmug_app.c draws them) */
+#include "upreset.c"             /* user presets */
+#include "settings.c"            /* the settings and the autosave */
+
+/* ---------------------------------------------------- update, editor --- */
 #if FELUCCA_OTA
 #include "ota.c"
 #include "ota_hw.c"
 #include "editor.c"              /* web editor SysEx (needs the OTA SysEx plumbing) */
-#endif
-#if FELUCCA_CDC
-#include "console.c"
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
 #include "fmug_app.c"

@@ -43,7 +43,7 @@ source with the submodule's files in it. The build stops with "firmware/engines 
   ```
 
 - Node.js (optional, for the web tests).
-- Emscripten (optional, `emcc`: the browser emulator, `web/emu/`).
+- wasi-sdk 25 (optional, `WASI_SDK`: the browser emulator, `web/emu/`).
 
 On Linux x86-64 the toolchain runs natively and Docker is not needed.
 
@@ -59,54 +59,34 @@ On Linux x86-64 the toolchain runs natively and Docker is not needed.
 `./build.sh --release 1.0` makes a release build: the package identity becomes `FM-1_910`
 and the version string `v1.0`; the package is `build/felucca-1.0.fwsc`, and
 `build/release-1.0/` holds what a release ships: the package, the app
-(`felucca-1.0-app.bin`), `SHA256SUMS`, the sample attribution, `LICENSE`, `LICENSING.md` and
+(`felucca-1.0-app.bin`), `SHA256SUMS`, `LICENSE`, `LICENSING.md` and
 `LICENSES/` (the package contains Apache-2.0 SDK files, so the licence texts travel with it).
 
-Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `core.h` and `icons.c`):
+Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c` and `firmware/src/usb.c`):
 
 | Flag | Default | |
 | --- | --- | --- |
-| `FELUCCA_FLASH` | 1 | settings, presets and projects in flash |
-| `FELUCCA_OTA` | 1 | update entry (needs `FELUCCA_FLASH`) |
-| `FELUCCA_CDC` | 1 | USB serial console |
-| `FELUCCA_CDC_DEFAULT` | 1 | `0`: the console is built in but left out of USB from boot (as MENU > USB SERIAL OFF) |
+| `FELUCCA_OTA` | 1 | update entry and the editor's SysEx |
 | `FELUCCA_UAC` | 1 | USB audio input (the master output, stereo, 44.1 or 48 kHz) |
 | `FELUCCA_UAC_48K` | 1 | `0`: the USB audio input at 44.1 kHz only, as up to 1.0.5.2 (`firmware/src/usb.c`) |
 | `FELUCCA_UAC_AS_FIRST` | 1 | the audio control header lists the audio streaming interface before the MIDI one, so the USB audio driver of older macOS (up to 15) finds it; `0`: 1.0 to 1.5's order, byte for byte (`firmware/src/usb.c`) |
-| `FELUCCA_CPU2` | 1 | the second core is built in (MENU > SYSTEM > 2ND CORE, OFF by default); `0`: none of it, 1.6's one-core code and RAM (`firmware/hal/fm1_cpu1.h`, `firmware/src/fx.c`) |
 | `FELUCCA_UART` | 1 | TRS MIDI IN |
-| `FELUCCA_SLICE` | 1 | the SLICE engine |
-| `FELUCCA_ICONS` | 1 | parameter icons on the knob cards |
-| `FELUCCA_FM4` | 0 | the retired DIGITAL engine (4-operator FM) instead of its FM6 conversion |
 
-`FELUCCA_USB_LAYOUT` (`0` to `3`, default `0`) picks other USB descriptor layouts for testing; see
-`firmware/src/usb.c`.
-
-## Samples
-
-The CC0 instrument samples that the SAMPLE engine uses are in `assets/samples-cc0/`
-(Versilian Studios, see `ATTRIBUTION.txt` there). `tools/fetch_cc0.py` downloads them
-again from the source repositories. Without that folder the build still works, with no
-instrument sets in the SAMPLE engine and no PIANO in SLICE (the PIANO set's middle C): they play a plain sine
-at the note's pitch instead, and the screen says NO SAMPLE.
+The firmware runs on one core and has no USB serial console (Felucca's second core and CDC console, its other
+engines and its sample sets are not in this tree).
 
 ## Browser emulator
 
 ```
 ./build.sh
-web/emu/build.sh
-python3 -m http.server -d build/emu 8790     # open http://localhost:8790/
+WASI_SDK=/path/to/wasi-sdk-25.0 web/emu/build_wasi.sh     # -> docs/emu (OUT=build/emu for a scratch copy)
+python3 -m http.server -d docs/emu 8790                   # open http://localhost:8790/
 ```
 
-`web/emu/felucca_web.c` builds the firmware's sources as the host tests do, against a simulated FM-1, and
-Emscripten compiles it to WebAssembly (`build/emu/felucca.wasm`, with `index.html`, `worklet.js` and the font in `fonts/`). The page
-keeps the flash's storage sectors (projects, user presets, settings) in the browser. Not emulated: USB (audio,
-MIDI out, the editor, updates), TRS MIDI and the user sample slots. A build of it is on the site:
-<https://hugelton.github.io/Felucca/webapp/try/>.
-
-FMini-1's browser build (`docs/emu/`, linked from the site; firmware = `FELUCCA_FMUG_ONLY`) needs no Emscripten:
-`WASI_SDK=/path/to/wasi-sdk web/emu/build_wasi.sh` compiles the same `felucca_web.c` with wasi-sdk
-(`web/emu/wasi_shim/` stubs the few POSIX headers) into an import-free reactor module.
+`web/emu/felucca_web.c` builds the firmware's sources in `src/felucca.c`'s order against a simulated FM-1, and
+wasi-sdk compiles it into an import-free reactor module (`web/emu/wasi_shim/` stubs the few POSIX headers), with
+`index.html`, `worklet.js` and the font in `fonts/`. The page keeps the flash's storage sectors (user presets, their
+patches, the settings, the autosave) in the browser. Not emulated: USB (audio, the editor, updates) and TRS MIDI.
 
 ## Tests
 
@@ -114,23 +94,18 @@ FMini-1's browser build (`docs/emu/`, linked from the site; firmware = `FELUCCA_
 tests/run_tests.sh
 ```
 
-Runs the host tests and, with Node.js, the web page tests (and, with Emscripten too, the browser emulator's). Run it after `./build.sh`
-(it uses `build/` and needs `AC79_SDK` set as for the build). The suites cover flash storage,
-user presets, projects of every format, backup, the keys and knobs, MIDI (USB, TRS, clock,
-control), USB audio, the update entry and loader, the command-line installer, the UI (the real
-drawing code against stubs: every screen in every palette is rendered and checked for clipped or
-overlapping text; PNGs land in `build/ui_new/`), every engine (DRUM, NOISE, PHYS, FM6, SLICE, the
-DIGITAL conversion), the chord keys, the modulation matrix, the FX layer, the reverbs, the SLICER
-and swing. With `DAISYSP` pointing at a DaisySP checkout, the PHYS models are also compared with
-their floating-point originals; without it that test is skipped. Felucca-Engines' own test
-(`firmware/engines/tests/run.sh`) runs too, and its standalone host is built once more with Felucca's tables
-against the same golden renders.
+Runs the host tests and, with Node.js, the web page tests (with python playwright, the patch editor in Chromium;
+with `WASI_SDK` set, the browser emulator's WebAssembly build). Run it after `./build.sh` (it uses `build/` and needs
+`AC79_SDK` set as for the build). The suites cover the instrument (every screen, the factory patches, the filter, the
+FX, the speaker EQ, overload protection), flash storage, user presets, the settings and the autosave, MIDI IN (USB,
+TRS), the editor protocol, USB audio and descriptors, the update entry and loader, the command-line installer, the
+keys and knobs, the text renderer. A failing section prints `SECTION FAILED: <name>`.
 
-The regression suite (`tests/regress.c`) renders every engine and preset and compares a
-hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU
-cost (`tests/cpu_baseline.txt`, `tests/target_budget.txt`). After an intended change of
-the sound, `GOLDEN_UPDATE=1 sh tests/run_tests.sh` rewrites the hashes; `BUDGET_UPDATE=1`
-does the same for the cost files.
+The regression suite (`tests/regress.c`) renders the 100 factory patches, the voice modes, the FX sends and the
+sequencer and compares a hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU
+cost (`tests/cpu_baseline.txt`, `tests/target_budget.txt`). After an intended change of the sound, run
+`build/host/regress` against a scratch copy with `GOLDEN_UPDATE=1` and merge the lines you mean to change;
+`BUDGET_UPDATE=1` does the same for the cost files.
 
 ## Install
 
@@ -148,9 +123,9 @@ Or, to install your own build from the web installer, make a local copy of the s
 (Web MIDI needs a secure context):
 
 ```
-python3 web/make_site.py build/felucca.fwsc dev /tmp/felucca-site
-cd /tmp/felucca-site && python3 -m http.server 8000
-# open http://localhost:8000/webapp/installer/
+mkdir -p /tmp/site && python3 web/make_fmug_installer.py build/felucca.fwsc /tmp/site/index.html dev
+cd /tmp/site && python3 -m http.server 8000
+# open http://localhost:8000/
 ```
 
 Installing firmware is at your own risk. If an install fails and the FM-1 no longer

@@ -120,8 +120,6 @@ int main(int argc, char **argv)
         cv_text(136, 66, &AF_S, "REC", T_REC);
         cv_text(4, 82, &AF_L, "124", T_THEME);
         cv_text(80, 92, &AF_S, "Mixed case text", T_TEXT);
-        cv_key_hint(80, 108, KC_OCTUP, "LOAD", 1, T_BG);          /* keycaps: available, unavailable */
-        cv_key_hint(150, 108, KC_OCTDN, "BACK", 0, T_BG);
         for (unsigned y = 0; y < 124; y++)
             for (unsigned x = 0; x < 240; x++) {
                 uint16_t v = swap16(cv_px[y * 240 + x]);
@@ -142,13 +140,6 @@ int main(int argc, char **argv)
     assert(text_w(&AF_M, "0000") == text_w(&AF_M, "1111") && text_w(&AF_S, "1.25") == text_w(&AF_S, "8.75"));
     assert(glyph(&AF_S, (uint8_t)ELLIPSIS) != glyph(&AF_S, '?') && glyph(&AF_M, (uint8_t)ELLIPSIS) != glyph(&AF_M, '?'));
     assert(text_w(&AF_L, "abc") == text_w(&AF_L, "ABC"));
-    {
-        char b[32];
-        assert(!text_fit(b, sizeof b, "KICK", &AF_S, 60) && !strcmp(b, "KICK"));
-        assert(text_fit(b, sizeof b, "A VERY LONG PRESET NAME", &AF_S, 60) && text_w(&AF_S, b) <= 60);
-        assert(b[strlen(b) - 1] == ELLIPSIS && b[strlen(b) - 2] != ' ');
-        assert(text_fit(b, sizeof b, "WWWWWWWW", &AF_M, 1) && b[0] == ELLIPSIS && !b[1]);
-    }
     if (argc > 1) {
         FILE *f = fopen(argv[1], "wb"); assert(f);
         fprintf(f, "P6\n%u %u\n255\n", (unsigned)SHEET_W, (unsigned)SHEET_H);

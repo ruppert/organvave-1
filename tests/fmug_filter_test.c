@@ -9,9 +9,8 @@
  * 3. EMPHASIS: no singing below the dial's 7.5, singing at 8.5 and 10; the passband falls as the hardware's does
  *    (-2.25 dB at 2.5, -9.5 at 5) and the peak rises with it.
  * 4. no click, no DC, no overflow: every cutoff, emphasis and key, a loud saw in: the output stays bounded. */
-#define main hostsim_main
-#include "hostsim.c"
-#undef main
+#define HOST_NO_UI 1
+#include "host.h"
 
 static int bad;
 static void check(const char *what, int ok)
@@ -27,7 +26,6 @@ static void setup(uint32_t cut, uint32_t emph, uint32_t kbd, uint32_t sw1)
 {
     uint32_t i;
     memset(trk, 0, sizeof trk);
-    memset(eng_mem, 0, sizeof eng_mem);
     memset(fmug_eff, 0, sizeof fmug_eff);
     memset(fmug_sm, 0, sizeof fmug_sm);
     fmug_sm_ok = 0;

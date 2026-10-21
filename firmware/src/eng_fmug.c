@@ -15,12 +15,7 @@
  * The patch holds the rest (ranges, waves, tuning, mixer, switches, keyboard tracking, TUNE). Edited with the FMUG
  * pages (ui_fmug.c). State per voice: s[0..3] the ladder, s[4] the feedback's lag pole (all Q8), s[7] the contour (stage << 24 |
  * level, Q23); the noise is the part's (fmug_nbuf: one source, made once a block). */
-#define ENGI_FMUG (13u + FELUCCA_SLICE)   /* engines.c ENGINES[] (append-only: after SLICE) */
-#if FELUCCA_FMUG_ONLY
 #define FMUG_POLY 12             /* FMini-1: POLY mode plays 12 voices */
-#else
-#define FMUG_POLY 4
-#endif
 #define FG_SIZE 32u
 #define FMUG_NFACTORY 100u
 #define FMUG_OWN FMUG_NFACTORY
@@ -51,7 +46,7 @@ static struct {                                  /* the patch as the audio ISR s
     uint8_t p[FG_SIZE];
     uint8_t gen, ok;
 } fmug_eff[NTRK];
-static int32_t fmug_nst[NTRK] = {0x2F6E2B1, 0x1A2B3C5, 0x3C4D5E7, 0x0F1E2D3};   /* a part's noise generator */
+static int32_t fmug_nst[NTRK] = {0x2F6E2B1};                     /* the part's noise generator */
 static int32_t fmug_pk[NTRK][3];                 /* its pink filter */
 static int32_t fmug_nbuf[NTRK][CTL];             /* the part's noise for this block, +-32768: one source, all its voices */
 static int32_t fmug_sm[NTRK][3];                 /* the smoothed CUTOFF, EMPH, CNTR knobs (Q16): the encoder's steps become ramps */

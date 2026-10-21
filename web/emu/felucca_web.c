@@ -3,43 +3,48 @@
  * The design (the device clock driven by the audio the worklet asks for, the exports below, the saved
  * flash handed back before boot) follows X0X's browser build, web/emu/x0x_web.c of charlesvestal/fm1-x0x
  * (GPL-3.0), a Felucca fork. */
-/* Felucca in the browser: the firmware's sources, as the host tests build them (tests/hostsim.c: libc,
- * engines, voices, FX, sequencer; then the UI, main.c, storage and projects, in src/felucca.c's order),
- * compiled to WebAssembly and run in an AudioWorklet against a simulated FM-1:
+/* organvave-1 (FMini-1's screen and sound) in the browser: the firmware's sources in src/felucca.c's order, with
+ * this file as the HAL, compiled to WebAssembly and run in an AudioWorklet against a simulated FM-1:
  *   - the device clock: TIMER4 ticks (24 MHz) and fm1_ms advance with the audio the worklet asks for; the
  *     audio ISR (audio.c fm1_alnk0_irq, the real one) renders each I2S half (HALF_FRAMES) as the DMA would
- *     ask for it, and the main loop (main.c's, below in web_frame) runs every 15 ms, with ui_input on every
+ *     ask for it, and the main loop (main.c's, below in web_frame) runs every 15 ms, with fa_input on every
  *     millisecond in between as main.c's wait loop calls it;
  *   - the panel: buttons and encoders by their printed labels (panel.c's table maps them to the matrix),
  *     the keys as fm1_in.notes, the LEDs read back from fm1_led / fm1_led_dim through the key matrix;
  *   - the screen: lcd_fill / lcd_blit into a 240 x 240 RGB565 frame (the panel's byte order);
- *   - the flash: a 1 MiB NOR image behind storage.c's hooks (settings, projects, user presets, the user
- *     sample slots read through it as XIP); the page keeps its storage sectors and gives them back at boot.
- * Not here: USB (MIDI, audio, the editor, updates), TRS MIDI, the serial console, the battery (full), the
- * crash / UBOOT paths. Nothing of the firmware changes for this file.
- *   web/emu/build.sh  ->  build/emu/{felucca.wasm, worklet.js, index.html} */
+ *   - the flash: a 1 MiB NOR image behind storage.c's hooks (the settings, the user presets, the autosave); the
+ *     page keeps its storage sectors and gives them back at boot;
+ *   - MIDI IN: channel messages from Web MIDI into the USB-MIDI queue (web_midi).
+ * Not here: USB (audio, the editor, updates), TRS MIDI, the battery (full), the crash / UBOOT paths. Nothing of the
+ * firmware changes for this file.
+ *   WASI_SDK=... web/emu/build_wasi.sh  ->  docs/emu/{felucca.wasm, worklet.js, index.html} */
 #include <stdint.h>
 
 #define FELUCCA_WEB 1
-#ifndef FELUCCA_FMUG_ONLY
-#define FELUCCA_FMUG_ONLY 1                /* FMini-1 (fmug_app.c); 0 = Felucca's whole UI */
-#endif
-#ifndef FELUCCA_CDC
-#define FELUCCA_CDC 1                    /* as src/felucca.c: MENU > USB SERIAL is there (nothing behind it) */
-#endif
-#define FELUCCA_FLASH 1
 #define FELUCCA_OTA 0
 #define FELUCCA_UAC 0
 #define FELUCCA_UART 0
 #ifndef FELUCCA_VERSION
 #define FELUCCA_VERSION "WEB"
 #endif
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#define __attribute__(x)
+#define memset felucca_memset
+#define memcpy felucca_memcpy
+#define memcmp felucca_memcmp
+#include "felucca_tables.h"
+#include "../../firmware/src/libc.c"
+#undef memset
+#undef memcpy
+#undef memcmp
+static struct { volatile uint32_t notes, buttons; } fm1_in;
 static uint8_t nor[0x100000];            /* the SPI NOR (erased: 0xFF) */
-#define SMP_USER_XIP(k) ((const uint8_t *)nor + SMP_USER_BASE + (k) * SMP_USER_SIZE)   /* eng_sample.c */
-#define main hostsim_main
-#include "../../tests/hostsim.c"
-#undef main
+static void fm1_delay_ms(uint32_t ms) { (void)ms; }
+static void fm1_irq_off(void) {}
+static void fm1_irq_on(void) {}
 
 /* ------------------------------------------------------------ the clock --- */
 #define FM1_TICKS_PER_US 24u             /* TIMER4: 24 MHz */
@@ -57,7 +62,6 @@ static void fm1_audio_init(int32_t *buf, uint32_t words, void (*isr)(void), uint
 { (void)buf; (void)words; (void)isr; (void)prio; }
 static void fm1_audio_stop(void) {}
 void isr_alnk0(void) {}
-#include "../../firmware/src/audio.c"
 
 /* ------------------------------------------------------------ the panel --- */
 #define FM1_NCOL 11u
@@ -126,8 +130,6 @@ static int32_t fm1_enc_take(uint32_t e) { int32_t s = web_enc_steps[e % 7u]; web
 static void fm1_input_init(void) {}
 static void fm1_input_tick(void) {}
 static void fm1_wdt_feed(void) {}
-static void fm1_irq_off(void) {}
-static void fm1_irq_on(void) {}
 
 /* ----------------------------------------------------------- the screen --- */
 static uint16_t web_fb[240 * 240];       /* RGB565 as the panel gets it (high byte first) */
@@ -161,15 +163,15 @@ static void lcd_wake_now(void) {}
 static void lcd_init(void) {}
 
 #include "../../firmware/src/gfx.c"
+#include "../../firmware/src/core.h"
+#include "../../firmware/src/engines.c"
+#include "../../firmware/src/params.c"
+#include "../../firmware/src/voice.c"
+#include "../../firmware/src/fx.c"
+#include "../../firmware/src/usb.c"
+#include "../../firmware/src/seq.c"
+#include "../../firmware/src/audio.c"
 #include "../../firmware/src/panel.c"
-#include "../../firmware/src/ui.c"
-#include "../../firmware/src/menu_items.c"
-#include "../../firmware/src/icons.c"
-#include "../../firmware/src/ui_graph.c"
-#include "../../firmware/src/ui_draw.c"
-#include "../../firmware/src/ui_menu.c"
-#include "../../firmware/src/ui_input.c"
-#include "../../firmware/src/ui_layer.c"
 
 /* ------------------------------------------------------------ the flash --- */
 static uint32_t web_flash_writes;
@@ -202,19 +204,17 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)       /* NOR: a wr
 }
 static uint32_t irq_save(void) { return 0; }
 static void irq_restore(uint32_t f) { (void)f; }
-static uint32_t fl_jedec_ram(void) { return 0x856014u; }             /* the FM-1's part (project.c) */
-static void fl_plain_window_init(void) {}
+static uint32_t fl_jedec_ram(void) { return 0x856014u; }             /* the FM-1's part (settings.c persist_boot) */
 #define FL_FAR(fn) (fn)
 #include "../../firmware/src/storage.c"
+#include "../../firmware/src/ui.c"
+#include "ui_icons.h"
+#include "../../firmware/src/ui_fmug.c"
 #include "../../firmware/src/upreset.c"
-#include "../../firmware/src/project.c"
+#include "../../firmware/src/settings.c"
 
 /* ------------------------------------------------- main.c and its HAL --- */
-#if FELUCCA_CPU2
-typedef struct { uint32_t magic, count, vec, pc, emu, dbg, rets, core; } fm1_crash_t;
-#else
 typedef struct { uint32_t magic, count, vec, pc, emu, dbg, rets; } fm1_crash_t;
-#endif
 #define FM1_CRASH_MAGIC 0x43525348u
 static fm1_crash_t fm1_crash;                     /* (none: main.c boot_leds runs the sweep) */
 static struct { uint8_t p3_rst, wdt_con; uint32_t rst_src; } fm1_boot;
@@ -238,27 +238,13 @@ static void fm1_wdt_arm(uint32_t v) { (void)v; }
 static void fm1_mailbox_clear(void) {}
 static void fm1_guard_enable(uint32_t m) { (void)m; }
 enum { FM1_GUARD_STACK = 1, FM1_GUARD_WRITE = 2, FM1_GUARD_BUS = 4, FM1_GUARD_PC = 8 };
-#if FELUCCA_CPU2
-/* the second core (hal/fm1_cpu1.h): none here, one core whatever MENU > 2ND CORE says (fx.c mix_block's C1_ON() is 0
- * without felucca.c's macros) */
-uint32_t _c1_start[1], _c1_end[1], _c1_load[1];
-static uint8_t fm1_c1_on, fm1_c1_gave_up;
-static void fm1_cpu1_halt(void) {}
-static int fm1_cpu1_start(void) { return -1; }
-static void fm1_guard_pc_open(void) {}
-#endif
-#if FELUCCA_CDC
-static void cdc_task(void) {}
-#endif
 /* main.c's calls into the USB driver (registers): nothing here (usb.c's own functions stay as they are) */
 #define usb_poll() ((void)0)
 #define usb_start() ((void)0)
 #define usb_retry(ms) ((void)(ms))
 #define usb_detach() ((void)0)
 #include "../../firmware/src/master.c"
-#if FELUCCA_FMUG_ONLY
 #include "../../firmware/src/fmug_app.c"
-#endif
 #include "../../firmware/src/main.c"
 #undef usb_poll
 #undef usb_start
@@ -273,13 +259,8 @@ static void web_power_on(void)
 {
     persist_boot();
     settings_init();
-    usb_serial_apply();
     lcd_init();
-#if FELUCCA_FMUG_ONLY
     fa_splash();
-#else
-    draw_splash();                        /* main.c: the splash (ui_draw.c) */
-#endif
     memset(&felucca_dbg, 0, sizeof felucca_dbg);
     felucca_dbg.magic = DBG_MAGIC;
     fm1_input_init();
@@ -290,13 +271,9 @@ static void web_power_on(void)
     kb_boot_hold = 1;                     /* main.c (#137): the keys silent under the splash */
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
-    autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
-#if FELUCCA_FMUG_ONLY
-    fa_init();                            /* main.c: track 1 = the instrument */
+    autosave_boot(boot_clean);            /* main.c: the last session's instrument (settings.c) */
+    fa_init();                            /* main.c: the instrument */
     web_boot_ms = fm1_ms + 3030u;        /* main.c: 30 ms + the 3 s splash */
-#else
-    web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
-#endif
     web_booted = 1;
 }
 
@@ -422,7 +399,7 @@ EXPORT uint32_t web_midi(uint32_t status, uint32_t d1, uint32_t d2)
     return (uint32_t)midi_enqueue((status >> 4) | status << 8 | (d1 & 127u) << 16 | (d2 & 127u) << 24, 1);
 }
 
-/* the LEDs: bit b = the button labelled b lit (bit 14: PLAY's green), keys bit k; the dim glow and the breath alike */
+/* the LEDs: bit b = the button labelled b lit, keys bit k; the dim glow and the breath alike */
 static uint32_t led_on(const uint8_t *l, uint32_t id)
 {
     uint32_t c, r;
@@ -446,10 +423,7 @@ static uint32_t led_keys(const uint8_t *l)
         m |= led_on(l, 14u + k) << k;
     return m;
 }
-EXPORT uint32_t web_lit_buttons(void)
-{
-    return led_buttons(fm1_led) | ((fm1_led[LED_PLAY_GREEN >> 3] >> (LED_PLAY_GREEN & 7u)) & 1u) << 14;
-}
+EXPORT uint32_t web_lit_buttons(void) { return led_buttons(fm1_led); }
 EXPORT uint32_t web_lit_keys(void) { return led_keys(fm1_led); }
 EXPORT uint32_t web_dim_buttons(void) { return led_buttons(fm1_led_dim); }
 EXPORT uint32_t web_dim_keys(void) { return led_keys(fm1_led_dim); }
@@ -471,36 +445,25 @@ EXPORT uint8_t *web_anim_levels(void)
     return lv;
 }
 
-/* for the test and the bench (web/emu/emu_test.mjs), a heavy song straight into the tracks (as hostsim's
- * renders set them): T1 FM6 PAD, T2 PHYS DRONE STRING (SYMP), T3 GRAIN CLOUD PAD, 4-note chords on all 16
- * steps, held; T4 DRUM, kick snare and hats. PLAY is the page's (or the test's) to press */
+/* for the test and the bench (web/emu/emu_test.mjs): a heavy song straight into the instrument: POLY, 4-note chords
+ * on all 16 steps, held, every FX on. PLAY is the page's (or the test's) to press */
 EXPORT void web_test_heavy(void)
 {
-    static const uint8_t ENG[3][2] = {{12, 4}, {ENGI_PHYS, 7}, {8, 0}};
     static const uint8_t CH[4][4] = {{48, 55, 60, 64}, {45, 52, 57, 60}, {41, 48, 53, 57}, {43, 50, 55, 59}};
-    uint32_t p, i;
-    for (p = 0; p < 3u; p++) {
-        track_t *t = &trk[p];
-        host_preset(t, ENG[p][0], ENG[p][1]);
-        t->p[P_VOICE] = V_POLY;
-        t->p[P_SUS] = 127;
-        for (i = 0; i < 16u; i++) {
-            uint8_t n[4], k;
-            for (k = 0; k < 4u; k++)
-                n[k] = (uint8_t)(CH[i / 4u][k] + 12u * p);
-            put_step(t, i, 4, n, ST_NOTE, 0);
-        }
-    }
-    host_drums(&trk[3]);
+    track_t *t = &trk[0];
+    uint32_t i, k;
+    apply_preset_to(t, 1);
+    t->p[P_VOICE] = V_POLY;
+    t->p[P_SUS] = 127;
+    t->p[P_SLEN] = 16;
     for (i = 0; i < 16u; i++) {
-        uint8_t n[4];
-        uint32_t k = 0;
-        if (i % 4u == 0u)
-            n[k++] = 36;
-        if (i == 4u || i == 12u)
-            n[k++] = 38;
-        n[k++] = i % 2u ? 42 : 46;
-        put_step(&trk[3], i, k, n, ST_NOTE, 0);
+        step_t *s = &t->step[i];
+        s->n = 4;
+        for (k = 0; k < 4u; k++)
+            s->note[k] = CH[i / 4u][k];
+        s->time = ST_NOTE;
+        s->flags = 0;
+        s->vel = 100;
     }
     ui.force = 1;
 }

@@ -28,7 +28,7 @@ int main(int argc, char **argv)
         return 2;
     web_nor_erase();
     web_boot();
-    render(500);
+    render(3400);
     web_test_heavy();
     web_buttons(1u << B_PLAY);
     render(60);

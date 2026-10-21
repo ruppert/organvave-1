@@ -2,8 +2,7 @@
  * The firmware's real editor handler behind stdin / stdout, for web/test_editor_fmini.py: each input line is the hex of a
  * SysEx request (F0 .. F7); the answer is the hex of the reply frame (or an empty line when there is none).
  * Track 1 is an FMUG track on its first factory patch, as on an FMini-1. */
-#define EDITOR_TEST_NO_MAIN 1
-#include "editor_test.c"
+#include "editor_host.h"
 #include <stdio.h>
 int main(void)
 {

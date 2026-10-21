@@ -17,21 +17,13 @@
 #define ST_PAYLOAD_OFF 256u
 #define ST_PAYLOAD_MAX (ST_SECTOR - ST_PAYLOAD_OFF)
 
-/* flash map (FL_DATA 0x97000..0xDFFFF, FL_GLOB 0xFC000.., FL_AUTO 0xE5000..0xE6FFF, FL_VBANK 0xE7000): settings 0xFC000, projects
- * 0x97000..0x9EFFF, user sample slots 0xA0000..0xDBFFF (eng_sample.c), user preset banks 0xDC000..0xDFFFF (upreset.c),
- * the user presets' FM6 patches (up_fm6.c, since 1.0.3): copy A 0x9F000, copy B 0xFE000; the autosave (project.c,
- * 1.2): A 0xE5000, B 0xE6000, above the OTA staging (0xE0000..0xE4FFF), in the margin the stock firmware's own update
- * stages into (only ever while the stock firmware runs: a later Felucca finds no valid copy and starts as without one).
- * Those two sectors held the FM6 patch bank of 1.0..1.0.2 (OBJ_FM6BANK, retired): both objects use the same pair,
- * told apart by the commit record's type. The bank is only read, once, to move its patches into the user presets
- * (up_fm6.c upf_boot); the first write of the new object goes to the sector that does not hold the bank's newest
- * copy (st_save_to), so a power cut never loses both.
- * The FM6 voice bank (1.4.1, fm6_vbank.c): 0xE7000, the sector above the autosave, with a commit record of the same
- * kind (type OBJ_FM6VB, not an st_load object); a new bank is first staged in the autosave's older copy (fm6_vbank.c). */
-enum { OBJ_SETTINGS, OBJ_PROJECT0, OBJ_UPRESET0 = OBJ_PROJECT0 + 4, OBJ_FM6BANK = OBJ_UPRESET0 + 2, OBJ_UPFM6,
-       OBJ_AUTOSAVE, OBJ_COUNT };
-#define OBJ_FM6VB 32u                          /* the voice bank's commit records (fm6_vbank.c; >= OBJ_COUNT: st_load
-                                                * never takes one, no object here takes its sectors) */
+/* flash map: settings 0xFC000 / 0xFD000 (settings.c), the user preset banks 0xDC000..0xDFFFF (upreset.c), the user
+ * presets' patches A 0x9F000, B 0xFE000 (upreset.c), the autosave A 0xE5000, B 0xE6000 (settings.c), above the OTA
+ * staging (0xE0000..0xE4FFF). The object numbers are the commit record's type and stay FMini-1's (and Felucca's), so the
+ * settings and the user presets of FMini-1 read here: Felucca's projects (1..4) and FM6 bank (7) are retired numbers,
+ * their sectors (0x97000..0x9EFFF) unused. The autosave's record is this firmware's own: FMini-1's (a project) reads
+ * as none */
+enum { OBJ_SETTINGS, OBJ_UPRESET0 = 5, OBJ_UPFM6 = 8, OBJ_AUTOSAVE, OBJ_COUNT };
 
 typedef struct {
     uint32_t magic;
@@ -65,20 +57,20 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
 {
     if (obj == OBJ_SETTINGS)
         return 0xFC000u + copy * ST_SECTOR;
-    if (obj == OBJ_FM6BANK || obj == OBJ_UPFM6)          /* (the same pair: see the flash map) */
+    if (obj == OBJ_UPFM6)
         return copy ? 0xFE000u : 0x9F000u;
     if (obj == OBJ_AUTOSAVE)
         return 0xE5000u + copy * ST_SECTOR;
-    if (obj >= OBJ_UPRESET0)
+    if (obj == OBJ_UPRESET0 || obj == OBJ_UPRESET0 + 1u)
         return 0xDC000u + (obj - OBJ_UPRESET0) * 2u * ST_SECTOR + copy * ST_SECTOR;
-    return 0x97000u + (obj - OBJ_PROJECT0) * 2u * ST_SECTOR + copy * ST_SECTOR;
+    return 0xFFFFFFFFu;                               /* (a retired number: no sector) */
 }
 
 static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
 
 static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record valid: 0 */
 {
-    if (obj >= OBJ_COUNT || copy > 1u)
+    if (obj >= OBJ_COUNT || copy > 1u || st_sector(obj, copy) == 0xFFFFFFFFu)
         return -1;
     if (st_read(st_sector(obj, copy), h, sizeof *h))
         return -1;
@@ -138,7 +130,7 @@ static int st_save_to(uint32_t obj, const void *src, uint32_t len, int to)
     uint32_t seq, base, off;
     int cur, rc;
     st_hdr_t h;
-    if (obj >= OBJ_COUNT || len > ST_PAYLOAD_MAX || to > 1)
+    if (obj >= OBJ_COUNT || len > ST_PAYLOAD_MAX || to > 1 || st_sector(obj, 0) == 0xFFFFFFFFu)
         return -1;
     cur = st_current(obj, &h);
     seq = cur < 0 ? 0u : h.seq;

@@ -13,9 +13,8 @@
  * The EQ is on the master: the speaker, the headphone / line out (the same DAC) and USB audio (uac_tap reads the
  * same output) all get it. */
 #include <math.h>
-#define main hostsim_main
-#include "hostsim.c"
-#undef main
+#define HOST_NO_UI 1
+#include "host.h"
 
 static double goertzel_db(const int32_t *x, uint32_t n, double f)
 {
@@ -68,27 +67,19 @@ static uint32_t kick_pattern(void)
 {
     static const char *const NAME[2] = {"PUNCH", "ROUND"};
     static float f[2 * FS];
-    static dv_coef_t c;
-    static dv_voice_t v;
-    static dv_metal_t mb;
-    uint32_t type, gi, mode, i, k, fails = 0;
+    uint32_t type, gi, mode, i, fails = 0;
     for (type = 0; type < 2u; type++) {
-        dv_param_t p;
-        int32_t y[CTL], m[CTL], pk = 1;
-        dv_default(&p, type);
-        dv_setup(&c, &p);
-        dv_init(&v, c.type);
-        memset(&mb, 0, sizeof mb);
-        dv_metal_tune(&mb, &c);
-        for (i = 0; i < 2u * FS; i += CTL) {
-            if (i % (FS / 2u) < CTL)
-                dv_trigger(&v);
-            dv_metal_run(&mb, m, CTL);
-            dv_run(&c, &v, m, y, CTL);
-            for (k = 0; k < CTL; k++) {
-                f[i + k] = (float)y[k];
-                pk = abs(y[k]) > pk ? abs(y[k]) : pk;
-            }
+        int32_t pk = 1;
+        double ph = 0.0;
+        for (i = 0; i < 2u * FS; i++) {             /* a kick (the DRUM engine's is gone): a sine falling from 150 Hz
+                                                     * (PUNCH) / 110 Hz (ROUND) to 48 Hz, decaying over ~0.3 s */
+            double t = (double)(i % (FS / 2u)) / FS, fq = 48.0 + (type ? 62.0 : 102.0) * exp(-t / (type ? 0.05 : 0.03));
+            int32_t y = (int32_t)(30000.0 * exp(-t / 0.12) * sin(ph));
+            ph += 2.0 * M_PI * fq / FS;
+            if (i % (FS / 2u) == 0u)
+                ph = 0.0;
+            f[i] = (float)y;
+            pk = abs(y) > pk ? abs(y) : pk;
         }
         for (gi = 1; gi <= 2u; gi++) {
             int32_t env[3], peak = 0;

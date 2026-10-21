@@ -1,9 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * FMini-1's FX buses (fx.c, FELUCCA_FMUG_ONLY): the reverb types (stereo, decay, level, stability), the delay and chorus types.
  *   build/host/fmug_fx_test [WAVDIR]       (WAVDIR: demo renders) */
-#define UI_TEST_NO_MAIN 1
-#define FELUCCA_FMUG_ONLY 1
-#include "ui_test.c"
+#include "host.h"
 #include "../firmware/src/fmug_app.c"
 #include <stdio.h>
 

@@ -5,9 +5,7 @@
  *   cc -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o /tmp/shots tools/readme_shots.c -lm && /tmp/shots /tmp/fa
  *   python3 tools/gen_readme_art.py /tmp/fa
  * (after the generation step of tools/build.py has made build/gen) */
-#define UI_TEST_NO_MAIN 1
-#define FELUCCA_FMUG_ONLY 1
-#include "ui_test.c"
+#include "host.h"
 #include "../firmware/src/fmug_app.c"
 #include <stdio.h>
 static const char *dir;

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+ * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments; Guilherme Ruppert (FMini-1) */
 /* Editor protocol: the FMUG patch (FMini-1; EDITOR_PROTOCOL.md "FMUG patches", cmds 82, 83). The patch is the 32
  * bytes of eng_fmug.c (FG_*: ranges, waves, tuning, mixer, switches, TUNE, MOD MIX, KBD, GLIDE), every byte 0..127.
  * Targets: 0 a track's own patch (index 0..3), 2 a factory patch (0..FMUG_NFACTORY-1, read only), 3 a user preset's
@@ -59,7 +59,7 @@ static int ed_fmug_handle(uint32_t cmd, const uint8_t *a, uint32_t n)
     }
     if (!rc && cmd == ED_FMUG_GET) {
         if (a[0] == ED_FMUG_USER) {
-            uint8_t w[FM6_PACKED];
+            uint8_t w[UPF_N];
             if (!upf_get(a[1], w)) {
                 memcpy(pk, w, FG_SIZE);
             } else {

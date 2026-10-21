@@ -1,9 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# FMini-1 in the browser without Emscripten: web/emu/felucca_web.c (FELUCCA_FMUG_ONLY) compiled with wasi-sdk
+# The instrument in the browser: web/emu/felucca_web.c compiled with wasi-sdk
 # (https://github.com/WebAssembly/wasi-sdk, a reactor module with no imports) plus the page.
 #   WASI_SDK=/path/to/wasi-sdk web/emu/build_wasi.sh   ->  ${OUT:-docs/emu}/{index.html, worklet.js, felucca.wasm, fonts/}
-# Run after one ./build.sh (build/gen: the tables, the fonts, the CC0 samples).
+# Run after one ./build.sh (build/gen: the tables, the fonts, the icons).
 set -e
 cd "$(dirname "$0")/../.."
 : "${WASI_SDK:?set WASI_SDK to a wasi-sdk directory (wasi-sdk-25.0-x86_64-linux)}"

@@ -10,8 +10,18 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from make_site import HERE, strip_module, product_of  # noqa: E402
+HERE = Path(__file__).resolve().parent
+BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
+
+
+def strip_module(src):
+    src = re.sub(r"^export\s+", "", src, flags=re.M)
+    return re.sub(r"^import .*?;\n", "", src, flags=re.M)
+
+
+def product_of(raw):
+    """the package identity: one marker byte after each of the first 20 blocks (fm1pkg.js productOf)"""
+    return "".join(chr((m - i - 1) & 0xFF) for i in range(BLOCKS) if (m := raw[i * BLK + KEEP]) != 0x7D)
 
 
 def main(pkg, out, version="1.4.2"):

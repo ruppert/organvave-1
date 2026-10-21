@@ -1,5 +1,25 @@
 # Felucca editor protocol (SysEx over USB-MIDI)
 
+## organvave-1: what this firmware answers (Oct 2026)
+
+organvave-1 keeps only the commands the patch editor (`web/editor_fmini.html`) uses; every other command gets no reply
+(an editor sees a timeout, as with older firmware). Answered: `INFO` 1, `GET` 2, `SET` 3, `DUMP` 4, `DESC` 5, `PRESET`
+8, `NAMES` 10, `UP_LIST` 16, `UP_GET` 17, `UP_STORE` 19, `UP_LOAD` 20, `UP_ERASE` 21, `WATCH` 22 (with `CHANGED` 23,
+`RELOAD` 24 pushes), `PING` 25, `TRACK` 27, `FMUG_GET` 82, `FMUG_PUT` 83, `FMUG_PRESET` 84. Gone: the steps (6, 7, 26,
+28-30), projects (9), user samples (11-15), `UP_PUT` 18, `TRACK_MIX` / `TRACK_DUMP` / `TRACK_PARAM` / `TRACK_CHANGED`,
+`SONG`, the UI state and favourites, `MOTION` 64, the backup 65-67 (so the installer's "return to official V15" warns
+and goes on without a backup), FM6 68-71 and 74-77, `MENU_DESC` / `MENU_SET` 72-73, MIDI LEARN 78-79, the palette 80-81.
+
+- One track (`NTRK` 1; `TRACK` lists one, its selection argument is accepted and ignored), 16 steps.
+- `INFO` still starts with `"FELUCCA "` and Felucca's version and still names 15 engines: the 14 retired ones are
+  `"-"` with no presets (`PRESET` of one: no reply), engine 14 is `FMUG`. After the track count it ends with the tags
+  `53 01 03` (live sync), `47 01 FG_SIZE` and `48 01 01`, as FMini-1 1.6.1 (the editor reads the last six bytes).
+- A request frame longer than 64 bytes is dropped whole (the longest request, `FMUG_PUT` with the octave, is 39).
+- User presets are FMini-1's records (`UPB1` banks, `UPF6` patches): presets saved on FMini-1 load here. The settings
+  record (`PER4`) is read too. The autosave is a new record (`OVA1`): FMini-1's autosave (a project) is not loaded.
+
+The sections below are Felucca's and FMini-1's protocol as it was; read them for the formats of the commands above.
+
 The firmware side is `firmware/src/editor.c`. Commands 1-15, track selection, dumps, step reads
 and parameter writes (27, 29, 30, 31) were checked on hardware. `tests/editor_test.c` also exercises the real C
 handler, malformed transfers and stop timeouts against simulated flash. User-preset

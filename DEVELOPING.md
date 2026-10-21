@@ -10,14 +10,18 @@ FMini-1 is firmware for the M-VAVE FM-1 that turns it into one monophonic (optio
 Minimoog Model D: three oscillators, a noise source, a mixer that overloads softly, a 24 dB/oct transistor-ladder low-pass with its
 own contour, a loudness contour, an LFO, an arpeggiator, a small sequencer, three FX buses and 100 factory patches. It is a fork of
 Felucca (many engines, a sequencer, projects); FMini-1 keeps Felucca's sound core, FX, MIDI, USB and storage and replaces the user
-interface (`FELUCCA_FMUG_ONLY=1`: `fmug_app.c`, `ui_fmug.c`) and adds one engine (FMUG, `eng_fmug.c`). Felucca's other engines are
-still built (the regression tests render them) but FMini-1's own screens do not offer them.
+interface (`fmug_app.c`, `ui_fmug.c`) and adds one engine (FMUG, `eng_fmug.c`). organvave-1 (Oct 2026) took out everything the
+instrument does not use: Felucca's other engines and their samples, its UI, projects, song chain, the modulation matrix, the SLICER,
+the INSERT and FX layer, the drum grid, MIDI clock and learn, the backup protocol, the second core and the USB serial console. One
+part (`NTRK` 1), 16 steps; `ENGINES[]` keeps its 15 numbers (14 retired ones point at a stub) so stored engine numbers still mean
+the same.
 
-The hardware, as the sources use it: a JieLi AC79 chip (pi32v2 core, clang 4.0.1; an optional second core), an I2S codec, a 240 x 240
+The hardware, as the sources use it: a JieLi AC79 chip (pi32v2 core, clang 4.0.1; the firmware uses one core), an I2S codec, a 240 x 240
 RGB565 LCD, a key matrix with 14 labelled buttons (`panel.c`: FX SCL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC OCT- OCT+), seven
-encoders (SELECT, ALGORITHM, PRESETS, KNOB 1..4), the keys, a MASTER pot, USB (MIDI, audio, a serial console), TRS MIDI IN. Sample
-rate 44.1 kHz; the audio interrupt renders one I2S half buffer (128 frames, 2.9 ms) in blocks of `CTL` = 32 samples. Memory at v1.7.0:
-image 533 KB, RAM `.data` + `.bss` 65.9 KB of 73.7 KB, the `.pool` section 348 KB of 368 KB (`./build.sh` prints these and fails when
+encoders (SELECT, ALGORITHM, PRESETS, KNOB 1..4), the keys, a MASTER pot, USB (MIDI, audio), TRS MIDI IN. Sample
+rate 44.1 kHz; the audio interrupt renders one I2S half buffer (128 frames, 2.9 ms) in blocks of `CTL` = 32 samples. Memory after the
+slimming: image 258 KB (533 KB before), RAM `.data` + `.bss` 16.2 KB of 73.7 KB (65.9 before), the `.pool` section 250 KB of 368 KB
+(348 before) (`./build.sh` prints these and fails when
 they do not fit).
 
 ## 2. Repository map
@@ -28,12 +32,12 @@ they do not fit).
 | `firmware/src/eng_fmug.c` | the FMUG engine: oscillators, mixer, the ladder, the contours, the 32-byte patch |
 | `firmware/src/eng_fmug_presets.h`, `eng_fmug_filter.h` | **generated**: the 100 patches; the filter's tables (do not edit) |
 | `firmware/src/fmug_app.c`, `ui_fmug.c` | FMini-1's whole UI: pages, knobs, graphs, dialogs (`fa_*`, `fmg_*`) |
-| `firmware/src/voice.c`, `fx.c`, `audio.c`, `mod.c` | voices and envelopes; the FX buses and the part mixer; the audio ISR; the modulation matrix |
-| `firmware/src/editor*.c`, `up_fm6.c`, `upreset.c`, `project.c`, `storage.c` | USB editor commands; user presets; projects; flash |
-| `firmware/engines/` | **git submodule** (MIT, Felucca-Engines): ANALOG LOFI TRIO WHEEL NOISE and the shared DSP. Never edited here |
+| `firmware/src/voice.c`, `fx.c`, `audio.c` | voices and envelopes; the FX buses and the part mixer; the audio ISR |
+| `firmware/src/editor*.c`, `upreset.c`, `settings.c`, `storage.c` | USB editor commands; user presets; the settings and the autosave; flash |
+| `firmware/engines/` | **git submodule** (MIT, Felucca-Engines): only its shared DSP (`dsp.c`) is built; ANALOG LOFI TRIO WHEEL NOISE are there as reference. Never edited here |
 | `firmware/hal/`, `firmware/loader/` | register access (only here); the update loader |
 | `tools/` | Python generators and measuring tools (floating point lives here); `build.py` is what `build.sh` runs |
-| `tests/` | host tests (`run_tests.sh`), the render harness `hostsim.c`, goldens, budgets |
+| `tests/` | host tests (`run_tests.sh`), the harnesses `host.h` and `editor_host.h`, goldens, budgets |
 | `web/` | `site_fmini.html` (the site), `editor_fmini.html` (the patch editor), `emu/` (browser emulator), `make_fmug_installer.py` |
 | `docs/` | what the site serves that is checked in: `index.html` (the installer page, generated), `emu/` (generated wasm), ad video |
 | `assets/` | splash, hero, the site's screenshots (`assets/site/*.webp`), README pictures (`assets/readme/`, `tools/gen_readme_art.py`) |
@@ -43,12 +47,12 @@ they do not fit).
 
 **One translation unit.** `felucca.c` includes the HAL (header-only), then the sources in dependency order. `engines.c` includes the
 engines and defines `ENGINES[]`; `fmug_app.c` is included near the end, before `main.c`. A host test includes the same files
-(`tests/hostsim.c`, `tests/ui_test.c`, `tools/readme_shots.c`), so what runs on the host is what runs on the chip, compiled by a
-different compiler. Tables that `build.py` generates (`build/gen/*.h`: sine, envelopes, fonts, icons, samples) exist only after one
+(`tests/host.h`, `tests/editor_host.h`, `tools/readme_shots.c`, `web/emu/felucca_web.c`), so what runs on the host is what runs
+on the chip, compiled by a different compiler. Tables that `build.py` generates (`build/gen/*.h`: sine, envelopes, fonts, icons) exist only after one
 `./build.sh`; host tests need them.
 
 **Audio.** `audio.c` (the I2S interrupt) calls `mix_block` (`fx.c`) per block: events, then each synth part (`voice.c` renders
-its voices through the engine's `render`), per-part DIST / INSERT, level and pan, sends into three buses (chorus, tempo delay,
+its voices through the engine's `render`), DIST, level and pan, sends into three buses (chorus, tempo delay,
 reverb), the master, USB audio. The main loop runs the UI and MIDI; the interrupt must never wait for it. Data the main loop
 changes for the interrupt is published with a generation counter (see `fmug_set_patch`: copy, `RING_PUBLISH()`, bump `fmug_pgen`;
 the interrupt takes `fmug_eff[]` at a block's start).
@@ -59,7 +63,7 @@ range, default), presets, and function pointers: `note_on`, `render(track, voice
 (bytes in the part's shared engine memory). `voice_t` has `s[8]` of free engine state and three phases. `keep` is a bit mask of
 the `s[]` slots a retrigger of a sounding voice preserves; `voice.c` honours only slots 0, 1, 4, 5, 6, 7 (a ladder with states in
 `s[2]`, `s[3]` loses them on a retrigger that re-initialises; FMUG's `note_on` does that only from silence). Engine numbers are
-stored in projects and presets: **append, never reorder**; `NENGINES` is in `core.h`.
+stored in user presets, the autosave and the editor protocol: **append, never reorder**; `NENGINES` is in `core.h`.
 
 **Value formats.** An EDIT parameter or global is formatted by `param_format` (`params.c`) from its `fmt` (`F_PCT`, `F_TIME`, `F_ENUM`,
 ...). Formats the submodule does not have are defined in `core.h` after the include (`F_MCUT` 14 and `F_MEMP` 15, the Minimoog's
@@ -79,17 +83,17 @@ trim -> `voice_amp` (the loudness contour). The oscillators drift a few cents (a
 (OSC 1-3, NOISE, PINK, MOD OSC, MOD FLT) and `FG_SW2` (GLIDE, LFO SQR), TUNE, MOD MIX, KBD (the cutoff's keyboard tracking), the kept
 GLIDE time. The **EDIT values** are track parameters: `E0` CUT, `E1` EMPH, `E2` CNTR (the contour's amount), `E3..E5` the contour's
 attack / decay / sustain, `E6` MOD (LFO depth), `E7` SLOT (the factory patch number, or OWN). The patch lives in `fmug_patch[track]`,
-is stored in projects and user presets in the slot of FM6's patch (the track plays one engine at a time), and is edited with
+is stored with user presets (`upreset.c`'s "UPF6" object) and the autosave, and is edited with
 `fmug_set_patch`, which sanitises it.
 
 **Voices.** The instrument is MONO (the lowest key wins, a new key retriggers and glides when GLIDE is on) or POLY (12 voices,
-`FMUG_POLY`); `fa_mono()` forces anything else to MONO. Track 1 is the instrument; tracks 2-4 are muted parts.
+`FMUG_POLY`); `fa_mono()` forces anything else to MONO. Track 1 is the instrument (the only part).
 
 **Contours.** The loudness contour is the host's ADSR (`P_ATK..P_REL`). The filter contour (`fmug_contour`, state in `s[7]`: stage
 in the top byte, level Q23 below) has attack, decay and sustain, and its release takes the DECAY time, as the original's.
 
 **Modulation.** The track LFO or noise (MOD MIX) into pitch (MOD OSC) and cutoff (MOD FLT), depth `E6` and the mod wheel; the host's
-modulation matrix adds its own routings to the cutoff through `m->cutoff`.
+(Felucca's modulation matrix is gone; `m->cutoff` stays 0.)
 
 ## 5. The ladder filter (1.7.0)
 
@@ -149,7 +153,7 @@ from self-oscillating), mean loudness change 0.19 dB, centroid +0.94 semitone on
 table of `fmgf_t` (`ui_fmug.c`: label, kind `FK_BYTE` / `FK_PAR` / `FK_SW` / ..., the patch byte or parameter, icon). The four
 encoders KNOB 1..4 edit the page's knobs; SELECT moves a cursor over every control including the extras (switches, waveforms);
 ALGORITHM changes the control under it. `fa_knob_col`, `fa_switch`, `fa_fader`, `fa_graph` draw them; `fa_scene` composes a page.
-Text is anti-aliased and measured (`fa_ctext`, `text_w`); the layout tests render every screen in every palette. The FILT page's
+Text is anti-aliased and measured (`fa_ctext`, `text_w`); `tests/fmug_app_test.c` renders every screen. The FILT page's
 graph is `FMUG_GRAPH` (17 emphasis rows x 73 columns of dB x 8, from `tools/fmug_filter.py`) shifted to the cutoff's singing pitch
 with a dotted marker at it. Screenshots for the README and the site come from the same drawing code (`tools/readme_shots.c`).
 
@@ -174,13 +178,13 @@ of meaning matters to users, add a marker byte there and convert on load.
 | `fmug_app_test.c` | every page, SAVE / PRESETS over the 100 patches and user patches, each patch's ARP / LFO / FX / LEVEL / octave |
 | `fmug_fx_test.c` | the FMini-1 FX: reverb, delay and chorus types, TUBE drive, bypass at 0 |
 | `editor_test.c`, `web/test_editor_fmini.py` | the editor handler; the editor page against the real C handler in Chromium |
-| `ui_render.c` | every screen in every palette: lint (clipped, overlapping text), alignment by ink, a PNG sheet in `build/ui_new/` |
-| `regress.c` + `golden.txt`, `cpu_baseline.txt`, `target_budget.*` | render hashes of every engine and preset (the 100 FMUG ones are current); level, DC, voices; CPU: the host's instruction counter may be missing (it was, in the sandbox: the budget is then not checked), the **static loop-instruction count** of the render functions in the chip's disassembly is always checked (+10 %) |
-| the rest | storage, projects, MIDI, USB, update loader, FX, other engines (Felucca's) |
+| `regress.c` + `golden.txt`, `cpu_baseline.txt`, `target_budget.*` | render hashes of the 100 patches, voice modes, FX sends and the sequencer; level, DC, voices; CPU: the host's instruction counter may be missing (it was, in the sandbox: the budget is then not checked), the **static loop-instruction count** of the render functions in the chip's disassembly is always checked (+10 %) |
+| `persistence_test.c`, `upreset_test.c`, `storage_test.c` | the settings and the autosave, user presets, flash (FMini-1's records read) |
+| `midi_control_test.c`, `midi_uart_test.c`, `uac_test.c`, `usb_desc_test.c`, `ota_test.c`, `ldr_test.c` | MIDI IN, USB, the update entry and loader |
+| `web/emu/emu_test.mjs` | the browser emulator against its native twin |
 
-Seven sections fail at 1.7.0; CLAUDE.md lists them and says which were confirmed on the untouched v1.6.1. `tests/hostsim.c`
-renders any engine and preset to a WAV (`build/host/hostsim ENGINE PRESET MONO OUT.wav`, with `SECS`, `CHORD`, `NOTE`,
-`PSET=id:v`, `BENCH=1` and more: its header) and is the quickest way to listen to a change. For sound work, write the measurement
+CLAUDE.md says which sections fail and why. To listen to a change, render through the browser build (`tools/preset_lab.py`,
+`tools/render_envelope.mjs`) or write a small host program on `tests/host.h` (`tests/regress.c` shows how to drive the mixer). For sound work, write the measurement
 first (a test with the number to hit), then the code.
 
 ## 9. Site, installer, emulator, release
@@ -194,7 +198,7 @@ first (a test with the number to hit), then the code.
   emulator to <https://ruppert.github.io/fmini-1/> (a few minutes). Documents at the root do not trigger it.
 - **Release checklist:** bump `FMINI_VERSION`; build; run the tests; regenerate `docs/emu` and `docs/index.html`; refresh the
   screenshots if screens changed (`tools/readme_shots.c`, then `tools/gen_readme_art.py` and the `assets/site/*.webp` it implies);
-  update the protocol doc and the site text; commit; push `fmug-1` and `main`; give the owner the `.fwsc`. The owner creates the
+  update the protocol doc and the site text; commit; push `main`; give the owner the `.fwsc`. The owner creates the
   GitHub Release by hand. Unless the owner says otherwise, nothing has been tested on a real FM-1: say so.
 - Installing is at the owner's risk; recovery of a dead FM-1 needs FM-1-transporter (BUILDING.md).
 
@@ -206,7 +210,7 @@ first (a test with the number to hit), then the code.
    and the reference measurements as constants; make it emit the firmware's tables, so the two cannot drift apart.
 3. **Choose the structure for fixed point before coding it** (zero-delay feedback with a linear prediction: no unit delay in the
    loop, so the pitch and the resonance are exact) and decide the Q formats and where 64-bit is allowed.
-4. **Test against the reference's numbers on the host** (`hostsim.c`), including the extremes (lowest cutoff, highest, quiet input,
+4. **Test against the reference's numbers on the host** (`tests/host.h`), including the extremes (lowest cutoff, highest, quiet input,
    silence) where fixed point fails first.
 5. **Migrate the content** (presets) by matching what you can measure, then check loudness, brightness and the closest pairs.
 6. **Do the UI last** (dial text, graphs), then the editor, the docs, the budgets, the screenshots, the release.
@@ -254,8 +258,8 @@ was written: verify before reusing anything beyond ideas.
   matter (shift-precedence ones in the oscillator drift code and a dangling `else` in `fmug_app.c` are old).
 - A failing test that prints nothing is a `return 1` with no message (`fmug_app_test.c` did, with stale constants): run the binary
   alone and look at the last line, then at the next `return 1`.
-- `tests/golden.txt` holds hashes of Felucca's other engines that no longer match (76 of them, identical on v1.6.1). Do not
-  "fix" them in the middle of unrelated work; only the FMUG lines are maintained.
+- `tests/golden.txt` was rewritten when the tree was slimmed (Oct 2026): the 100 patches render bit for bit as the FMini-1 1.7.0
+  build did (FMUG-only, second core on: its LFO tick is split, `track_lfo_adv` / `track_lfo_end`, and that order is kept).
 - The firmware is integer-only by design; the wasm build adds `-ffp-contract=off` so the emulator matches the host renders.
 - The sandbox for Claude sessions is reclaimed after a while: files in `/tmp` and the toolchain directories disappear. Keep
   scratch work in the session's scratchpad directory and commit what matters.

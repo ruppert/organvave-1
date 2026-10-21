@@ -15,7 +15,7 @@
 static volatile uint8_t um_ring[UM_RING] __attribute__((aligned(16)));
 static struct {
     uint32_t rd, pend;
-    volatile uint32_t bytes, drops, msgs;          /* TIMER5 writes; read-only CDC diagnostics */
+    volatile uint32_t bytes, drops, msgs;          /* TIMER5 writes; diagnostics (the tests read them) */
     uint8_t st, need, got, d0, sysex;
 } um;
 

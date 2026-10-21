@@ -387,9 +387,9 @@
   <div class="wrap">
     <span class="mk"><i>FM</i>ini-<i>1</i> <small style="font-weight:600;font-size:13px;letter-spacing:0;color:var(--dim)">by Ruppert</small></span>
     <span class="credits"><span data-t="cr_made"></span> <a href="https://github.com/hugelton/Felucca" target="_blank" rel="noopener">Felucca</a><span data-t="cr_made2"></span><br><span data-t="cr_ai"></span></span><br><br>
-    FMini-1 by Ruppert, a custom firmware based on Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>, with its CrispyZebra waveforms, drum voices, Sample Pack and Fukiai icons (MIT).<br>
-    Font: Inter Tight (The Inter Project Authors, SIL OFL 1.1). Samples: Versilian Studios VSCO-2 Community Edition and VCSL (CC0 1.0).<br>
-    FM6 engine: msfa from Dexed (Google Inc., Pascal Gauthier, Apache-2.0). The package also holds three JieLi AC79 SDK files, uboot.boot, cfg_tool.bin and eq_cfg_hw.bin (JieLi Technology, Apache-2.0). Licences: <a href="https://github.com/hugelton/Felucca/blob/main/LICENSING.md">LICENSING</a>, <a href="https://github.com/hugelton/Felucca/blob/main/LICENSE">GPL-3.0</a>, <a href="https://github.com/hugelton/Felucca/tree/main/LICENSES/">all</a>.<br>
+    FMini-1 by Ruppert, a custom firmware based on Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>, with its Fukiai icons (MIT).<br>
+    Font: Inter Tight (The Inter Project Authors, SIL OFL 1.1).<br>
+    The package also holds three JieLi AC79 SDK files, uboot.boot, cfg_tool.bin and eq_cfg_hw.bin (JieLi Technology, Apache-2.0). Licences: <a href="https://github.com/hugelton/Felucca/blob/main/LICENSING.md">LICENSING</a>, <a href="https://github.com/hugelton/Felucca/blob/main/LICENSE">GPL-3.0</a>, <a href="https://github.com/hugelton/Felucca/tree/main/LICENSES/">all</a>.<br>
     M-VAVE and FM-1 are trademarks of their respective owners.<br>
     <span data-t="license"></span> <a href="https://github.com/hugelton/Felucca" target="_blank" rel="noopener">github.com/hugelton/Felucca</a>
   </div>
@@ -413,6 +413,7 @@ const TEXT = {
     stockValid: "V15 oficial verificado", stockConfirm: "O arquivo de backup completo foi salvo neste computador? Continuar vai voltar ao V15 oficial, que não abre as músicas do Felucca.",
     stockNeedBackup: "Do modo de atualização não dá para exportar backup. Só marque retomar se você já salvou um backup completo.",
     stockUnsupported: "Este firmware não suporta backup completo. Instale primeiro a versão atual.",
+    stockNoBackup: "Este firmware não faz backup completo: os presets de usuário e os ajustes ficam no FM-1 e o V15 oficial pode apagá-los. Continuar e voltar ao V15 oficial sem backup?",
     backup: "Salvando backup completo ", stockError: "Não foi possível validar o firmware oficial: ",
     nomidi: "Este navegador não consegue. Abra a página no Chrome ou no Edge.", loadfail: "Não foi possível carregar: ",
     start: "Iniciando", verify: "Verificando", loader: "Entrando no modo de atualização", write: "Gravando",
@@ -453,6 +454,7 @@ const TEXT = {
     stockValid: "公式V15を確認しました", stockConfirm: "全体バックアップファイルをパソコンに保存できましたか？ 続けると公式V15へ戻します。Feluccaの曲は公式V15では開けません。",
     stockNeedBackup: "書き込みモードからはバックアップできません。保存済みバックアップがある場合だけ、更新中断の再開にチェックしてください。",
     stockUnsupported: "このFeluccaは全体バックアップに未対応です。先に最新版をインストールしてください。",
+    stockNoBackup: "このファームウェアは全体バックアップに対応していません。ユーザープリセットと設定は公式V15で消える場合があります。バックアップなしで公式V15に戻しますか？",
     backup: "全体バックアップ保存中 ", stockError: "公式ファイルを確認できません: ",
     nomidi: "このブラウザでは使えません。Chrome か Edge で開いてください。", loadfail: "読み込めませんでした: ",
     start: "開始します", verify: "確認中", loader: "書き込みモードに切り替え中", write: "書き込み中",
@@ -493,6 +495,7 @@ const TEXT = {
     stockValid: "Official V15 verified", stockConfirm: "Has the complete backup file been saved to this computer? Continue to return to official V15. Official V15 cannot open Felucca music.",
     stockNeedBackup: "An update loader cannot export a backup. Only select resume if you already saved a complete backup.",
     stockUnsupported: "This Felucca does not support complete backups. Install the current Felucca first.",
+    stockNoBackup: "This firmware makes no complete backup: the user presets and settings stay on the FM-1, and official V15 may erase them. Return to official V15 without a backup?",
     backup: "Saving complete backup ", stockError: "Cannot validate official firmware: ",
     nomidi: "This browser cannot do it. Open the page in Chrome or Edge.", loadfail: "Could not load: ",
     start: "Starting", verify: "Verifying", loader: "Switching to update mode", write: "Writing",
@@ -899,11 +902,16 @@ $("stock-go").addEventListener("click", async () => {
       const input = device.link.input, output = device.link.output; device.link.close();
       link = new BackupConnection(input, output);
       const info = archiveInfo(await link.request([1,[]]));
-      if (!info.supported) { sayK("stockUnsupported"); return; }
-      const archive = await captureBackup((r,o) => link.request(r,o), info.version,
-        (done,total) => sayK("backup", `${Math.round(done / Math.max(1,total) * 100)}%`));
-      saveArchive(archive); link.close(); link = null;
-      if (!confirm(t("stockConfirm"))) return;
+      if (!info.supported && !/^FELUCCA /i.test(info.version)) { sayK("stockUnsupported"); return; }
+      if (!info.supported) {                       /* organvave-1: no complete backup in this firmware */
+        link.close(); link = null;
+        if (!confirm(t("stockNoBackup"))) return;
+      } else {
+        const archive = await captureBackup((r,o) => link.request(r,o), info.version,
+          (done,total) => sayK("backup", `${Math.round(done / Math.max(1,total) * 100)}%`));
+        saveArchive(archive); link.close(); link = null;
+        if (!confirm(t("stockConfirm"))) return;
+      }
       await up.install(selected.image, selected.product, step);
     }
   } catch (e) {
