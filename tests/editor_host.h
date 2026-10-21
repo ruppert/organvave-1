@@ -30,7 +30,7 @@ static void host_editor_wdt(void)               /* time passes in a blocking loo
     if (host_progress && transport_req == 2u) { seq_stop(); transport_req = 0; }
 }
 #include "../firmware/src/editor.c"
-#include "../firmware/src/fmug_app.c"
+#include "../firmware/src/organ_app.c"
 
 #ifndef CHECK_TAG
 #define CHECK_TAG "editor"
@@ -54,7 +54,8 @@ static void reset(void)
     persist_boot();
     host_tracks_init();
     track_defaults(&trk[0]);
-    set_engine_of(&trk[0], ENGI_FMUG);
+    org_init();
+    set_engine_of(&trk[0], ENGI_ORGAN);
     trk[0].engine = trk[0].eng_req;
     song.sel = 0;
 }

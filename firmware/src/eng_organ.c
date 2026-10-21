@@ -110,7 +110,7 @@ static const uint32_t *org_contrib(uint32_t k, uint32_t xt, uint32_t *n, uint32_
     return tab + off[tk];
 }
 
-static void org_msg(uint32_t k, uint32_t on, uint32_t xt)
+static __attribute__((noinline)) void org_msg(uint32_t k, uint32_t on, uint32_t xt)
 {
     uint32_t n, boff, i;
     const uint32_t *c = org_contrib(k, xt, &n, &boff);
@@ -140,7 +140,7 @@ static void org_msg(uint32_t k, uint32_t on, uint32_t xt)
 
 /* the start of a fragment: the key messages, the drawbars, then each active wheel's gains and envelope for the
  * fragment (setBfree's message queue, activated list and removal list) */
-static void org_fragment(void)
+static __attribute__((noinline)) void org_fragment(void)
 {
     uint32_t i, d, chg = 0, nrem = 0;
     uint8_t rem[ORG_NWHEEL];
@@ -201,8 +201,8 @@ static void org_fragment(void)
     org.kcd = (kct - org.kc) / (int32_t)ORG_FRAG;
 }
 
-/* add n (= CTL) samples to out[] */
-static void org_render(int32_t *out, uint32_t n)
+/* add n (= CTL) samples to out[] (not inlined: tests/target_budget.py counts it) */
+static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
 {
     int32_t y[CTL];
     uint32_t i, k, off;
@@ -222,15 +222,16 @@ static void org_render(int32_t *out, uint32_t n)
         int32_t g = w->gs;
         if (w->env) {
             const uint16_t *e = w->env + off;
-            int32_t gd = w->gd;
-            for (i = 0; i < n; i++) {
-                int32_t gg = g + (((int32_t)e[i] * gd) >> 15);
-                y[i] += (sine_i(ph) * gg) >> 12;
+            int32_t gd = w->gd, *yp = y;
+            for (i = n; i; i--) {
+                int32_t gg = g + (((int32_t)*e++ * gd) >> 15);
+                *yp++ += (sine_i(ph) * gg) >> 12;
                 ph += inc;
             }
         } else if (g) {
-            for (i = 0; i < n; i++) {
-                y[i] += (sine_i(ph) * g) >> 12;
+            int32_t *yp = y;
+            for (i = n; i; i--) {
+                *yp++ += (sine_i(ph) * g) >> 12;
                 ph += inc;
             }
         } else {
@@ -247,3 +248,107 @@ static void org_render(int32_t *out, uint32_t n)
         out[i] += mulq16(y[i], (uint32_t)m);
     }
 }
+
+/* ------------------------------------------------------------------ the patch --- */
+/* The organ's own settings, a record of ORG_PSIZE 7-bit values (stored in the autosave and in user presets: their
+ * meaning is fixed, web/EDITOR_PROTOCOL.md). The main loop writes it (org_set_patch), the audio path takes it at its
+ * next block (org_block). */
+#define ORG_PSIZE 64u
+enum {
+    OP_UB = 0,                  /* upper drawbars 16' .. 1', 0..8 (9 bytes) */
+    OP_LB = 9,                  /* lower drawbars (9) */
+    OP_PB = 18,                 /* pedal drawbars (9: setBfree's pedal buses) */
+    OP_TEMP = 27,               /* tuning: 0 gear 60 Hz, 1 gear 50 Hz, 2 equal */
+    OP_XTALK = 28,              /* crosstalk: 0 off, 1 setBfree's model */
+    OP_NUM                      /* (29..63: reserved for percussion, vibrato, rotary, drive: 0 until then) */
+};
+static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
+static volatile uint8_t org_pgen;
+static uint8_t org_pgen_seen = 0xFF;
+
+static uint32_t org_pmax(uint32_t i) { return i < OP_TEMP ? 8u : i == OP_TEMP ? 2u : i == OP_XTALK ? 1u : 0u; }
+static void org_sanitize(uint8_t *v)
+{
+    uint32_t i;
+    for (i = 0; i < ORG_PSIZE; i++)
+        v[i] = (uint8_t)(v[i] > org_pmax(i) ? org_pmax(i) : v[i]);
+}
+
+/* the patch = v (ORG_PSIZE bytes, sanitized). Main loop */
+static void org_set_patch(const uint8_t *v)
+{
+    uint8_t s[ORG_PSIZE];
+    memcpy(s, v, ORG_PSIZE);
+    org_sanitize(s);
+    memcpy(org_patch, s, ORG_PSIZE);
+    RING_PUBLISH();
+    org_pgen++;
+}
+/* one byte of the patch (the UI's controls). Main loop */
+static void org_set(uint32_t i, uint32_t v)
+{
+    if (i >= ORG_PSIZE)
+        return;
+    org_patch[i] = (uint8_t)(v > org_pmax(i) ? org_pmax(i) : v);
+    RING_PUBLISH();
+    org_pgen++;
+}
+
+#include "eng_organ_presets.h"          /* ORG_FACTORY, ORG_LEVEL, ORG_PRESETS: tools/gen_organ_presets.py */
+
+/* ----------------------------------------------------------------- the engine --- */
+/* The organ is not a voice engine: voice.c sends its keys to org_key and its render to org_track_render. The key
+ * numbers: MIDI notes 36..96 (C2..C7) are the upper manual's 61 keys, as setBfree's default map */
+static void org_block(struct track *t)          /* audio path, before the render: a new patch */
+{
+    uint32_t i;
+    (void)t;
+    if (org_pgen == org_pgen_seen)
+        return;
+    org_pgen_seen = org_pgen;
+    for (i = 0; i < ORG_NBUS; i++)
+        org.bars[i] = org_patch[OP_UB + i];
+    org.temp = org_patch[OP_TEMP];
+    org.xtalk = org_patch[OP_XTALK];
+}
+static void org_note(uint32_t note, uint32_t on)
+{
+    if (note >= 36u && note <= 96u)
+        org_key(note - 36u, on);
+}
+static void org_all_off(void)
+{
+    uint32_t k;
+    for (k = 0; k < ORG_NKEY; k++)
+        if (org.keys[k])
+            org_key(k, 0);
+}
+/* the part's block: out[] (cleared by the caller) gets the organ, half setBfree's scale (one key at 888000000 peaks
+ * near 46000, about one FMUG voice); returns 1 while anything sounds */
+static uint32_t org_track_render(struct track *t, int32_t *out, uint32_t n)
+{
+    uint32_t i;
+    org_block(t);
+    if (!org.nins && !org.nq && !org.nacl)
+        return 0;
+    org_render(out, n);
+    for (i = 0; i < n; i++)
+        out[i] >>= 1;
+    return 1;
+}
+static void org_note_on_unused(struct track *t, voice_t *v) { (void)t; (void)v; }
+static void org_render_unused(struct track *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    (void)t; (void)v; (void)out; (void)n; (void)m;
+}
+#define ORG_NODESC {"-", F_INT, 0, 0, 0, 0, 0}
+static const engine_t ENG_ORGAN = {
+    .name = "ORGAN",
+    .page_title = {"-", "-"},
+    .edit = {ORG_NODESC, ORG_NODESC, ORG_NODESC, ORG_NODESC, ORG_NODESC, ORG_NODESC, ORG_NODESC, ORG_NODESC},
+    .presets = ORG_PRESETS,
+    .npresets = ORG_NFACTORY,
+    .note_on = org_note_on_unused,
+    .render = org_render_unused,
+    .knob = {P_E0, P_E1, P_E2, P_E3},
+};

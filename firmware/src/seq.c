@@ -3,7 +3,7 @@
 /* Keyboard, arpeggiator, sequencer and transport (Felucca's seq.c, cut down to what the one instrument uses: the SEQ
  * pop-up's 16 steps, the ARP pop-up, the keys and MIDI IN).
  * Everything here runs in the audio ISR, once per CTL-sample block, and ends in trk_note_on / trk_note_off: engines
- * never see where a note came from. The keys and MIDI IN play track 1 (fmug_app.c GLO: the MIDI source and channel).
+ * never see where a note came from. The keys and MIDI IN play track 1 (organ_app.c GLO: the MIDI source and channel).
  * The SEQ pop-up records its steps itself (fa_seq_note); the sequencer plays them on the track's LEN / DIV / SWING /
  * GATE. A step: up to 4 notes, NOTE / TIE / REST, accent and slide (acid style), as Felucca's. */
 #define KB_SILENT 255u
@@ -239,10 +239,8 @@ static void arp_step(track_t *t, uint32_t n)
 }
 
 /* -------------------------------------------------------- note input --- */
-static void fa_seq_note(track_t *t, uint32_t note);      /* fmug_app.c: the SEQ pop-up's step recording */
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
-    fa_seq_note(t, note);
     if (t->p[P_AMODE])
         arp_add(t, note);
     else
@@ -422,7 +420,7 @@ static void seq_tick(track_t *t, uint32_t n)
     }
 }
 
-/* MIDI IN (fmug_app.c, GLO): the one instrument is track 1 on every channel the setting accepts; the sources are 1 USB,
+/* MIDI IN (organ_app.c, GLO): the one instrument is track 1 on every channel the setting accepts; the sources are 1 USB,
  * 2 MIDI (TRS), 3 Bluetooth (no radio driver in this firmware yet: nothing arrives with that number). The CC map is the
  * app's own: the ISR only notes the last value of each CC (fm_cc_rx, bit cc of fm_cc_pend); the main loop applies it */
 static volatile uint8_t fm_midi_src = 3;                 /* 0 USB, 1 MIDI, 2 BLUETOOTH, 3 ALL */

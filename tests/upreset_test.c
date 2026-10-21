@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments; Guilherme Ruppert (organvave-1) */
 /* The user presets against a RAM NOR (firmware/src/upreset.c, storage.c): the banks and the patches across a power
  * cycle, a bank or record of another shape read as empty, an older record mapped by count, a retired engine's record
- * playing on FMUG, the patch kept through a rename and dropped when the record changes, a failed write changing
+ * playing on the organ, the patch kept through a rename and dropped when the record changes, a failed write changing
  * nothing. */
 #define CHECK_TAG "upreset"
 #include "editor_host.h"
@@ -28,8 +28,8 @@ int main(void)
                  st_save(3, &r, 16) != 0);
 
     apply_preset(20);
-    memcpy(pk, fmug_patch[0], FG_SIZE); pk[FG_L1] = 11;
-    fmug_set_patch(0, pk); fmug_adopt(0);
+    memcpy(pk, org_patch, ORG_PSIZE); pk[OP_TEMP] = 2;     /* (equal temperament: not the factory's) */
+    org_set_patch(pk);
     TSEL->p[P_LEVEL] = 81; song.g[G_BPM] = 141; song.octave = -2;
     bad += check("up_store U18: rc 0", up_store(17, "ORGAN ONE") == 0 && up_used(17));
     power_cycle();
@@ -38,11 +38,11 @@ int main(void)
                  up_rec(17)->packed[UP_BPM_AT] == 141 && up_rec(17)->packed[UP_OCT_AT] == 2 && !up_used(16) && !up_used(0));
     apply_preset(0); song.g[G_BPM] = 100; song.octave = 0;
     bad += check("up_load U18: the patch, LEVEL, the tempo and the octave",
-                 up_load(17) == 0 && fmug_patch[0][FG_L1] == 11 && TSEL->p[P_LEVEL] == 81 && song.g[G_BPM] == 141 &&
+                 up_load(17) == 0 && org_patch[OP_TEMP] == 2 && TSEL->p[P_LEVEL] == 81 && song.g[G_BPM] == 141 &&
                  song.octave == -2 && TSEL->user == 18);
 
     up_set_name(up_rec(17), 17, "RENAMED");
-    bad += check("a rename keeps the preset's patch", !upf_get(17, pk) && pk[FG_L1] == 11);
+    bad += check("a rename keeps the preset's patch", !upf_get(17, pk) && pk[OP_TEMP] == 2);
     up_set_value(up_rec(17), P_LEVEL, 50);
     bad += check("a change of the record drops it (the factory patch its SLOT names then)", upf_get(17, pk) != 0);
 
@@ -63,7 +63,7 @@ int main(void)
     /* an older record (fewer common parameters): mapped by count */
     reset();
     memset(&r, 0, sizeof r);
-    r.used = UP_USED; r.ver = UP_VER; r.engine = ENGI_FMUG; r.np = 40; memcpy(r.name, "OLD", 3);
+    r.used = UP_USED; r.ver = UP_VER; r.engine = ENGI_ORGAN; r.np = 40; memcpy(r.name, "OLD", 3);
     {
         uint32_t i;
         for (i = 0; i < 32u; i++) up_set_value(&r, i, TP[i].def);
@@ -73,14 +73,14 @@ int main(void)
     up_values(&r, v);
     {
         uint32_t i, ok = v[P_LEVEL] == 66;
-        for (i = 0; i < 8u; i++) ok &= v[P_E0 + i] == (int16_t)param_fit(param_desc_of(ENGI_FMUG, P_E0 + i), (int32_t)(i + 1u));
-        for (i = 32; i < P_E0; i++) ok &= v[i] == (int16_t)param_fit(param_desc_of(ENGI_FMUG, i), param_desc_of(ENGI_FMUG, i)->def);
+        for (i = 0; i < 8u; i++) ok &= v[P_E0 + i] == (int16_t)param_fit(param_desc_of(ENGI_ORGAN, P_E0 + i), (int32_t)(i + 1u));
+        for (i = 32; i < P_E0; i++) ok &= v[i] == (int16_t)param_fit(param_desc_of(ENGI_ORGAN, i), param_desc_of(ENGI_ORGAN, i)->def);
         bad += check("np 40: the first 32 as stored, E0..E7 at P_E0, the rest their defaults", ok);
     }
     r.engine = 3;                                /* (a Felucca engine this firmware no longer has) */
     up_put(5, &r);
-    bad += check("a retired engine's record: used, it plays on FMUG", up_used(5) && up_engine(5) == ENGI_FMUG &&
-                 up_load(5) == 0 && TSEL->eng_req == ENGI_FMUG);
+    bad += check("a retired engine's record: used, it plays on the organ", up_used(5) && up_engine(5) == ENGI_ORGAN &&
+                 up_load(5) == 0 && TSEL->eng_req == ENGI_ORGAN);
 
     /* failures */
     reset();

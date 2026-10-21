@@ -1,22 +1,24 @@
 # Felucca editor protocol (SysEx over USB-MIDI)
 
-## organvave-1: what this firmware answers (Oct 2026)
+## organvave-1: what this firmware answers (0.1.0)
 
-organvave-1 keeps only the commands the patch editor (`web/editor_fmini.html`) uses; every other command gets no reply
-(an editor sees a timeout, as with older firmware). Answered: `INFO` 1, `GET` 2, `SET` 3, `DUMP` 4, `DESC` 5, `PRESET`
-8, `NAMES` 10, `UP_LIST` 16, `UP_GET` 17, `UP_STORE` 19, `UP_LOAD` 20, `UP_ERASE` 21, `WATCH` 22 (with `CHANGED` 23,
-`RELOAD` 24 pushes), `PING` 25, `TRACK` 27, `FMUG_GET` 82, `FMUG_PUT` 83, `FMUG_PRESET` 84. Gone: the steps (6, 7, 26,
-28-30), projects (9), user samples (11-15), `UP_PUT` 18, `TRACK_MIX` / `TRACK_DUMP` / `TRACK_PARAM` / `TRACK_CHANGED`,
-`SONG`, the UI state and favourites, `MOTION` 64, the backup 65-67 (so the installer's "return to official V15" warns
-and goes on without a backup), FM6 68-71 and 74-77, `MENU_DESC` / `MENU_SET` 72-73, MIDI LEARN 78-79, the palette 80-81.
+organvave-1 answers the commands an editor needs and no others: every other command gets no reply (an editor sees a timeout,
+as with older firmware). Answered: `INFO` 1, `GET` 2, `SET` 3, `DUMP` 4, `DESC` 5, `PRESET` 8, `NAMES` 10, `UP_LIST` 16,
+`UP_GET` 17, `UP_STORE` 19, `UP_LOAD` 20, `UP_ERASE` 21, `WATCH` 22 (with `CHANGED` 23, `RELOAD` 24 pushes), `PING` 25,
+`TRACK` 27, `ORG_GET` 85, `ORG_PUT` 86 (the organ patch, below). Gone: the steps (6, 7, 26, 28-30), projects (9), user
+samples (11-15), `UP_PUT` 18, `TRACK_MIX` / `TRACK_DUMP` / `TRACK_PARAM` / `TRACK_CHANGED`, `SONG`, the UI state and
+favourites, `MOTION` 64, the backup 65-67, FM6 68-71 and 74-77, `MENU_DESC` / `MENU_SET` 72-73, MIDI LEARN 78-79, the
+palette 80-81, and the FMUG patch 82-84 (FMini-1's engine, removed in 0.1.0).
 
-- One track (`NTRK` 1; `TRACK` lists one, its selection argument is accepted and ignored), 16 steps.
-- `INFO` still starts with `"FELUCCA "` and Felucca's version and still names 15 engines: the 14 retired ones are
-  `"-"` with no presets (`PRESET` of one: no reply), engine 14 is `FMUG`. After the track count it ends with the tags
-  `53 01 03` (live sync), `47 01 FG_SIZE` and `48 01 01`, as FMini-1 1.6.1 (the editor reads the last six bytes).
-- A request frame longer than 64 bytes is dropped whole (the longest request, `FMUG_PUT` with the octave, is 39).
-- User presets are FMini-1's records (`UPB1` banks, `UPF6` patches): presets saved on FMini-1 load here. The settings
-  record (`PER4`) is read too. The autosave is a new record (`OVA1`): FMini-1's autosave (a project) is not loaded.
+- One track (`NTRK` 1; `TRACK` lists one, its selection argument is accepted and ignored).
+- `INFO` still starts with `"FELUCCA "` and Felucca's version and names 16 engines (`NENGINES`): engines 0..14 are `"-"` with
+  no presets (`PRESET` of one: no reply); engine 15 is `ORGAN` with 8 factory patches. After the track count it ends with the
+  tags `53 01 03` (live sync) and `4F 01 ORG_PSIZE` (the organ patch: 64 bytes); the editor reads the last four bytes.
+- A request frame longer than 64 bytes is dropped whole (the longest request, `ORG_PUT` of 48 bytes, is 54).
+- User presets are the records of `upreset.c` (`UPB1` banks; the patch of each in its own object, `UPF6`). An organ
+  preset stores the organ patch; a preset of an older engine (FMini-1's FMUG, or a retired engine) plays the organ's first
+  factory patch. The settings record (`PER4`) is read too. The autosave is `OVA2` (version 2: an organ patch in it); the
+  autosave of 0.0.x (`OVA1`) and FMini-1's autosave (a project) are not loaded.
 
 The sections below are Felucca's and FMini-1's protocol as it was; read them for the formats of the commands above.
 
@@ -1029,47 +1031,31 @@ knob turn picks a built-in palette. A preview by the slider is op 0 sent at most
 settings changes only with op 1. Example: `F0 7D 46 4C 51 01 01 02 05 03 04 0A 06 ...` is op 1 with BG = (r 1, g 2, b 5),
 SURF = (3, 4, 10), ...
 
-## FMUG patch (82-84; FMini-1 1.6.0, 1.6.1; the filter 1.7.0)
+## Organ patch (85-86; 0.1.0)
 
-The FMUG engine's sound is the track's **patch**: 32 bytes (`FG_SIZE`, `eng_fmug.c`), every byte 0..127, of which 18 are
-used (the rest are 0): ranges, waves, the detune of OSC 2 / 3, the mixer levels, the two switch bytes, TUNE, MOD MIX, KBD
-and the kept GLIDE time. The eight EDIT values (cutoff, emphasis, contour, ...) are track parameters (`P_E0..P_E7`) and
-travel with `GET` / `SET`; the patch has no other command. `INFO` ends with `47 01 32` when the firmware has these two
-commands (the editor reads the last three bytes; older firmware ends with `45 01 5`). Source: `firmware/src/editor_fmug.c`,
-tests `tests/editor_test.c` (fmug_patches) and `web/test_editor_fmini.py` (the page against the real handler).
+The organ's sound is the **patch**: `ORG_PSIZE` (64) bytes, every byte 0..127, of which the first 29 are used (`OP_*` in
+`eng_organ.c`): the nine drawbars of the upper manual (`OP_UB` 0..8, 0 = out, 8 = full: the 16' to 1' footages), the lower
+manual's (`OP_LB` 9..17) and the pedals' (`OP_PB` 18..26) nine, the tuning (`OP_TEMP` 27: 0 gear 60 Hz, 1 gear 50 Hz,
+2 equal temperament), and the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model). The rest are reserved, 0. The lower and
+pedal bars are stored and kept; the sound of those manuals arrives with 0.4.0. The patch is the instrument's own: it travels
+with user presets and the autosave, not with the track's parameters.
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 82 FMUG_GET | target, index | target, index, rc, then (rc 0) the 32 patch bytes, and for target 0 the track's SLOT (`P_E7`: 0..99 = F1..F100, 100 = OWN) |
-| 83 FMUG_PUT | 0, track, 32 patch bytes [, octave + 4] | target, index, rc |
-| 84 FMUG_PRESET (1.6.1) | slot 0..31 | slot, rc, then 14 x v14 (below) |
+| 85 ORG_GET | target, index | target, index, rc, then (rc 0) the 64 patch bytes |
+| 86 ORG_PUT | 0, offset, count, count bytes (count <= 48, offset + count <= 64) | target, offset, rc |
 
-Targets: 0 a track's own patch (index 0..3), 2 a factory patch (index 0..99, read only; `PUT` answers rc 1), 3 a user preset's
-patch (slot 0..31, read only; rc 2 when the slot is empty or holds another engine; a preset stored without its own patch gives
-the factory patch its SLOT names, as loading it does). rc: 0 ok,
-1 arguments (length, target, index), 2 the track is not on the FMUG engine. A `PUT` sanitizes every byte into its range, makes
-the patch the track's own (SLOT OWN, or the factory patch it equals unchanged), as an edit on the panel does, and does not
-write flash. The patch bytes: R1..R3 (0..2) range 0 LO .. 5 2'; W1..W3 (3..5) wave 0 TRI, SHARK, SAW, SQR, PLS W, PLS N;
-F2, F3 (6, 7) 64 = 0, +-7 semitones; L1..L3, LN (8..11) levels; SW1 (12) bits 1 OSC 1, 2 OSC 2, 4 OSC 3, 8 NOISE,
-16 PINK, 32 MOD OSC, 64 MOD FLT; SW2 (13) bits 1 GLIDE, 2 LFO SQR; TUNE (14) 64 = A 440; MMIX (15) MOD MIX; KBD (16);
-GLID (17) the kept glide time. While the GLIDE switch is on `P_GLIDE` (38) holds the same time (a `PUT` does not copy it:
-set both, as the page does).
+Targets: 0 the instrument's own patch (index 0), 2 a factory patch (index 0..7, read only; `PUT` answers rc 1), 3 a user
+preset's patch (slot 0..31, read only; rc 2 when the slot is empty or holds an engine other than the organ's; a preset stored
+without its own patch gives the first factory patch, as loading it does). rc: 0 ok, 1 arguments (length, target, offset,
+index), 2 not an organ (see above). A `PUT` writes the bytes into the instrument's patch and sanitizes them into their ranges
+(the drawbars 0..8, the tuning 0..2, the crosstalk 0..1, the reserved bytes 0); it does not write flash: `UP_STORE` does.
 
-**1.6.1 (INFO `48 01 01`, after `47 01 32`):** the keys' octave. `FMUG_GET` of target 0 ends with the octave + 4 (1..7) after the SLOT,
-and `FMUG_PUT` takes it as an optional byte after the 32 (outside 1..7 it is ignored). `FMUG_PRESET` reads what a user preset keeps
-besides the track's values (`UP_GET` has those): on the FMini-1 a preset stores the tempo, the octave and the FX pop-ups'
-globals (`upreset.c`, UP_BPM_AT ..). The reply carries the stored bytes, each as a v14: BPM (40..240), OCT (octave + 4, 1..7),
-then `G_RSIZE G_DRREV G_CRATE G_DRLVL` + 1 (1..128) and `G_RTYPE G_RDAMP G_DTIME G_DFDBK G_ENGGO G_CDEPTH G_INFO G_MIDI` + 1;
-0 = the preset has none (older). Saving a user preset from the editor is `UP_STORE` after setting the sound live (`SET` the
-parameters and globals, `FMUG_PUT` the patch and the octave): it stores exactly that, tempo, octave and FX included.
+`PRESET` (8) with engine 15 (`ORGAN`) and index n loads `ORG_FACTORY[n]` and its LEVEL, as the panel does; `NAMES` (10) of engine 15 lists the 8 factory names.
 
-**1.7.0 (no new command, INFO unchanged):** the filter is a model of the Minimoog's ladder (`tools/fmug_filter.py`, `eng_fmug.c`), and
-the two EDIT values that set it changed meaning. `P_E0` (CUT, fmt MCUT) is the cutoff dial -5 .. +5 (0..127, 0 at 63.5; the
-singing pitch at KBD 0 rises about an octave per mark near the middle), `P_E1` (EMPH, fmt MEMP) the emphasis dial 0 .. 10 (the
-ladder sings from 8). A patch, a user preset, a sound file or a library entry made before 1.7.0 keeps its raw numbers, so it sounds
-different on 1.7.0: set CUTOFF and EMPHASIS again. The factory bank was converted (`tools/fmug_retune.py`).
+The factory patches and their levels are generated (`tools/gen_organ_presets.py` from `tools/organ_bank.py`) into
+`firmware/src/eng_organ_presets.h`; they are not stored in the editor's tables, which read `DESC` and `NAMES` from the device.
 
-The web editor for it is `web/editor_fmini.html` (published at `editor/` on the FMini-1 site).
 
 ## Tagged device preferences v1
 

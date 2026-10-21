@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments; Guilherme Ruppert (FMini-1, organvave-1) */
-/* Editor protocol: SysEx for the web editor (web/EDITOR_PROTOCOL.md), the commands the instrument's editor uses
- * (web/editor_fmini.html): INFO GET SET DUMP DESC PRESET NAMES, the user presets (UP_LIST GET STORE LOAD ERASE),
- * live sync (WATCH, the CHANGED / RELOAD pushes, PING), TRACK, and the FMUG patch (82..84, editor_fmug.c).
+/* Editor protocol: SysEx for the web editor (web/EDITOR_PROTOCOL.md; the organ's editor comes in 0.5.0): INFO GET SET
+ * DUMP DESC PRESET NAMES, the user presets (UP_LIST GET STORE LOAD ERASE), live sync (WATCH, the CHANGED / RELOAD
+ * pushes, PING), TRACK, and the organ patch (85, 86: editor_organ.c).
  * Felucca's other commands (steps, projects, samples, the mixer, songs, motion, backups, menus, palettes, MIDI LEARN,
  * FM6) are gone: a frame of one gets no reply.
  *   F0 7D 46 4C cmd args.. F7     (7D = non-commercial ID, "FL")
@@ -172,7 +172,7 @@ static int ed_flash_stop(void)
     return song.playing;
 }
 
-#include "editor_fmug.c"                     /* FMini-1: the FMUG patch (cmds 82, 83, 84) */
+#include "editor_organ.c"                    /* the organ patch (cmds 85, 86) */
 
 static int ed_args_ok(uint32_t cmd, uint32_t n)
 {
@@ -204,7 +204,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
     if (!ed_args_ok(cmd, na))
         return;
     ed_begin(cmd);
-    if (ed_fmug_handle(cmd, a, na)) { ed_send(); return; }
+    if (ed_organ_handle(cmd, a, na)) { ed_send(); return; }
     switch (cmd) {
     case ED_INFO:
         ed_str("FELUCCA " FELUCCA_VERSION, 24);             /* (the editors look for "FELUCCA") */
@@ -217,8 +217,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
             ed_str(ENGINES[i]->name, 8);
         ed_b(NTRK);                                       /* v3 */
         ed_b(0x53); ed_b(1); ed_b(3);   /* live sync: bit 0 WATCH while on keeps the shadow, bit 1 no RELOAD echo */
-        ed_b(0x47); ed_b(1); ed_b(FG_SIZE);   /* FMini-1: the FMUG patch, FG_SIZE bytes (cmds 82, 83; editor_fmug.c) */
-        ed_b(0x48); ed_b(1); ed_b(1);   /* FMini-1 1.6.1: the octave on 82 / 83, and cmd 84 (what a user preset keeps besides the values) */
+        ed_b(0x4F); ed_b(1); ed_b(ORG_PSIZE);   /* OrganVave-1: the organ patch, ORG_PSIZE bytes (cmds 85, 86; editor_organ.c) */
         break;
     case ED_GET:
     case ED_SET:
@@ -405,7 +404,7 @@ static void ed_service(void)
         return;
     ed_w.last_ms = fm1_ms;                                 /* any request keeps WATCH alive */
     {
-        static uint8_t f[64];                              /* (the longest request: FMUG_PUT, 39 bytes) */
+        static uint8_t f[64];                              /* (the longest request: ORG_PUT with 48 bytes, 56) */
         uint32_t i;
         for (i = 0; i < n && i < sizeof f; i++)
             f[i] = p[i];

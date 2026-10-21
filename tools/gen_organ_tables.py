@@ -117,7 +117,7 @@ def main():
         L += rows("", "", off, 12)
         L.append("};")
         L.append("static const uint32_t %s[%d] = {" % (tag, len(ent)))
-        L += rows("", "", ent, 6, "0x{:08x}u")
+        L += rows("", "", ent, 6, "{}u")         # decimal: a hex word in 0x02xxxxxx reads as the XIP window to tools/build.py
         L.append("};")
     for tag, key in (("ORG_ATK", "attack"), ("ORG_REL", "release")):
         L.append("")

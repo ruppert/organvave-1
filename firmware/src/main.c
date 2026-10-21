@@ -94,19 +94,19 @@ static void fm1_fault(const fm1_crash_t *c)
     fm1_reboot();
 }
 
-/* power-on: the instrument with its defaults and the first factory patch (the autosave and fa_init come later) */
-#define UI_INPUT fa_input
-#define UI_LEDS fa_leds
-#define UI_DRAW fa_draw
+/* power-on: the instrument with its defaults and the first factory patch (the autosave and oa_init come later) */
+#define UI_INPUT oa_input
+#define UI_LEDS oa_leds
+#define UI_DRAW oa_draw
 static void felucca_init(void)
 {
     uint32_t i;
     track_t *t = &trk[0];
     for (i = 0; i < G_COUNT; i++)
         song.g[i] = GP[i].def;
-    fmug_init();                              /* the FMUG patch: F1 */
+    org_init();                               /* the tone generator at rest */
     track_defaults(t);
-    set_engine_of(t, ENGI_FMUG);
+    set_engine_of(t, ENGI_ORGAN);             /* the organ, its first factory preset */
     t->engine = t->eng_req;
     song.sel = 0;
     song.master_q12 = 2048;                   /* (the pot's level replaces it before the audio starts: master_boot) */
@@ -145,7 +145,7 @@ static void fm1_main(void)
 #endif
     settings_init();
     lcd_init();
-    fa_splash();
+    oa_splash();
     if (felucca_dbg.magic != DBG_MAGIC) {
         memset(&felucca_dbg, 0, sizeof felucca_dbg);
         felucca_dbg.magic = DBG_MAGIC;
@@ -180,7 +180,7 @@ static void fm1_main(void)
         settings_save();
     }
     autosave_boot(boot_clean);                /* the last session's instrument, under the splash */
-    fa_init();                                /* the instrument, whatever the autosave held */
+    oa_init();                                /* the instrument, whatever the autosave held */
     for (ms = 0; ms < 3000u; ms += 10u) {     /* the splash: 3 s (since power-on's work above ran under it, the rest of it) */
         fm1_delay_ms(10);
         master_poll();

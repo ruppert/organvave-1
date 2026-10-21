@@ -22,14 +22,14 @@ then the UI.
 | RAM .data + .bss | 65,896 | 16,248 | 73,728 | 53,384 (4 KiB reserve) |
 | pool | 348,096 | 249,764 | 368,640 | 110,684 (8 KiB reserve) |
 
-About 164 KB of SRAM and 316 KB of flash are free, before FMUG goes (0.1.0: about 85 KB of flash, of which the splash
-57.6 KB comes back as the organ's splash). Pool users today: the delay line 131 KB (FMini-1's seven delays: 1.49 s,
+Since 0.1.0 FMUG is gone and the organ's splash takes its place in flash (the current figures are in DEVELOPING.md,
+section 1). Pool users today: the delay line 131 KB (FMini-1's seven delays: 1.49 s,
 mono int16), the UI canvas 60 KB, the reverb 35 KB, the user presets and their patches 10 KB, the chorus 4 KB. The delay line
 is the one big lever left: half of it (0.74 s) frees 65 KB if the organ ever needs it.
 
 **(owner)** The firmware keeps only the organ: every other engine, the SAMPLE data, the sequencer, the arpeggiator and
-everything tied to them go, to free RAM and flash (done in the slimming; the sequencer and the arpeggiator stay until
-0.1.0 replaces FMUG's UI). FMUG stays as a scaffold (sound and UI) until the organ engine replaces it in 0.1.0.
+everything tied to them go, to free RAM and flash (done in the slimming). FMUG, the FMini-1 synth, went in 0.1.0 with its
+UI: the organ's panel and screens replaced it.
 
 ### Memory plan
 
@@ -195,7 +195,7 @@ designed one; the static budget of the new functions.
 | version | contents |
 | --- | --- |
 | 0.0.x | the house: identity (`FM-1_8XY`), names, README / CREDITS, docs, the workflow manual only; the slimming; the UI mock-ups |
-| 0.1.0 | tone generator, upper manual, click, the drawbar page, about 8 presets; FMUG removed |
+| 0.1.0 (now) | tone generator, upper manual, click, the drawbar page, 8 factory patches; FMUG removed |
 | 0.2.0 | percussion, vibrato / chorus |
 | 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive, the effects section |
 | 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |

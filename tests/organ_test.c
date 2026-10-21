@@ -24,6 +24,9 @@
 #define NPART 1
 static inline int32_t clamp_(int32_t v, int32_t lo, int32_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 #include "../firmware/engines/src/felucca_engine.h"
+#define RING_PUBLISH() __asm__ volatile("" ::: "memory")
+enum { P_E0, P_E1, P_E2, P_E3 };
+struct track { int dummy; };
 #include "../firmware/engines/src/dsp.c"
 #include "../firmware/src/eng_organ.c"
 

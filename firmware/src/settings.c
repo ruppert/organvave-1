@@ -3,16 +3,16 @@
 /* The settings and the autosave, kept in flash (storage.c).
  *
  * Settings (OBJ_SETTINGS): the panel's calibration (panel.c), the speaker EQ (MENU's LOW CUT, fx_lowcut), the LEDs
- * (settings_leds) and a block of bytes the UI keeps its own settings in (set_bytes: fmug_app.c's GLO, rows 7 and 8).
+ * (settings_leds) and a block of bytes the UI keeps its own settings in (set_bytes: organ_app.c's GLO, row 7).
  * The record is FMini-1's and Felucca's ("PER4", persist_t), so FMini-1's calibration and GLO settings carry over; the
  * fields this firmware does not use are written back as they were read.
  *
- * The autosave (OBJ_AUTOSAVE, magic "OVA1"): the instrument as it is (a user preset record: the sound, the first 16
- * steps, the tempo, the octave, the FX settings; and the FMUG patch, the preset it came from), put back at power-on
+ * The autosave (OBJ_AUTOSAVE, magic "OVA2"): the instrument as it is (a user preset record: the part's values, the
+ * octave, the FX settings; and the organ patch, the preset it came from), put back at power-on
  * (not after a crash, a hang or a failed boot: main.c). A flash erase stops the audio for its ~40 ms, so a write only
  * when the record changed and has stayed the same for AS_IDLE_MS with the transport stopped, nothing sounding and no
  * key or button down, and at least AS_GAP_MS after the one before (AS_RETRY_MS after a failed write). The settings are
- * written under the same quiet rule. FMini-1's autosave (a Felucca project) reads as none. */
+ * written under the same quiet rule. FMini-1's autosave and 0.0.x's ("OVA1", an FMUG patch) read as none. */
 typedef struct {
     uint32_t magic, palette, lowcut, zoom;     /* zoom: LEDS (panel.c leds_*_stored) */
     panel_t panel;
@@ -21,7 +21,7 @@ typedef struct {
 } persist_t;
 #define PERSIST_MAGIC 0x50455234u              /* "PER4" */
 static persist_t persist_saved __attribute__((section(".pool")));   /* what flash holds (no write when unchanged) */
-#define set_bytes (persist_saved.bytes.factory) /* the UI's bytes (fmug_app.c fa_cfg_byte), saved with the rest */
+#define set_bytes (persist_saved.bytes.factory) /* the UI's bytes (organ_app.c oa_cfg_byte), saved with the rest */
 static uint8_t persist_pending;                /* 1 asked for, 2 waiting after a flash error */
 static uint32_t persist_retry_ms;
 static persist_t persist_flash __attribute__((section(".pool")));   /* the copy flash holds */
@@ -53,7 +53,7 @@ static int persist_quiet(void)
     for (i = 0; i < NVOICE; i++)
         if (trk[0].v[i].active)
             return 0;
-    return 1;
+    return !org.nacl;                              /* (the organ: no wheel sounding) */
 }
 
 static void settings_poll(void)                /* main loop, every pass */
@@ -91,15 +91,15 @@ static void settings_init(void)                /* after persist_boot and panel_i
 }
 
 /* ------------------------------------------------------------ autosave --- */
-#define AS_MAGIC 0x3141564Fu                   /* "OVA1" */
+#define AS_MAGIC 0x3241564Fu                   /* "OVA2" (0.1.0: the organ patch) */
 #define AS_POLL_MS 250u
 #define AS_IDLE_MS 10000u
 #define AS_GAP_MS 60000u
 #define AS_RETRY_MS 30000u
 typedef struct {
     uint32_t magic;
-    up_rec_t r;                                /* the sound, its steps and extras (upreset.c up_capture) */
-    uint8_t patch[FG_SIZE];                    /* the FMUG patch */
+    up_rec_t r;                                /* the part's values and extras (upreset.c up_capture) */
+    uint8_t patch[ORG_PSIZE];                  /* the organ patch (eng_organ.c OP_*) */
     uint8_t preset, user, rsv[2];              /* the factory preset, the user preset + 1 it came from; spare */
 } as_rec_t;
 _Static_assert(sizeof(as_rec_t) <= ST_PAYLOAD_MAX, "the autosave in one flash sector");
@@ -114,7 +114,7 @@ static void as_capture(as_rec_t *a)
     memset(a, 0, sizeof *a);
     a->magic = AS_MAGIC;
     up_capture(&a->r, 0, "AUTOSAVE");
-    memcpy(a->patch, fmug_patch[song.sel], FG_SIZE);
+    memcpy(a->patch, org_patch, ORG_PSIZE);
     a->preset = TSEL->preset;
     a->user = TSEL->user;
 }
@@ -157,8 +157,7 @@ static int autosave_boot(int allowed)
         t->preset = a.preset;
         t->user = a.user <= UP_SLOTS ? a.user : 0u;
         fm1_irq_on();
-        fmug_set_patch(song.sel, a.patch);
-        fmug_adopt(song.sel);
+        org_set_patch(a.patch);
         up_extras(&a.r);
         rc = 1;
     }

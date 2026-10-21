@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Core types: the instrument (one track), voices, engines, parameters. Felucca's four parts, drum grid, song chain
- * and automation are gone (organvave-1 plays one instrument: FMini-1's, the organ next); the parameter ids and the
+ * and automation are gone (organvave-1 plays one instrument: the organ, eng_organ.c); the parameter ids and the
  * global ids stay as they were (the user presets and the editor protocol use them).
  * Sections: sizes, parameters, voices and engines, the track and the song, system. */
 #include <stdint.h>
@@ -9,17 +9,17 @@
 /* organvave-1's version: the splash and ABOUT show it; the workflow, the emulator and the installer read this line;
  * build.py --release X.Y sets it. (FELUCCA_VERSION in felucca.c is Felucca's: the editor INFO "FELUCCA ...") */
 #ifndef ORGANVAVE_VERSION
-#define ORGANVAVE_VERSION "v0.0.1"
+#define ORGANVAVE_VERSION "v0.1.0"
 #endif
 
 /* ------------------------------------------------------------ sizes --- */
-#define NVOICE 12                /* FMini-1: 12 voices when the instrument is set to POLY */
+#define NVOICE 1                 /* the organ is no voice engine (eng_organ.c): the voice system keeps one, unused */
 #define NPART 1                  /* the instrument: one part */
 #define NTRK NPART               /* (the editor protocol counts tracks: one) */
 #define NSTEP 16                 /* the SEQ pop-up's steps (fmug_app.c) */
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
-#define NENGINES 15             /* 0..13 Felucca's (retired: engines.c ENG_GONE), 14 FMUG: the numbers are stored */
-#define ENGI_FMUG 14u
+#define NENGINES 16             /* 0..13 Felucca's, 14 FMini-1's FMUG (retired: engines.c ENG_GONE), 15 ORGAN: stored */
+#define ENGI_ORGAN 15u
 #define NENG_SHOWN 1             /* the engines one can pick (engines.c ENGINE_ORDER) */
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 
@@ -143,7 +143,7 @@ typedef struct track {
     int32_t peak;
     int32_t dist_hp, dist_lp1, dist_lp2;   /* DIST state (fx.c) */
     uint8_t tail;                /* blocks to mix after the last voice (the DIST tail) */
-    uint8_t mw;                  /* CC1 mod wheel (FMUG's MOD depth) */
+    uint8_t mw;                  /* CC1 mod wheel (unused by the organ) */
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
 } track_t;
 

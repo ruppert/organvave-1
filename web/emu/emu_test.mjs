@@ -4,11 +4,10 @@
 // tests/host/emu_test.mjs (charlesvestal/fm1-x0x, GPL-3.0).
 //   node web/emu/emu_test.mjs build/emu/felucca.wasm [NATIVE.f32]
 // Checks: it boots (the 3 s splash, then HOME on the screen, the HOME LED; the power-on LED sweep under the splash,
-// over by 1 s), a held key sounds and lights its LED, PLAY
-// starts the sequencer (PLAY's LED), a user preset saved from the panel (SAVE, SAVE) reaches the flash,
+// over by 1 s), a held key sounds and lights its LED, a user preset saved from the panel (SAVE, SAVE) reaches the flash,
 // and the flash sectors kept as the page keeps them bring it back in a fresh instance; the same gestures twice
 // give the same audio (deterministic), with NATIVE.f32 (web/emu/native_check.c) the native build's, bit for bit.
-// Then the cost: 1 s of a heavy song (4-note chords on every step, POLY, the FX on) against real time (BENCH_MAX, default 0.5:
+// Then the cost: 1 s of the organ at its heaviest (nine drawbars out, eight keys down) against real time (BENCH_MAX, default 0.5:
 // fails above half of real time on this machine).
 import fs from "fs";
 import { storeSectors, restoreSectors, midiKnob, KNOB_CC, MASTER_CC } from "./worklet.js";
@@ -88,12 +87,8 @@ check(`a MIDI note in (USB-MIDI's queue) sounds (peak ${a.peak.toFixed(3)})`, a.
 const draws = a.ex.web_screen_draws();
 a.turn(EN.K1, 3);
 check("KNOB 1 redraws the screen", a.ex.web_screen_draws() > draws);
-a.tap(B.PLAY);
 a.render(1000);
-check("PLAY: the sequencer runs, PLAY's LED", a.ex.web_playing() === 1 && (a.ex.web_lit_buttons() >> B.PLAY & 1) === 1);
-a.tap(B.PLAY);
 a.render(300);
-check("PLAY again stops it", a.ex.web_playing() === 0);
 { // the page's breathing peaks against the firmware's (hal/fm1_input.h FM1_LED_BREATH_PK / _LO, /256 of lit): the
   // colour at 50 % between the dark and the lit one by the LED's share, gamma-encoded (sRGB), within 0.06
   const html = fs.readFileSync(new URL("./index.html", import.meta.url), "utf8");
@@ -171,22 +166,21 @@ async function song() {
   const d = await device(null);
   d.render(3400);
   d.ex.web_test_heavy();
-  d.tap(B.PLAY);
   d.rec = true;
   d.render(2000);
   return d;
 }
 const s1 = await song(), s2 = await song();
-check(`the heavy song plays (peak ${s1.peak.toFixed(3)}), twice the same samples`, s1.peak > 0.05 && s1.sig === s2.sig);
-if (nativePath) {                                             // web/emu/native_check.c: the same song, built with cc
+check(`the heavy organ sounds (peak ${s1.peak.toFixed(3)}), twice the same samples`, s1.peak > 0.05 && s1.sig === s2.sig);
+if (nativePath) {                                             // web/emu/native_check.c: the same render, built with cc
   const nat = new Float32Array(new Uint8Array(fs.readFileSync(nativePath)).buffer);
   const web = s1.samples;
   let diff = nat.length === web.length ? 0 : Infinity;
   for (let i = 0; i < web.length && diff === 0; i++) if (nat[i] !== web[i]) diff = i + 1;
-  check(`the same song from the native build (cc): ${web.length / 2} frames, ${diff === 0 ? "bit for bit" : "differs at " + diff}`, diff === 0);
+  check(`the same render from the native build (cc): ${web.length / 2} frames, ${diff === 0 ? "bit for bit" : "differs at " + diff}`, diff === 0);
 }
 
-// ---- the cost: 1 s of the heavy song against real time (the best of 3, after 2 s to settle)
+// ---- the cost: 1 s of the heavy organ against real time (the best of 3, after 2 s to settle)
 let best = Infinity;
 s1.rec = false;
 for (let i = 0; i < 3; i++) {

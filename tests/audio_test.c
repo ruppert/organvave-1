@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* The real audio ISR with a simulated DMA and clock: overload must free work
- * within one block without cutting another part's lead or bass. */
+/* The real audio ISR with a simulated DMA and clock: the overload detection, the DMA diagnostics, MENU > USB LEVEL,
+ * the keys under the splash (#137); the organ plays (it has no voices to shed: overload never cuts it). */
 #define HOST_NO_UI 1
 #define HOST_TICKS 1
 #define FM1_TICKS_PER_US 1u
@@ -44,11 +44,9 @@ static void fresh(void)
     memset(trk, 0, sizeof trk);
     memset(&song, 0, sizeof song);
     host_tracks_init();
-    fmug_nst[0] = 0x2F6E2B1;                           /* (FMUG's noise, filter smoothing and modulation from power-on: */
-    memset(fmug_pk, 0, sizeof fmug_pk);                /* runs compare) */
-    memset(fmug_sm, 0, sizeof fmug_sm);
-    fmug_sm_ok = 0;
-    for (p = 0; p < NPART; p++) host_preset(&trk[p], ENGI_FMUG, 0);
+    org_init();                                        /* (the tone generator from power-on: runs compare) */
+    org_pgen_seen = 0xFF;
+    for (p = 0; p < NPART; p++) host_preset(&trk[p], ENGI_ORGAN, 0);
     memset(&felucca_dbg, 0, sizeof felucca_dbg);
     audio_cpu_rem = audio_halves = audio_max_us = 0;
     shed_req = 0; shed_count = 0; shed_over = 0;
@@ -56,60 +54,19 @@ static void fresh(void)
     host_pending = FM1_AUDIO_HALF;
     transport_req = panic_req = 0;
 }
-static voice_t *held(track_t *t, uint32_t note)
-{
-    uint32_t i;
-    for (i = 0; i < NVOICE; i++)
-        if (t->v[i].active && t->v[i].note == note) return &t->v[i];
-    return 0;
-}
+/* the organ is no voice engine: an overload's shedding finds nothing to take, the organ goes on */
 static void overload(void)
 {
-    voice_t *lead, *extra, *top;
-    uint32_t mode, i;
     int32_t out[2 * CTL];
+    uint32_t b;
     fresh();
-    trk[0].p[P_VOICE] = V_POLY;
     trk_note_on(&trk[0], 48, 100);
     trk_note_on(&trk[0], 60, 100);
-    trk_note_on(&trk[0], 64, 100);
-    lead = held(&trk[0], 48); extra = held(&trk[0], 60); top = held(&trk[0], 64);
+    for (b = 0; b < 8u; b++)
+        mix_block(out, CTL);
     shed_voice();
-    acheck("overload keeps the lowest POLY note (the bass) and takes the oldest other one",
-           lead && extra && top && lead->gate && extra->stage == 4u && top->gate && shed_count == 1u);
     mix_block(out, CTL);
-    acheck("overload frees its victim within one control block", extra && !extra->active && voices_busy() == 2u);
-
-    fresh();
-    trk[0].p[P_VOICE] = V_MONO;
-    trk_note_on(&trk[0], 40, 100);
-    lead = held(&trk[0], 40);
-    shed_voice();
-    acheck("a MONO lead alone stays protected", lead && lead->gate && shed_count == 0u);
-
-    fresh();
-    trk[0].p[P_VOICE] = V_UNISON;
-    trk_note_on(&trk[0], 55, 100);
-    shed_voice(); mix_block(out, CTL);
-    acheck("UNISON loses an extra voice and retains its lead", trk[0].v[0].active && trk[0].v[0].gate && voices_busy() == NVOICE - 1u);
-
-    for (mode = V_MONO; mode <= V_LEGATO; mode++) {
-        fresh(); trk[0].p[P_VOICE] = V_POLY;
-        for (i = 0; i < NVOICE; i++) trk_note_on(&trk[0], 48u + 2u * i, 100);
-        trk[0].p[P_VOICE] = (int16_t)mode;
-        shed_voice(); mix_block(out, CTL);
-        acheck("overload can reclaim stale POLY voices after a MONO / LEGATO change",
-               shed_count == 1u && trk[0].v[0].gate && voices_busy() == NVOICE - 1u);
-    }
-
-    fresh();
-    trk[0].p[P_VOICE] = V_POLY;
-    trk_note_on(&trk[0], 60, 100); trk_note_on(&trk[0], 64, 100);
-    lead = held(&trk[0], 60); extra = held(&trk[0], 64);
-    trk_note_off(&trk[0], 60); trk_note_off(&trk[0], 64);
-    lead->env = 10000; extra->env = 10;
-    shed_voice();
-    acheck("released voices shed the quieter tail first", extra->stage == 4u && lead->stage != 4u);
+    acheck("overload: the organ has no voice to shed, it goes on sounding", shed_count == 0u && org.nacl > 0u);
 }
 static void dma(void)
 {
@@ -162,6 +119,7 @@ static double usb_run(uint32_t fixed, uint32_t master, int dac_is_tap_scaled_ok[
     lim_env = LIM_T; dc_l = dc_r = dce_l = dce_r = 0;    /* (the master's state as at power-on: runs compare) */
     trk[0].p[P_VOICE] = V_POLY;
     trk[0].p[P_DIST] = trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = 0;   /* (no tails between runs) */
+    trk[0].p[P_LEVEL] = 40;                            /* (quiet: at the default the full MASTER chord hits the limiter, LIM_T) */
     trk_note_on(&trk[0], 48, 110); trk_note_on(&trk[0], 55, 110); trk_note_on(&trk[0], 64, 110);
     fx_usb_fixed = (uint8_t)fixed;
     song.master_q12 = master;
@@ -188,7 +146,7 @@ static void usb_level(void)
     printf("audio: USB / DAC rms: MASTER full %.0f / %.0f, 1/4 %.0f / %.0f, 0 %.0f / %.0f; FIXED 1/4 %.0f / %.0f, 0 %.0f / %.0f\n",
            u_full, d_full, u_quiet, d_quiet, u_off, d_off, u_fixed, d_fixed, u_fixed0, d_fixed0);
     acheck("USB LEVEL MASTER (default): USB is the DAC's signal and follows the knob (0: silent)",
-          ok_full && ok_quiet && ok_off && u_full > 1000.0 && u_quiet < u_full * 0.5 && u_off == 0.0);
+          ok_full && ok_quiet && ok_off && u_full > 300.0 && u_quiet < u_full * 0.5 && u_off == 0.0);
     acheck("USB LEVEL FIXED: USB at the full level whatever MASTER is (within 0.1 dB), MASTER 0 too",
           fabs(20.0 * log10(u_fixed / u_full)) < 0.1 && fabs(20.0 * log10(u_fixed0 / u_full)) < 0.1);
     acheck("USB LEVEL FIXED: the DAC gets exactly USB scaled by MASTER (MASTER 0: silent, 1/4: -12 dB)",
@@ -235,7 +193,7 @@ static double boot_run(int32_t pot, int boot, uint32_t *splash_peak, uint32_t *f
         fm1_in.notes = b < 40u ? 1u << 12 : b < 60u ? 0u : (1u << 0) | (1u << 4) | (1u << 7);
         audio_block(out, 32);
         if (b >= 60u) r += block_rms(out, 32);
-        if (b == 39u) *busy = voices_busy();
+        if (b == 39u) *busy = org.nacl;                /* (the wheels sounding) */
     }
     fm1_in.notes = 0;
     return r / 340.0;

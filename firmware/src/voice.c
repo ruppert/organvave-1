@@ -349,6 +349,10 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         return;
     if (t->eng_req != t->engine)                        /* engine switch under way (engine_block, the next block) */
         return;
+    if (t->engine == ENGI_ORGAN) {                      /* the organ: its keys, no voices (eng_organ.c) */
+        org_note(note, 1);
+        return;
+    }
     for (i = 0; i < NVOICE; i++)
         any |= t->v[i].gate;
     if (!any) {                                        /* fresh phrase: LFO retrigger (TRIG NOTE) and fade */
@@ -383,6 +387,10 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 static void trk_note_off(track_t *t, uint32_t note)
 {
     uint32_t i, mode = trk_vmode(t);
+    if (t->engine == ENGI_ORGAN) {
+        org_note(note, 0);
+        return;
+    }
     mono_remove(t, note);                              /* a mode change must not retain a released key */
     if (mode != V_POLY) {
         uint32_t nv = mode == V_UNISON ? trk_nvoice(t) : 1u;
@@ -410,6 +418,8 @@ static void trk_note_off(track_t *t, uint32_t note)
 static void trk_all_off(track_t *t)
 {
     uint32_t i;
+    if (t->engine == ENGI_ORGAN)
+        org_all_off();
     for (i = 0; i < NVOICE; i++) {
         t->v[i].gate = 0;
         t->v[i].stage = t->v[i].active ? 3 : 0;
@@ -502,6 +512,8 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
     uint32_t nr = 0;
     for (i = 0; i < n; i++)
         out[i] = 0;
+    if (t->engine == ENGI_ORGAN)                        /* the organ renders the part itself (eng_organ.c) */
+        return org_track_render(t, out, n);
     track_lfo_adv(t);                                   /* (the rest of its block after the part: fx.c mix_block) */
     glide_blk[(uint32_t)(t - trk) % NTRK]++;
     if (e->block)                                       /* the engine's per-part work (WHEEL: bars, rotor) */

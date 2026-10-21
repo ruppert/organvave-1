@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments; Guilherme Ruppert (FMini-1, organvave-1) */
 /* The firmware on the host: the same sources as firmware/src/felucca.c, in its order, with the HAL stubbed (a screen
  * in RAM, the keys and knobs from the test, a 1 MiB RAM flash behind storage.c's hooks). The tests include this, then
- * what they test on top (fmug_app.c, editor.c, audio.c ...).
+ * what they test on top (organ_app.c, editor.c, audio.c ...).
  *   HOST_NO_UI     only the sound and the sequencer (the DSP tests: no screen, no stores)
  *   HOST_FLASH_OFF the flash part not found (flash_ok 0: everything in RAM only)
  *   HOST_TICKS     the test defines fm1_ticks and FM1_TICKS_PER_US */
@@ -93,9 +93,7 @@ static void lcd_sync(void) {}
 #include "../firmware/src/usb.c"
 #include "../firmware/src/midi_uart.c"                  /* TRS MIDI IN: its parser (um_byte) feeds midi_in_q */
 #include "../firmware/src/seq.c"
-#ifdef HOST_NO_UI
-static void fa_seq_note(track_t *t, uint32_t note) { (void)t; (void)note; }   /* (fmug_app.c's SEQ pop-up) */
-#else
+#ifndef HOST_NO_UI
 #include "../firmware/src/panel.c"
 
 /* the flash: 1 MiB of RAM behind storage.c's hooks (storage_hw.c is the chip's) */
@@ -135,8 +133,6 @@ static uint32_t fl_jedec_ram(void) { return 0x856014u; }
 #define FL_FAR(fn) (fn)
 #include "../firmware/src/storage.c"
 #include "../firmware/src/ui.c"
-#include "ui_icons.h"
-#include "../firmware/src/ui_fmug.c"
 #include "../firmware/src/upreset.c"
 #include "../firmware/src/settings.c"
 #endif
@@ -203,7 +199,10 @@ static void host_preset(track_t *t, uint32_t e, uint32_t pi)
     t->p[P_VOICE] = p->mono ? V_LEGATO : V_POLY;
     for (i = 0; i < 4u; i++)
         t->p[P_DIST + i] = (int16_t)(p->fx[i] ? p->fx[i] - 1 : FX_DEF[i]);
-    fmug_track_loaded(t);
+    if (e == ENGI_ORGAN) {
+        org_set_patch(ORG_FACTORY[pi % ORG_NFACTORY]);
+        t->p[P_LEVEL] = ORG_LEVEL[pi % ORG_NFACTORY];
+    }
 }
 
 static void put_step(track_t *t, uint32_t i, uint32_t n, const uint8_t *notes, uint32_t time, uint32_t flags)

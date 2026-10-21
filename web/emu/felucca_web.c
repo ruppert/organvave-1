@@ -3,11 +3,11 @@
  * The design (the device clock driven by the audio the worklet asks for, the exports below, the saved
  * flash handed back before boot) follows X0X's browser build, web/emu/x0x_web.c of charlesvestal/fm1-x0x
  * (GPL-3.0), a Felucca fork. */
-/* organvave-1 (FMini-1's screen and sound) in the browser: the firmware's sources in src/felucca.c's order, with
+/* organvave-1 (the organ's screen and sound) in the browser: the firmware's sources in src/felucca.c's order, with
  * this file as the HAL, compiled to WebAssembly and run in an AudioWorklet against a simulated FM-1:
  *   - the device clock: TIMER4 ticks (24 MHz) and fm1_ms advance with the audio the worklet asks for; the
  *     audio ISR (audio.c fm1_alnk0_irq, the real one) renders each I2S half (HALF_FRAMES) as the DMA would
- *     ask for it, and the main loop (main.c's, below in web_frame) runs every 15 ms, with fa_input on every
+ *     ask for it, and the main loop (main.c's, below in web_frame) runs every 15 ms, with oa_input on every
  *     millisecond in between as main.c's wait loop calls it;
  *   - the panel: buttons and encoders by their printed labels (panel.c's table maps them to the matrix),
  *     the keys as fm1_in.notes, the LEDs read back from fm1_led / fm1_led_dim through the key matrix;
@@ -208,8 +208,6 @@ static uint32_t fl_jedec_ram(void) { return 0x856014u; }             /* the FM-1
 #define FL_FAR(fn) (fn)
 #include "../../firmware/src/storage.c"
 #include "../../firmware/src/ui.c"
-#include "ui_icons.h"
-#include "../../firmware/src/ui_fmug.c"
 #include "../../firmware/src/upreset.c"
 #include "../../firmware/src/settings.c"
 
@@ -244,7 +242,7 @@ enum { FM1_GUARD_STACK = 1, FM1_GUARD_WRITE = 2, FM1_GUARD_BUS = 4, FM1_GUARD_PC
 #define usb_retry(ms) ((void)(ms))
 #define usb_detach() ((void)0)
 #include "../../firmware/src/master.c"
-#include "../../firmware/src/fmug_app.c"
+#include "../../firmware/src/organ_app.c"
 #include "../../firmware/src/main.c"
 #undef usb_poll
 #undef usb_start
@@ -260,7 +258,7 @@ static void web_power_on(void)
     persist_boot();
     settings_init();
     lcd_init();
-    fa_splash();
+    oa_splash();
     memset(&felucca_dbg, 0, sizeof felucca_dbg);
     felucca_dbg.magic = DBG_MAGIC;
     fm1_input_init();
@@ -272,7 +270,7 @@ static void web_power_on(void)
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
     autosave_boot(boot_clean);            /* main.c: the last session's instrument (settings.c) */
-    fa_init();                            /* main.c: the instrument */
+    oa_init();                            /* main.c: the instrument */
     web_boot_ms = fm1_ms + 3030u;        /* main.c: 30 ms + the 3 s splash */
     web_booted = 1;
 }
@@ -447,24 +445,16 @@ EXPORT uint8_t *web_anim_levels(void)
 
 /* for the test and the bench (web/emu/emu_test.mjs): a heavy song straight into the instrument: POLY, 4-note chords
  * on all 16 steps, held, every FX on. PLAY is the page's (or the test's) to press */
-EXPORT void web_test_heavy(void)
+EXPORT void web_test_heavy(void)            /* the organ at its heaviest: the nine upper drawbars out, the crosstalk on,
+                                            * eight keys down (emu_test.mjs's cost check and native_check.c) */
 {
-    static const uint8_t CH[4][4] = {{48, 55, 60, 64}, {45, 52, 57, 60}, {41, 48, 53, 57}, {43, 50, 55, 59}};
-    track_t *t = &trk[0];
-    uint32_t i, k;
-    apply_preset_to(t, 1);
-    t->p[P_VOICE] = V_POLY;
-    t->p[P_SUS] = 127;
-    t->p[P_SLEN] = 16;
-    for (i = 0; i < 16u; i++) {
-        step_t *s = &t->step[i];
-        s->n = 4;
-        for (k = 0; k < 4u; k++)
-            s->note[k] = CH[i / 4u][k];
-        s->time = ST_NOTE;
-        s->flags = 0;
-        s->vel = 100;
-    }
+    static const uint8_t NOTES[8] = {48, 52, 55, 59, 60, 64, 67, 71};
+    uint32_t i;                                 /* (no preset: a preset change releases the keys, panic_req) */
+    for (i = 0; i < 9u; i++)
+        org_set(OP_UB + i, 8u);
+    org_set(OP_XTALK, 1u);
+    for (i = 0; i < 8u; i++)
+        trk_note_on(&trk[0], NOTES[i], 100);
     ui.force = 1;
 }
 

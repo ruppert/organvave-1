@@ -11,9 +11,10 @@
  * P_E0). Version 4 (today's) holds each value in a byte (value + 64); versions 1..3 (Felucca's of before) an int16
  * each; version 5 is a drum grid (Felucca's DRUM engine: it reads, its grid is no pattern here).
  *
- * The FMUG patch of a preset is kept beside the records, in one more object (OBJ_UPFM6, "UPF6": one entry per slot,
- * tagged with a hash of its record without the name, so a rename keeps it and any other change of the record leaves
- * the record without one: it then loads the factory patch its SLOT names). */
+ * The organ patch of a preset (eng_organ.c OP_*) is kept beside the records, in one more object (OBJ_UPFM6, "UPF6":
+ * one entry per slot, tagged with a hash of its record without the name, so a rename keeps it and any other change of
+ * the record leaves the record without one: it then loads the first factory patch). FMini-1's entries (FMUG
+ * patches, of records of engine 14) are never read: those records load as the organ with the first factory patch. */
 #define UP_PER_BANK 16u
 #define UP_PMAX 72u                              /* room for P_COUNT to grow */
 #define UP_USED 0xA5u
@@ -67,8 +68,8 @@ static uint32_t up_cat(uint32_t k)               /* (the category byte as stored
     const up_rec_t *r = up_rec(k);
     return r->ver >= 4u && r->np <= UP_CAT_AT && r->packed[UP_CAT_AT] < 9u ? r->packed[UP_CAT_AT] : 0u;
 }
-/* the engine a used slot's sound plays on (a retired engine's: FMUG, its values clamped) */
-static uint32_t up_engine(uint32_t k) { return eng_ok(up_rec(k)->engine) ? up_rec(k)->engine : ENGI_FMUG; }
+/* the engine a used slot's sound plays on (a retired engine's: ORGAN, its values clamped) */
+static uint32_t up_engine(uint32_t k) { return eng_ok(up_rec(k)->engine) ? up_rec(k)->engine : ENGI_ORGAN; }
 
 static void up_pat_norm(uint8_t *note, uint8_t *flags)   /* tie: no note; rest: no flags */
 {
@@ -101,7 +102,7 @@ static void up_bank_check(uint32_t b, int len)
 /* the record's values in today's P_* order (mapped by count, see the top), each inside its range */
 static void up_values(const up_rec_t *r, int16_t *v)
 {
-    uint32_t i, e = eng_ok(r->engine) ? r->engine : ENGI_FMUG, nc = r->np - 8u;
+    uint32_t i, e = eng_ok(r->engine) ? r->engine : ENGI_ORGAN, nc = r->np - 8u;
     for (i = 0; i < P_E0; i++)
         v[i] = i < nc ? up_value(r, i) : param_desc_of(e, i)->def;
     for (i = 0; i < 8u; i++)
@@ -138,9 +139,9 @@ static void up_slot_label(char *b, uint32_t k)  /* "U07" */
     b[3] = 0;
 }
 
-/* ------------------------------------------------- the presets' FMUG patches --- */
+/* ------------------------------------------------ the presets' organ patches --- */
 #define UPF_MAGIC 0x36465055u                    /* "UPF6" */
-#define UPF_N 128u                               /* an entry's patch: 128 7-bit values (FMUG: its FG_SIZE first) */
+#define UPF_N 128u                               /* an entry's patch: 128 7-bit values (the organ: its ORG_PSIZE first) */
 #define UPF_PK 112u                              /* .. packed 8 to 7 bytes */
 typedef struct {
     uint32_t tag;                                /* upf_tag of the record it belongs to */
@@ -154,7 +155,7 @@ typedef struct {
     upf_ent_t e[UP_SLOTS];
 } upf_t;
 _Static_assert(sizeof(upf_t) == 3728u, "user preset patches layout (at most ST_PAYLOAD_MAX, 3840)");
-_Static_assert(FG_SIZE <= UPF_N, "the FMUG patch in a user preset patch entry");
+_Static_assert(ORG_PSIZE <= UPF_N, "the organ patch in a user preset patch entry");
 static upf_t upf __attribute__((section(".pool")));
 
 static int upf_valid(const upf_t *u) { return u->magic == UPF_MAGIC && u->ver == 1u && u->nslot == UP_SLOTS; }
@@ -177,7 +178,7 @@ static uint32_t upf_tag(const up_rec_t *r)       /* FNV-1a of the record without
     return h;
 }
 
-static int upf_fmug(uint32_t k) { return up_used(k) && up_rec(k)->engine == ENGI_FMUG; }
+static int upf_organ(uint32_t k) { return up_used(k) && up_rec(k)->engine == ENGI_ORGAN; }
 
 /* 128 7-bit values, 8 to 7 bytes (UPF_PK) and back */
 static void upf_pk_get(const uint8_t *d, uint8_t *pk)
@@ -211,7 +212,7 @@ static void upf_pk_put(const uint8_t *pk, uint8_t *d)
 /* slot k's patch -> pk (UPF_N bytes), 0 = it has one */
 static int upf_get(uint32_t k, uint8_t *pk)
 {
-    if (k >= UP_SLOTS || !upf_valid(&upf) || !((upf.used >> k) & 1u) || !upf_fmug(k) ||
+    if (k >= UP_SLOTS || !upf_valid(&upf) || !((upf.used >> k) & 1u) || !upf_organ(k) ||
         upf.e[k].tag != upf_tag(up_rec(k)))
         return 1;
     upf_pk_get(upf.e[k].pk, pk);
@@ -225,15 +226,15 @@ static void upf_boot(void)                       /* up_boot, after the banks */
     upf_empty();
 }
 
-/* up_store: slot k (its record just written) gets track tr's patch; 0 ok, 2 flash error, 3 no flash (kept in RAM) */
-static int upf_store(uint32_t k, uint32_t tr)
+/* up_store: slot k (its record just written) gets the organ patch; 0 ok, 2 flash error, 3 no flash (kept in RAM) */
+static int upf_store(uint32_t k)
 {
     uint8_t c[UPF_N];
     if (!upf_valid(&upf))
         upf_empty();
     memset(c, 0, sizeof c);
-    memcpy(c, fmug_patch[tr % NTRK], FG_SIZE);
-    fmug_sanitize(c);
+    memcpy(c, org_patch, ORG_PSIZE);
+    org_sanitize(c);
     upf_pk_put(c, upf.e[k].pk);
     upf.e[k].tag = upf_tag(up_rec(k));
     upf.used |= 1u << k;
@@ -242,20 +243,16 @@ static int upf_store(uint32_t k, uint32_t tr)
     return st_save(OBJ_UPFM6, &upf, sizeof upf) ? 2 : 0;
 }
 
-/* up_load: track t (its values just loaded from slot k) gets the preset's own patch, else the factory one its SLOT
- * names; SLOT then shows F n or OWN (fmug_adopt) */
+/* up_load: the instrument (its values just loaded from slot k) gets the preset's own organ patch, else the first
+ * factory one */
 static void upf_track_load(track_t *t, uint32_t k)
 {
     uint8_t pk[UPF_N];
-    uint32_t tr = (uint32_t)(t - trk);
-    if (tr >= NTRK || t->eng_req != ENGI_FMUG)
+    if (t->eng_req != ENGI_ORGAN)
         return;
-    if (upf_get(k, pk)) {
-        int32_t s = t->p[P_E7];
-        memcpy(pk, FMUG_FACTORY[s >= 0 && s < (int32_t)FMUG_NFACTORY ? s : 0], FG_SIZE);
-    }
-    fmug_set_patch(tr, pk);
-    fmug_adopt(tr);
+    if (upf_get(k, pk))
+        memcpy(pk, ORG_FACTORY[0], ORG_PSIZE);
+    org_set_patch(pk);
 }
 
 /* ------------------------------------------------------------- the store --- */
@@ -306,13 +303,13 @@ static int up_put(uint32_t k, const up_rec_t *r)
     return flash_ok ? 0 : 3;
 }
 
-/* the record's name = name (at most 12), 0 or "": the automatic one (engine name + slot number, "FMUG 07") */
+/* the record's name = name (at most 12), 0 or "": the automatic one (engine name + slot number, "ORGAN 07") */
 static void up_set_name(up_rec_t *r, uint32_t k, const char *name)
 {
     char b[16], l[4];
     uint32_t i;
     if (!name || !name[0]) {
-        str_cpy(b, ENGINES[eng_ok(r->engine) ? r->engine : ENGI_FMUG]->name, 9);
+        str_cpy(b, ENGINES[eng_ok(r->engine) ? r->engine : ENGI_ORGAN]->name, 9);
         up_slot_label(l, k);
         str_cpy(b + str_len(b), " ", 2);
         str_cpy(b + str_len(b), l + 1, 3);
@@ -350,14 +347,14 @@ static void up_capture(up_rec_t *r, uint32_t k, const char *name)
         r->packed[UP_FX_AT + i] = (uint8_t)(clamp(song.g[UP_FXG[i]], 0, 127) + 1);
 }
 
-/* the instrument's sound -> slot k, with its FMUG patch; name 0 or "": the automatic name; up_put's result */
+/* the instrument's sound -> slot k, with its organ patch; name 0 or "": the automatic name; up_put's result */
 static int up_store(uint32_t k, const char *name)
 {
     up_rec_t r;
     int rc;
     up_capture(&r, k, name);
     rc = up_put(k, &r);                                /* the record first, then its patch */
-    if ((rc == 0 || rc == 3) && r.engine == ENGI_FMUG && upf_store(k, song.sel) == 2)
+    if ((rc == 0 || rc == 3) && r.engine == ENGI_ORGAN && upf_store(k) == 2)
         rc = 2;
     return rc;
 }
@@ -398,7 +395,7 @@ static int up_load(uint32_t k)
     fm1_irq_off();                                      /* the audio ISR must not see half a sound */
     t->eng_req = (uint8_t)up_engine(k);
     for (i = 0; i < P_COUNT; i++)
-        if (!param_kept(i))
+        if (!param_kept(i) || (i == P_LEVEL && t->eng_req == ENGI_ORGAN))   /* (the organ: a preset's level is its own) */
             t->p[i] = v[i];
     t->preset = 0;
     fm1_irq_on();

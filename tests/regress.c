@@ -3,18 +3,18 @@
 /* Regression suite of the DSP on the host (the firmware's sources, through tests/host.h).
  *   build/host/regress [GOLDEN_FILE CPU_FILE]      (run_tests.sh builds and runs it)
  *
- * 1. golden renders: every factory patch of every engine, the voice modes (POLY / MONO / LEGATO / UNISON) and the FX
- *    sends on FMUG's first patch, and the sequencer playing a pattern. Each render plays a fixed phrase (notes, an
+ * 1. golden renders: every factory patch of the organ, the FX sends on its first patch, and the sequencer playing a
+ *    pattern. Each render plays a fixed phrase (notes, an
  *    overlap, a chord, note-offs, the release tail) and is reduced to a 64-bit FNV-1a hash of its output samples,
  *    compared with GOLDEN_FILE (tests/golden.txt). Every render runs in its own fork()ed child of a process that never
  *    touched the DSP state, so all state starts as at boot. The renders keep the REVERB TYPE at ROOM (the power-on
- *    reverb of the hashes' first days; HALL is the default since, its own test is fmug_fx_test.c).
+ *    reverb of the hashes' first days; HALL is the default since, its own test is fx_test.c).
  * 2. health checks on every render: no sample beyond 16 bits, none near full scale, DC offset, the peak level, every
- *    voice free after the release, silence at the end.
+ *    organ free after the release, silence at the end.
  * 3. CPU budget (hosts with a kernel instruction counter: macOS): per patch (8 notes held), the instructions per
  *    sample against CPU_FILE (tests/cpu_baseline.txt) at +-25 %.
- * 4. voices: the budget of NVOICE, MONO keeps its note under pressure, and no hanging note after the note-offs
- *    (MIDI on every channel, the keys, the ARP, the voice modes).
+ * 4. keys: the key budget under random notes, a held key keeps sounding under pressure, and no key left down after
+ *    the note-offs (MIDI on every channel, the keys, the octave buttons, random patches).
  * env: GOLDEN_UPDATE=1 rewrites GOLDEN_FILE, BUDGET_UPDATE=1 rewrites CPU_FILE (on purpose: review the diff),
  * VERBOSE=1 prints every render's numbers, JOBS=n children at once (default 8). */
 #define HOST_NO_UI 1
@@ -26,9 +26,9 @@
 #define LIM_PEAK_MIN 250          /* quieter than this (-42 dBFS): something is missing */
 #define LIM_TAIL 6                /* AC peak of the last 0.25 s, after the voices are free and the FX rang out */
 #define LIM_TAIL_DC 2             /* its constant part */
-#define FREE_CAP_S 40             /* the voices must be free this long after the last note-off (FMUG: DECAY, up to 12 s, is
-                                   * also the release, to -60 dB about three times that) */
-#define TAIL_S 3                  /* FX tail rendered after the voices are free */
+#define FREE_CAP_S 40             /* the organ must be free this long after the last note-off (its release, the tonewheels'
+                                   * decay to silence, is a few seconds at most) */
+#define TAIL_S 8                  /* FX tail rendered after the organ is free (the delay and reverb sends ring for seconds) */
 #define CPU_TOL 0.25              /* +-25 %, and at least CPU_SLACK instructions */
 #define CPU_SLACK 20
 
@@ -53,13 +53,9 @@ static res_t R;
 static uint32_t fpos, rel_at, dc_end, tail_from;
 static int64_t dcs[2];
 
-static int parts_free(void)
+static int parts_free(void)                     /* the organ: no tone instance, no queued key, no click left */
 {
-    uint32_t i;
-    for (i = 0; i < NVOICE; i++)
-        if (trk[0].v[i].active)
-            return 0;
-    return 1;
+    return !org.nins && !org.nq && !org.nacl;
 }
 
 static int32_t last_out[2 * CTL];
@@ -142,7 +138,7 @@ static void phrase(track_t *t, uint32_t base)
 }
 
 /* ------------------------------------------------------------- jobs --- */
-enum { J_PRESET, J_MODE, J_SENDS, J_SEQ, J_CPU, J_CHECK };
+enum { J_PRESET, J_SENDS, J_SEQ, J_CPU, J_CHECK };
 typedef struct {
     char name[64];
     uint8_t kind, e, pi, arg;
@@ -154,6 +150,7 @@ typedef struct {
 static void power_on(void)
 {
     host_tracks_init();
+    org_init();                                /* the tone generator at rest (main.c's boot) */
     song.g[G_RTYPE] = 0;                       /* ROOM: the renders' reverb (see the top) */
 }
 
@@ -162,18 +159,6 @@ static void job_preset(const job_t *j)
     track_t *t = &trk[0];
     power_on();
     host_preset(t, j->e, j->pi);
-    phrase(t, 60);
-}
-
-static void job_mode(const job_t *j)            /* arg: the voice mode, ARP off, glide on for MONO / LEGATO */
-{
-    track_t *t = &trk[0];
-    power_on();
-    host_preset(t, j->e, j->pi);
-    t->p[P_VOICE] = j->arg;
-    t->p[P_AMODE] = 0;
-    t->p[P_GLIDE] = j->arg == V_MONO || j->arg == V_LEGATO ? 30 : 0;
-    t->p[P_DETUNE] = 40;
     phrase(t, 60);
 }
 
@@ -200,7 +185,6 @@ static void job_seq(const job_t *j)
     power_on();
     host_preset(t, j->e, j->pi);
     t->p[P_AMODE] = 0;
-    t->p[P_VOICE] = V_MONO;
     t->p[P_SLEN] = 16;
     t->p[P_SSWING] = 20;
     for (i = 0; i < 16u; i++) {
@@ -234,8 +218,6 @@ static void job_cpu(const job_t *j)             /* e 0xFF: idle (nothing held) *
     power_on();
     if (j->e != 0xFF) {
         host_preset(&trk[0], j->e, j->pi);
-        trk[0].p[P_VOICE] = V_POLY;
-        trk[0].p[P_SUS] = 127;
         trk[0].p[P_AMODE] = 0;
         for (i = 0; i < 8u; i++)
             trk_note_on(&trk[0], NOTES[i], 100);
@@ -256,7 +238,6 @@ static void run_job_body(job_t *j)
     memset(&R, 0, sizeof R);
     switch (j->kind) {
     case J_PRESET: job_preset(j); break;
-    case J_MODE: job_mode(j); break;
     case J_SENDS: job_sends(j); break;
     case J_SEQ: job_seq(j); break;
     case J_CPU: job_cpu(j); break;
@@ -302,7 +283,7 @@ static void run_jobs(job_t *jobs, uint32_t n, uint32_t nj)
     }
 }
 
-/* ------------------------------------------------- voice / routing checks --- */
+/* ------------------------------------------------- key / routing checks --- */
 static uint32_t lcg = 12345u;
 static uint32_t rnd(uint32_t n)
 {
@@ -316,17 +297,15 @@ static void midi_pkt(uint32_t st, uint32_t d1, uint32_t d2)   /* as usb.c: the q
     midi_in_q[mi_w++ % MQ] = (st >> 4) | st << 8 | d1 << 16 | d2 << 24;
 }
 
-/* the budget: random notes on and off for 6 s, up to 24 held; after every block at most NVOICE voices active and none
- * still fading (a stolen voice fades within its block); then all off: every voice free */
-static int chk_budget(char *msg, uint32_t n)
+/* the key budget: random notes on and off for 6 s, up to 48 held (the upper manual's 61 keys: MIDI notes 36..96, the
+ * keys 0..60); after every block at most ORG_UPPER keys down; then all up: the organ free */
+#define ORG_UPPER 61u                  /* the upper manual: keys 0..60 (org_note) */
+static int chk_keys(char *msg, uint32_t n)
 {
     uint8_t held[128] = {0};
-    uint32_t k, worst = 0, fading = 0;
+    uint32_t k, worst = 0;
     power_on();
-    host_preset(&trk[0], ENGI_FMUG, 2);
-    trk[0].p[P_VOICE] = V_POLY;
-    trk[0].p[P_AMODE] = 0;
-    trk[0].p[P_SUS] = 100;
+    host_preset(&trk[0], ENGI_ORGAN, 2);
     for (k = 0; k < 6u * FS / CTL; k++) {
         uint32_t i, a = 0;
         if (k % 4u == 0u) {
@@ -338,10 +317,8 @@ static int chk_budget(char *msg, uint32_t n)
             held[note] ^= 1u;
         }
         blk();
-        for (i = 0; i < NVOICE; i++) {
-            a += trk[0].v[i].active;
-            fading += trk[0].v[i].active && trk[0].v[i].stage == 4u;
-        }
+        for (i = 0; i < ORG_UPPER; i++)
+            a += org.keys[i] != 0;
         worst = a > worst ? a : worst;
     }
     for (k = 0; k < 128u; k++)
@@ -349,38 +326,34 @@ static int chk_budget(char *msg, uint32_t n)
             trk_note_off(&trk[0], k);
     rel_at = fpos;
     finish();
-    snprintf(msg, n, "POLY, random notes: at most %u voices active (budget %u), %u still fading after their block, all "
-             "free %.2f s after the note-offs", worst, NVOICE, fading, R.free_s);
-    return worst <= NVOICE && !fading && R.free_s >= 0;
+    snprintf(msg, n, "random notes for 6 s: at most %u of the upper manual's %u keys down at once, the organ free "
+             "%.2f s after the note-offs", worst, ORG_UPPER, R.free_s);
+    return worst <= ORG_UPPER && R.free_s >= 0;
 }
 
-/* MONO keeps its note: the lowest key held stays the sounding one while higher keys come and go for 2 s */
-static int chk_keep_mono(char *msg, uint32_t n)
+/* a held key keeps sounding while higher keys come and go for 2 s */
+static int chk_keep_key(char *msg, uint32_t n)
 {
     uint32_t k, lost = 0;
     power_on();
-    host_preset(&trk[0], ENGI_FMUG, 0);
-    trk[0].p[P_VOICE] = V_MONO;
-    trk[0].p[P_PRIO] = 1;                      /* LOW: the lowest key wins (fmug_app.c fa_mono) */
-    trk[0].p[P_AMODE] = 0;
-    trk[0].p[P_SUS] = 100;
+    host_preset(&trk[0], ENGI_ORGAN, 0);
     trk_note_on(&trk[0], 40, 100);
     for (k = 0; k < 2u * FS / CTL; k++) {
-        if (k % 3u == 0u) {                    /* (at most 2 others held: the stack keeps the last 8 keys) */
+        if (k % 3u == 0u) {                    /* (at most 2 others held: the key queue keeps them all) */
             uint32_t m = 50u + k / 3u % 40u;
             trk_note_off(&trk[0], m - 2u);
             trk_note_on(&trk[0], m, 100);
         }
         blk();
-        lost += !(trk[0].v[0].active && trk[0].v[0].gate && trk[0].v[0].note == 40u);
+        lost += !org.keys[40u - 36u];
     }
-    snprintf(msg, n, "MONO (LOW) held its note through 2 s of other keys: lost in %u blocks", lost);
+    trk_note_off(&trk[0], 40);
+    snprintf(msg, n, "a held key keeps sounding through 2 s of other keys: lost in %u blocks", lost);
     return !lost;
 }
 
-/* no hanging notes: 6 s of random MIDI note-ons / offs on several channels and the keys, the instrument in random
- * voice modes, some with ARP, SUS 127 (a hanging note keeps sounding); then every held note off: no gate may stay
- * on, no ARP may still hold a key, every voice must be free */
+/* no hanging notes: 6 s of random MIDI note-ons / offs on several channels and the keys, the octave buttons, three
+ * random patches; then every held note off: no key may stay down, the organ must be free */
 static int chk_hang(char *msg, uint32_t n)
 {
     static const uint8_t CHS[7] = {0, 1, 2, 3, 4, 9, 15};
@@ -390,11 +363,7 @@ static int chk_hang(char *msg, uint32_t n)
     int bad = 0;
     for (round = 0; round < 3u && !bad; round++) {
         power_on();
-        host_preset(&trk[0], ENGI_FMUG, rnd(FMUG_NFACTORY));
-        trk[0].p[P_VOICE] = (int16_t)(round == 0u ? V_POLY : round == 1u ? V_MONO : V_LEGATO);
-        trk[0].p[P_AMODE] = round == 2u ? (int16_t)(1 + rnd(4)) : 0;
-        trk[0].p[P_AHOLD] = 0;
-        trk[0].p[P_SUS] = 127;
+        host_preset(&trk[0], ENGI_ORGAN, rnd(ORG_NFACTORY));
         for (k = 0; k < 6u * FS / CTL; k++) {
             uint32_t r = rnd(16);
             if (r < 6u) {                          /* MIDI */
@@ -423,15 +392,11 @@ static int chk_hang(char *msg, uint32_t n)
                     midi_pkt(0x80u | CHS[c], k, 64);
                     on[c][k] = 0;
                 }
-        run_to(fpos + FS / 2u);                    /* (an ARP note-off: within its gate) */
-        if (trk[0].nheld) {
-            bad = 1;
-            snprintf(who, sizeof who, "the ARP still holds %u notes (first %u)", trk[0].nheld, trk[0].held[0]);
-        }
-        for (k = 0; k < NVOICE && !bad; k++)
-            if (trk[0].v[k].active && trk[0].v[k].gate) {
+        run_to(fpos + FS / 2u);
+        for (k = 0; k < ORG_NKEY && !bad; k++)
+            if (org.keys[k]) {
                 bad = 1;
-                snprintf(who, sizeof who, "voice %u note %u still held", k, trk[0].v[k].note);
+                snprintf(who, sizeof who, "key %u still down", k);
             }
         rel_at = fpos;
         {
@@ -440,12 +405,12 @@ static int chk_hang(char *msg, uint32_t n)
                 blk();
             if (!parts_free() && !bad) {
                 bad = 2;
-                snprintf(who, sizeof who, "a voice still active %d s after the note-offs", FREE_CAP_S);
+                snprintf(who, sizeof who, "the organ still sounds %d s after the note-offs", FREE_CAP_S);
             }
         }
     }
-    snprintf(msg, n, "%u random MIDI / key events on ch 1-5, 10, 16 and the keys, octave changing, 3 rounds (POLY, MONO, "
-             "LEGATO + ARP): %s", ev, bad ? who : "no gate left on, every voice free");
+    snprintf(msg, n, "%u random MIDI / key events on ch 1-5, 10, 16 and the keys, octave changing, 3 random patches: %s",
+             ev, bad ? who : "no key left down, the organ free");
     return !bad;
 }
 
@@ -503,7 +468,6 @@ int main(int argc, char **argv)
     const char *cpath = argc > 2 ? argv[2] : "tests/cpu_baseline.txt";
     int gupd = getenv("GOLDEN_UPDATE") != 0, cupd = getenv("BUDGET_UPDATE") != 0, verbose = getenv("VERBOSE") != 0;
     uint32_t jobs_at_once = getenv("JOBS") ? (uint32_t)atoi(getenv("JOBS")) : 8u;
-    static const char *const MN[4] = {"POLY", "MONO", "LEGATO", "UNISON"};
     static const char *const SN[6] = {"dry", "chorus", "delay", "reverb", "all", "dist"};
     static kv_t gold[MAXJ], cpu[MAXJ];
     uint32_t ng, nc, e, pi, i, g0, g1, c0, c1, k0, k;
@@ -524,21 +488,14 @@ int main(int argc, char **argv)
             j->e = (uint8_t)e;
             j->pi = (uint8_t)pi;
         }
-    for (k = 0; k < 4u; k++) {
-        job_t *j;
-        snprintf(name, sizeof name, "mode/FMUG/%s", MN[k]);
-        j = add(J_MODE, name);
-        j->e = ENGI_FMUG;
-        j->arg = (uint8_t)k;
-    }
     for (k = 0; k < 6u; k++) {
         job_t *j;
-        snprintf(name, sizeof name, "sends/FMUG/%s", SN[k]);
+        snprintf(name, sizeof name, "sends/ORGAN/%s", SN[k]);
         j = add(J_SENDS, name);
-        j->e = ENGI_FMUG;
+        j->e = ENGI_ORGAN;
         j->arg = (uint8_t)k;
     }
-    add(J_SEQ, "seq/FMUG/16_steps")->e = ENGI_FMUG;
+    add(J_SEQ, "seq/ORGAN/16_steps")->e = ENGI_ORGAN;
     g1 = nj;
     {   /* determinism: the first render once more */
         job_t *j = add(J_PRESET, "repeat");
@@ -546,10 +503,10 @@ int main(int argc, char **argv)
         snprintf(j->name, sizeof j->name, "repeat");
     }
 
-    /* 4: the voice checks */
+    /* 4: the key checks */
     k0 = nj;
-    add(J_CHECK, "voices: the budget")->check = chk_budget;
-    add(J_CHECK, "voices: MONO keeps its note")->check = chk_keep_mono;
+    add(J_CHECK, "keys: the budget")->check = chk_keys;
+    add(J_CHECK, "keys: a held key keeps sounding")->check = chk_keep_key;
     add(J_CHECK, "routing: no hanging notes")->check = chk_hang;
     run_jobs(J, nj, jobs_at_once);
 
@@ -597,15 +554,15 @@ int main(int argc, char **argv)
         if (r->peak < LIM_PEAK_MIN)
             snprintf(why + strlen(why), sizeof why - strlen(why), " peak %d (min %d);", r->peak, LIM_PEAK_MIN);
         if (r->free_s < 0)
-            snprintf(why + strlen(why), sizeof why - strlen(why), " voices not free %d s after the note-offs;", FREE_CAP_S);
+            snprintf(why + strlen(why), sizeof why - strlen(why), " organ not free %d s after the note-offs;", FREE_CAP_S);
         if (abs(r->tail_dc) > LIM_TAIL_DC)
             snprintf(why + strlen(why), sizeof why - strlen(why), " DC %d left at the end (limit %d);", r->tail_dc,
                      LIM_TAIL_DC);
         if (r->tail_peak > LIM_TAIL)
             snprintf(why + strlen(why), sizeof why - strlen(why), " not silent at the end: peak %d (limit %d);",
                      r->tail_peak, LIM_TAIL);
-        if (r->vmax > NVOICE)
-            snprintf(why + strlen(why), sizeof why - strlen(why), " %u voices (budget %u);", r->vmax, NVOICE);
+        if (r->vmax > ORG_NKEY)
+            snprintf(why + strlen(why), sizeof why - strlen(why), " %u keys (organ %u);", r->vmax, ORG_NKEY);
         if (why[0]) {
             printf("regress: HEALTH FAIL  %s:%s\n", j->name, why);
             h_fail++;
@@ -646,7 +603,7 @@ int main(int argc, char **argv)
         printf("regress: %u renders not in %s (new: GOLDEN_UPDATE=1 adds them)\n", g_new, gpath);
     }
 
-    /* ---- voices ---- */
+    /* ---- keys and routing ---- */
     for (i = k0; i < c0; i++) {
         int ok = !J[i].crashed && J[i].r.ok;
         printf("regress: %s: %s %s\n", J[i].name, J[i].crashed ? "crashed" : J[i].r.msg, ok ? "ok" : "FAIL");
@@ -699,7 +656,7 @@ int main(int argc, char **argv)
         printf("regress: CPU baseline %s rewritten (%u entries)\n", cpath, c1 - c0);
     }
 
-    printf("regress: %u golden renders (%u changed, %u gone), %u health failures, %u voice / routing checks failed, "
+    printf("regress: %u golden renders (%u changed, %u gone), %u health failures, %u key / routing checks failed, "
            "%u CPU entries over budget (%u notes), %u crashes; %.1f s\n", g1 - g0, gupd ? 0 : g_changed,
            gupd ? 0 : g_gone, h_fail, k_fail, cupd ? 0 : c_fail, c_warn, crash, (double)(now_ns() - t_start) / 1e9);
     if (!gupd && (g_changed || g_gone))

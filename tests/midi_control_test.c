@@ -15,7 +15,6 @@ static void mreset(void)
     midi_forget_all();
     memset((void *)fm_cc_rx, 0, sizeof fm_cc_rx); memset((void *)fm_cc_pend, 0, sizeof fm_cc_pend);
     fm_midi_src = 3; fm_midi_ch = 0; fm_bend_mode = 0; fm_bt = 0; midi_pc = 0;
-    TSEL->p[P_VOICE] = V_POLY;
     events_block(CTL);
 }
 static void q(uint32_t st, uint32_t d1, uint32_t d2, uint32_t source)
@@ -23,13 +22,10 @@ static void q(uint32_t st, uint32_t d1, uint32_t d2, uint32_t source)
     midi_enqueue((st >= 0xF8u ? 0xFu : st >> 4) | st << 8 | d1 << 16 | d2 << 24, source);
     events_block(CTL);
 }
+/* the organ has no voices: a note's gate is its key (notes 36..96 are keys 0..60, org_note) */
 static int gate(uint32_t note)
 {
-    uint32_t i;
-    for (i = 0; i < NVOICE; i++)
-        if (TSEL->v[i].active && TSEL->v[i].gate && TSEL->v[i].note == note)
-            return 1;
-    return 0;
+    return note >= 36u && note <= 96u && org.keys[note - 36u] != 0;
 }
 
 int main(void)
@@ -38,11 +34,11 @@ int main(void)
 
     mreset();
     q(0x90, 60, 100, 1);
-    bad += check("a USB note on: a voice with its gate", gate(60));
+    bad += check("a USB note on: its key is down", gate(60));
     q(0x80, 60, 0, 1);
     bad += check("  .. its note off releases it", !gate(60));
     q(0x95, 62, 90, 2);
-    bad += check("a TRS note on channel 6 (omni): a voice", gate(62));
+    bad += check("a TRS note on channel 6 (omni): its key is down", gate(62));
     q(0x95, 62, 0, 2);
     bad += check("  .. note on velocity 0 releases it", !gate(62));
 
@@ -87,12 +83,12 @@ int main(void)
     bad += check("CC120 (All Sound Off) ends everything, the pedal too", !gate(60) && !gate(64) && !midi_owners);
 
     mreset();
-    q(0xC0, 9, 0, 1);
-    bad += check("Program Change: noted, not loaded in the audio path", midi_pc == (0x80 | 9) && TSEL->preset == 0);
+    q(0xC0, 2, 0, 1);
+    bad += check("Program Change: noted, not loaded in the audio path", midi_pc == (0x80 | 2) && TSEL->preset == 0);
     midi_pc_poll();
-    bad += check("  .. the main loop loads factory patch 10", TSEL->preset == 9 && !midi_pc);
+    bad += check("  .. the main loop loads factory patch 3", TSEL->preset == 2 && !midi_pc);
     q(0xC0, 120, 0, 1); midi_pc_poll();
-    bad += check("  .. a program past the last is ignored (no wrap)", TSEL->preset == 9);
+    bad += check("  .. a program past the last is ignored (no wrap)", TSEL->preset == 2);
 
     mreset();
     fm_midi_ch = 3;

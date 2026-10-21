@@ -14,7 +14,7 @@ import os
 import re
 import sys
 
-FUNCS = ["fmug_render", "fmug_wave", "fmug_block",          # the instrument (eng_fmug.c)
+FUNCS = ["org_render", "org_fragment", "org_msg",          # the organ (eng_organ.c): the wheels, a fragment's start, a key
          "fm1_alnk0_irq", "fm1_timer5_irq",               # the audio ISR (the mix and DRIVE inlined); TIMER5: the key / LED scan
          "uac_tap48",                                       # the USB audio input at 48 kHz: the 44.1 -> 48 resampler (usb.c)
          "rev_room", "rev_spring", "rev_hall", "rev_side_mix",   # the reverb bus (fx.c) and its stereo

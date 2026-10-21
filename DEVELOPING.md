@@ -1,267 +1,158 @@
 # Developing OrganVave-1
 
-OrganVave-1 (repository `organvave-1`) is a tonewheel-organ firmware seeded from FMini-1; [ORGAN.md](ORGAN.md) is its plan.
-Until 0.1.0 the tree still runs FMini-1's instrument (FMUG) as a scaffold, so most of this guide still describes FMini-1's
-engine and UI; the generic parts (architecture, method, tests, gotchas) hold for the organ.
+OrganVave-1 (repository `organvave-1`) is a tonewheel-organ firmware for the M-VAVE FM-1. [ORGAN.md](ORGAN.md) is its plan
+(the map from setBfree, the budget, the milestones); this guide is how the code is laid out and how to change it. It was
+seeded from FMini-1 (Guilherme Ruppert), itself a fork of Felucca (Leo Kuroshita); what is left of those is named in
+[CREDITS.md](CREDITS.md). Since 0.1.0 the instrument is the organ alone: FMini-1's synthesizer engine, its UI and its
+editor are gone, and so are the sequencer, the arpeggiator and Felucca's other engines.
 
-The guide for whoever (person or Claude) changes this firmware, or starts another one from it. [CLAUDE.md](CLAUDE.md) is the short
-list of rules and commands; [BUILDING.md](BUILDING.md) installs the toolchain; [web/EDITOR_PROTOCOL.md](web/EDITOR_PROTOCOL.md) is the
-USB editor protocol. Facts here were read from the sources at v1.7.0; when a file and this guide disagree, the file wins.
+## 1. What runs on the chip
 
-## 1. What this is
+The FM-1 has a JieLi AC79 (pi32v2 core, clang 4.0.1), an I2S codec, a 240 x 240 RGB565 LCD, a key matrix with 14 labelled
+buttons (`panel.c`), seven encoders (SELECT, ALGO, PRESET, K1..K4), 27 keys, a MASTER pot, USB (MIDI, audio) and TRS MIDI IN.
+The sample rate is 44.1 kHz. The audio interrupt renders one I2S half (128 frames) in blocks of `CTL` = 32 samples.
 
-FMini-1 is firmware for the M-VAVE FM-1 that turns it into one monophonic (optionally 12-voice) synthesizer modelled after the
-Minimoog Model D: three oscillators, a noise source, a mixer that overloads softly, a 24 dB/oct transistor-ladder low-pass with its
-own contour, a loudness contour, an LFO, an arpeggiator, a small sequencer, three FX buses and 100 factory patches. It is a fork of
-Felucca (many engines, a sequencer, projects); FMini-1 keeps Felucca's sound core, FX, MIDI, USB and storage and replaces the user
-interface (`fmug_app.c`, `ui_fmug.c`) and adds one engine (FMUG, `eng_fmug.c`). organvave-1 (Oct 2026) took out everything the
-instrument does not use: Felucca's other engines and their samples, its UI, projects, song chain, the modulation matrix, the SLICER,
-the INSERT and FX layer, the drum grid, MIDI clock and learn, the backup protocol, the second core and the USB serial console. One
-part (`NTRK` 1), 16 steps; `ENGINES[]` keeps its 15 numbers (14 retired ones point at a stub) so stored engine numbers still mean
-the same.
-
-The hardware, as the sources use it: a JieLi AC79 chip (pi32v2 core, clang 4.0.1; the firmware uses one core), an I2S codec, a 240 x 240
-RGB565 LCD, a key matrix with 14 labelled buttons (`panel.c`: FX SCL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC OCT- OCT+), seven
-encoders (SELECT, ALGORITHM, PRESETS, KNOB 1..4), the keys, a MASTER pot, USB (MIDI, audio), TRS MIDI IN. Sample
-rate 44.1 kHz; the audio interrupt renders one I2S half buffer (128 frames, 2.9 ms) in blocks of `CTL` = 32 samples. Memory after the
-slimming: image 258 KB (533 KB before), RAM `.data` + `.bss` 16.2 KB of 73.7 KB (65.9 before), the `.pool` section 250 KB of 368 KB
-(348 before) (`./build.sh` prints these and fails when
-they do not fit).
+Budget (`./build.sh` prints these and fails when they do not fit): image 277,640 B (limit 581,564); RAM `.data` + `.bss`
+24,744 B (limit 73,728); the `.pool` section 249,764 B (limit 368,640).
 
 ## 2. Repository map
 
 | Path | What |
 | --- | --- |
 | `firmware/src/` | the firmware, one compilation unit: `felucca.c` includes everything, in an order that matters |
-| `firmware/src/eng_fmug.c` | the FMUG engine: oscillators, mixer, the ladder, the contours, the 32-byte patch |
-| `firmware/src/eng_fmug_presets.h`, `eng_fmug_filter.h` | **generated**: the 100 patches; the filter's tables (do not edit) |
-| `firmware/src/fmug_app.c`, `ui_fmug.c` | FMini-1's whole UI: pages, knobs, graphs, dialogs (`fa_*`, `fmg_*`) |
-| `firmware/src/voice.c`, `fx.c`, `audio.c` | voices and envelopes; the FX buses and the part mixer; the audio ISR |
-| `firmware/src/editor*.c`, `upreset.c`, `settings.c`, `storage.c` | USB editor commands; user presets; the settings and the autosave; flash |
-| `firmware/engines/` | **git submodule** (MIT, Felucca-Engines): only its shared DSP (`dsp.c`) is built; ANALOG LOFI TRIO WHEEL NOISE are there as reference. Never edited here |
+| `firmware/src/eng_organ.c` | the organ: the tonewheel tone generator (keys, buses, contributions, click, swell, compression), the patch, `org_track_render` |
+| `firmware/src/eng_organ_tables.h` | **generated** from setBfree's own numbers (`tools/gen_organ_tables.py`); do not edit |
+| `firmware/src/eng_organ_presets.h` | **generated** from `tools/organ_bank.py` (`tools/gen_organ_presets.py`); do not edit |
+| `firmware/src/organ_app.c` | the screens (HOME, DRAWBARS), the presets, SAVE, GLO, the LEDs, the splash |
+| `firmware/src/editor_organ.c` | the editor's organ patch commands (85, 86) |
+| `firmware/src/engines.c` | `ENGINES[]`: 0..14 retired (`"-"`), 15 the organ |
+| `firmware/src/voice.c`, `fx.c`, `audio.c`, `seq.c` | the track render (the organ is handed over in `track_render`), the FX buses and the master, the audio ISR, the note input |
+| `firmware/src/editor.c`, `upreset.c`, `settings.c`, `storage.c` | the editor protocol; user presets; the settings and the autosave; flash |
+| `firmware/src/organvave_splash.h` | **generated** from `docs/organvave-splash.png` (`tools/gen_splash.py`); do not edit |
+| `firmware/engines/` | **git submodule** (MIT, Felucca-Engines). Only its shared `dsp.c` is built (`sine_i`). Never edited here |
 | `firmware/hal/`, `firmware/loader/` | register access (only here); the update loader |
-| `tools/` | Python generators and measuring tools (floating point lives here); `build.py` is what `build.sh` runs |
+| `tools/` | Python generators and the measuring tools (floating point lives here); `build.py` is what `build.sh` runs |
+| `tools/setbfree_ref/` | setBfree's tone generator as the reference: `sbf_ref.c`, the dump the tables come from, `compare.py` |
 | `tests/` | host tests (`run_tests.sh`), the harnesses `host.h` and `editor_host.h`, goldens, budgets |
-| `web/` | `site_fmini.html` (the site), `editor_fmini.html` (the patch editor), `emu/` (browser emulator), `make_fmug_installer.py` |
-| `docs/` | what the site serves that is checked in: `index.html` (the installer page, generated), `emu/` (generated wasm), ad video |
-| `assets/` | splash, hero, the site's screenshots (`assets/site/*.webp`), README pictures (`assets/readme/`, `tools/gen_readme_art.py`) |
+| `web/` | the installer's JavaScript and page generator (0.5.0), `EDITOR_PROTOCOL.md`, `emu/` (the browser emulator) |
+| `docs/` | what the site serves that is checked in: `index.html` (generated), `emu/` (generated wasm), the splash |
 | `.github/workflows/installer.yml` | builds the firmware and publishes the site to GitHub Pages on a push to `main` |
 
 ## 3. How the firmware is put together
 
-**One translation unit.** `felucca.c` includes the HAL (header-only), then the sources in dependency order. `engines.c` includes the
-engines and defines `ENGINES[]`; `fmug_app.c` is included near the end, before `main.c`. A host test includes the same files
-(`tests/host.h`, `tests/editor_host.h`, `tools/readme_shots.c`, `web/emu/felucca_web.c`), so what runs on the host is what runs
-on the chip, compiled by a different compiler. Tables that `build.py` generates (`build/gen/*.h`: sine, envelopes, fonts, icons) exist only after one
-`./build.sh`; host tests need them.
+**One translation unit.** `felucca.c` includes the HAL (header-only), then the sources in dependency order; `engines.c`
+includes `eng_organ.c` and defines `ENGINES[]`; `organ_app.c` is included near the end, before `main.c`. The host tests and the
+browser build include the same files (`tests/host.h`, `tests/editor_host.h`, `web/emu/felucca_web.c`), so what runs on the host
+is what runs on the chip, compiled by a different compiler. `./build.sh` generates `build/gen/*.h` (sine, envelopes, fonts,
+icons): host tests need them, so run `./build.sh` first.
 
-**Audio.** `audio.c` (the I2S interrupt) calls `mix_block` (`fx.c`) per block: events, then each synth part (`voice.c` renders
-its voices through the engine's `render`), DIST, level and pan, sends into three buses (chorus, tempo delay,
-reverb), the master, USB audio. The main loop runs the UI and MIDI; the interrupt must never wait for it. Data the main loop
-changes for the interrupt is published with a generation counter (see `fmug_set_patch`: copy, `RING_PUBLISH()`, bump `fmug_pgen`;
-the interrupt takes `fmug_eff[]` at a block's start).
+**Integer only.** No floating point and no 64-bit multiply in a per-sample loop (int64 only per block). The organ's tables carry
+the setBfree numbers already converted; `tools/` does the floating point.
 
-**Engines.** `engine_t` (`firmware/engines/src/felucca_engine.h`): a name, eight EDIT parameters (`P_E0..P_E7`: label, value format,
-range, default), presets, and function pointers: `note_on`, `render(track, voice, out, n, vmod)`, optional `amp`, `desc`, `block`
-(once per block and part, also with no voice sounding: the place for state that runs on without notes), `keys`, `done`, and `mem`
-(bytes in the part's shared engine memory). `voice_t` has `s[8]` of free engine state and three phases. `keep` is a bit mask of
-the `s[]` slots a retrigger of a sounding voice preserves; `voice.c` honours only slots 0, 1, 4, 5, 6, 7 (a ladder with states in
-`s[2]`, `s[3]` loses them on a retrigger that re-initialises; FMUG's `note_on` does that only from silence). Engine numbers are
-stored in user presets, the autosave and the editor protocol: **append, never reorder**; `NENGINES` is in `core.h`.
+**Audio.** `audio.c` (the I2S interrupt) calls `mix_block` (`fx.c`) per block: events, then each track (`mix_part`, which calls
+`track_render`), the sends into the buses, the master (a peak limiter at `LIM_T` 18000, then the soft clip), and the USB audio tap.
+`track_render` hands the organ to `org_track_render` (its keys are `org_key`, from `org_note`): the organ renders its whole part
+into the buffer and the track's level, pan and sends apply after it, as for any part. The main loop runs the UI and the MIDI; the
+interrupt never waits for it. Anything the main loop changes that the interrupt reads goes through a publish step:
+`org_set_patch` copies the patch, then bumps `org_pgen`; the interrupt takes it at the start of the next block (`org_block`).
 
-**Value formats.** An EDIT parameter or global is formatted by `param_format` (`params.c`) from its `fmt` (`F_PCT`, `F_TIME`, `F_ENUM`,
-...). Formats the submodule does not have are defined in `core.h` after the include (`F_MCUT` 14 and `F_MEMP` 15, the Minimoog's
-dials) and numbered in `web/EDITOR_PROTOCOL.md`; the editor's tables are dumped from the firmware.
+**The organ's tone generator** (`eng_organ.c`, the setBfree port). Each of the 91 wheels is a 32-bit phase accumulator on one
+shared sine (`sine_i`), with the three tunings of setBfree as increments (`ORG_WINC`: gear 60 Hz, gear 50 Hz, equal). A key
+is a list of (wheel, bus, level) contributions (`ORG_KC`, with crosstalk; `ORG_KCX`, without); the key's messages (`org_key`) go into a
+queue that `org_fragment` applies at each 128-frame fragment, as setBfree's `oscGenerateFragment` does: the attack's click
+(`ORG_ATK`), the release (`ORG_REL`), the key compression (`ORG_KEYCOMP`), the swell (`ORG_SWELL_TC`). The drawbars enter as
+Q12 bus levels (`/8` of the drawbar's 0..8). `org_render` sums the wheels per bus and mixes the result into the part.
 
-**Number formats.** Signals are +-32768 (Q15 range as `int32_t`); `mulq15`, `mulq16` and `fmug_mulr` (rounded) are the multiplies.
-Per-sample loops use 32-bit integers only; 64-bit products are for once-per-block work (the instruction cost on the chip is measured,
-section 8).
+**Numbers.** Q15 signals; the wheel levels Q18 packed with the wheel and bus into one word (`wheel << 25 | bus << 20 | level`).
+`tools/setbfree_ref/compare.py` shows the port against the reference: levels within 0.002 dB, the attack within 0.04 dB,
+waveforms with 43 dB SNR over 0.25 s (the wheels are pure sines here; setBfree's wavetables carry a dither).
 
-## 4. The FMUG engine
+## 4. Changing the organ
 
-Signal path per voice (`fmug_render`): three oscillators (TRI, SHARK, SAW, SQR, wide and narrow pulse; polyBLEP; ranges LO and 32'..2')
-and a noise source -> mixer (a squared level curve each; the sum goes through `softclip`: the original's overload) -> the ladder ->
-trim -> `voice_amp` (the loudness contour). The oscillators drift a few cents (a random walk per voice).
+- **The tables** come from setBfree. To refresh them, build the reference (`sh tools/setbfree_ref/build.sh DIR`, which clones
+  setBfree at 2f41983 if needed), dump with `DIR/sbf_ref dump tools/setbfree_ref/tonegen_dump.txt`, then
+  `python3 tools/gen_organ_tables.py`. The dump is checked in; glibc's `rand()` decides the click envelopes, so the dump is made
+  with the same libc.
+- **The factory patches** are in `tools/organ_bank.py` (drawbars as `upper "88 8000 000"` strings, the tuning, the crosstalk,
+  the reverb send). `python3 tools/gen_organ_presets.py` writes `eng_organ_presets.h`, the LEVEL of each preset (about the same
+  loudness as the JAZZ patch) included. Change the bank, rerun, commit both.
+- **A stored value's meaning** never changes silently. The patch bytes, the autosave and the user presets are stored: a new
+  meaning needs a new version (`AS_MAGIC`, `UP_VER`, the patch's `ORG_PSIZE`), a note in `web/EDITOR_PROTOCOL.md`, and a rule for
+  older records. `ENGINES[]` entries are appended, never reordered.
+- **The rotary, the vibrato, the percussion, the lower manual and the pedals** are the next milestones in ORGAN.md. They are
+  ports of setBfree's `whirl.c`, `vibrato.c`, `percussion` and the lower and pedal keys; the reduced rotary (1024 angles,
+  interpolated coefficients) is the plan of the owner's approved revision.
 
-**The patch** is 32 bytes (`FG_SIZE`; 18 used, each 0..127): ranges, waves, OSC 2/3 tuning, mixer levels, the switch bytes `FG_SW1`
-(OSC 1-3, NOISE, PINK, MOD OSC, MOD FLT) and `FG_SW2` (GLIDE, LFO SQR), TUNE, MOD MIX, KBD (the cutoff's keyboard tracking), the kept
-GLIDE time. The **EDIT values** are track parameters: `E0` CUT, `E1` EMPH, `E2` CNTR (the contour's amount), `E3..E5` the contour's
-attack / decay / sustain, `E6` MOD (LFO depth), `E7` SLOT (the factory patch number, or OWN). The patch lives in `fmug_patch[track]`,
-is stored with user presets (`upreset.c`'s "UPF6" object) and the autosave, and is edited with
-`fmug_set_patch`, which sanitises it.
+## 5. Tests
 
-**Voices.** The instrument is MONO (the lowest key wins, a new key retriggers and glides when GLIDE is on) or POLY (12 voices,
-`FMUG_POLY`); `fa_mono()` forces anything else to MONO. Track 1 is the instrument (the only part).
-
-**Contours.** The loudness contour is the host's ADSR (`P_ATK..P_REL`). The filter contour (`fmug_contour`, state in `s[7]`: stage
-in the top byte, level Q23 below) has attack, decay and sustain, and its release takes the DECAY time, as the original's.
-
-**Modulation.** The track LFO or noise (MOD MIX) into pitch (MOD OSC) and cutoff (MOD FLT), depth `E6` and the mod wheel; the host's
-(Felucca's modulation matrix is gone; `m->cutoff` stays 0.)
-
-## 5. The ladder filter (1.7.0)
-
-The model and its numbers are in `tools/fmug_filter.py` (read its header); the implementation is the render loop of `eng_fmug.c`
-(read the comment above `fmug_render`). In short:
-
-- Four identical one-pole stages, a tanh in front of each (a differential pair), the last output fed back to the input through a
-  **lag pole** (the emphasis network and output buffer). The lag pole moves the loop's 180-degree point to 0.686 of the stage pole,
-  so the filter sings at **1.578 x its -3 dB corner** and starts to sing at a loop gain of **2.92** (not the ideal ladder's 4).
-  Those, the dial positions (singing pitch of the CUTOFF dial at -3..+2: 110.8, 206.6, 472.2, 1073.8, 2344, 5188 Hz), the passband
-  loss and peak of EMPHASIS (e.g. -9.5 dB and +11.3 dB at 5.0) and the 1 V/oct keyboard with 0 V on F (MIDI 41) come from the
-  calibration notes of CA-72 (<https://github.com/idlefoundry/ca-72>, GPL-3.0-or-later; `docs/calibration/README.md` there). Only the
-  numbers were taken; the code is this project's.
-- **Zero-delay feedback.** Each stage is a trapezoidal integrator (`G = g / (1 + g)`, `g = tan(pi f / FS) / W0`, so the singing pitch
-  is exact at every frequency). The feedback is solved before the sample is processed: y4 is predicted linearly from the four stored
-  states (coefficients `c0..c3`), passed through the lag pole, and `u = (x - k * fb) / (1 + k * Gx * G^4)` is the loop's solution;
-  then the stages run with their tanh (`softclip`).
-- **Units.** The knobs and the pitch work in 1/16 semitone of the singing pitch (MIDI x 16): CUTOFF -> `FMUG_CUT[128]`; plus the
-  contour (up to 5 octaves), the keyboard (`(pitch - 41 x 16) x KBD x 516 >> 16`), the LFO (+-2.85 octaves), the host's routings.
-  The stage and lag poles come from per-semitone tables (`FMUG_G`, `FMUG_GX`), linear between. EMPHASIS -> `FMUG_K` (the loop gain)
-  and `FMUG_TRIM` (an output trim of up to 1.5 dB for the passband loss the hardware has beyond the loop's own).
-- **Fixed point.** Signals +-32768; ladder and lag-pole states **Q8**; `G` Q16 (rounded multiply); prediction coefficients Q14; `k` Q12.
-  What went wrong before it worked, so nobody repeats it: with Q0 states a quiet ladder at a low cutoff moves less than one least
-  significant bit a sample and rounding traps it at a fixed point, so it could never start to sing (Q8 states fixed it); a plain
-  floor-biased multiply made small states drift to one sign (`fmug_mulr` rounds); `mulq16` needs its factor below 65536; a ladder that
-  must self-oscillate needs a starting nudge, which the hardware gets from noise (`fmug_note_on` seeds `s[0]` with +-700 x 256 when
-  EMPH >= 96).
-- **Singing** works from the lowest cutoff (35 Hz) to the ceiling (`FOSC_MAX` 19.5 kHz, where the stage pole's `tan` stays below
-  about 5), as a sine with THD of about 0.3 to 1.3 % in the middle and 2 to 6 % at the lowest pitches.
-- **CPU.** `fmug_render` is 227 instructions a sample in its loops on the chip (static count, `tests/target_budget.txt`), up from 170
-  for the old filter. Not measured on hardware.
-
-`tests/fmug_filter_test.c` checks the filter against the hardware's numbers, not against the model: singing from silence (pitch,
-THD), 1 V/oct over four octaves of keys, KBD 0 fixed, the dial's marks within a quarter tone, the emphasis table, no singing below
-7.5 and singing from 8.5, and boundedness over every cutoff, emphasis and key with a loud saw.
-
-## 6. Factory presets
-
-`tools/fmug_bank.py` (one `add()` per patch, in physical units: oscillator ranges and cents, cutoff as the -3 dB corner in Hz at middle
-C with keyboard tracking included, emphasis as the 0..10 dial, ms, Hz) -> `tools/gen_fmug_presets.py` (checks the bank and turns it
-into bytes; `cut(f, kbd)` and `emp(d)` call `tools/fmug_filter.py`, the same laws as the firmware) -> `eng_fmug_presets.h` (checked
-in; the build does not run the generator). `tools/fmug_levels.json` holds each patch's LEVEL so every patch is about as loud as the
-next. `tools/preset_lab.py` renders every patch through the real firmware (the browser build) and prints level, brightness, attack /
-decay / release, stereo width and the closest pairs; `--calibrate` rewrites `tools/fmug_levels.json` for the target loudness of
-each category (on the last try it moved 63 of 100 levels because the old ones were not at the target; for a law change apply only
-the per-patch loudness difference you measured).
-
-**Changing a law without changing the sound.** 1.7.0 did it by matching responses: for each patch, `tools/fmug_retune.py` computes
-the old filter's magnitude response (as the patch set it, at middle C), weighted by where the patch had energy (a sawtooth's 1/f
-spectrum through the old filter), and searches the new filter's cutoff and emphasis grid for the least log-magnitude distance;
-output levels were then trimmed by the measured loudness change. Result: fit error up to about 0.6 dB (one patch, 1.9 dB, held back
-from self-oscillating), mean loudness change 0.19 dB, centroid +0.94 semitone on average. Use the same pattern for the next change.
-
-## 7. UI, editor, protocol
-
-**UI** (`fmug_app.c`, `ui_fmug.c`): seven pages (CTRL OSC MIX FILT F.ENV A.ENV FX), each with four knobs; a page's controls are a
-table of `fmgf_t` (`ui_fmug.c`: label, kind `FK_BYTE` / `FK_PAR` / `FK_SW` / ..., the patch byte or parameter, icon). The four
-encoders KNOB 1..4 edit the page's knobs; SELECT moves a cursor over every control including the extras (switches, waveforms);
-ALGORITHM changes the control under it. `fa_knob_col`, `fa_switch`, `fa_fader`, `fa_graph` draw them; `fa_scene` composes a page.
-Text is anti-aliased and measured (`fa_ctext`, `text_w`); `tests/fmug_app_test.c` renders every screen. The FILT page's
-graph is `FMUG_GRAPH` (17 emphasis rows x 73 columns of dB x 8, from `tools/fmug_filter.py`) shifted to the cutoff's singing pitch
-with a dotted marker at it. Screenshots for the README and the site come from the same drawing code (`tools/readme_shots.c`).
-
-**Editor.** The patch editor (`web/editor_fmini.html`, served at `/editor/`) talks to the firmware with the commands in
-`EDITOR_PROTOCOL.md` ("FMUG patch": 82 GET, 83 PUT, 84 PRESET; 1.6.1 added the octave and the library of user presets U01-U32).
-`firmware/src/editor_fmug.c` is the handler. The editor's tables are read from the device (`ED_DESC`), so a new value format needs a
-row in the protocol's table and a case in the editor's `shown()`.
-
-**Stored values.** User presets (`upreset.c`) have spare bytes at the end of the record for what FMini-1 added (tempo, octave, FX
-globals: `UP_*_AT`), "0 = none, as every record before". A record cannot tell which filter it was made for: from 1.7.0 on, CUTOFF
-and EMPHASIS of anything saved earlier sound different (documented in the protocol; there is no migration). If a future change
-of meaning matters to users, add a marker byte there and convert on load.
-
-## 8. Tests
-
-`tests/run_tests.sh` after `./build.sh`, with the toolchain variables set (the package test needs `AC79_SDK`). It takes 20 to
-30 minutes; run it in the background and read the log. Parts that matter for this firmware:
+`sh tests/run_tests.sh > /tmp/tests.log 2>&1` after `./build.sh` (the package sections need `AC79_SDK`; the whole suite takes
+several minutes: run it in the background and read the log). A section that fails prints `SECTION FAILED: <name>`. A test
+that prints nothing and fails is a `return 1` with no message: run the binary alone.
 
 | Test | What it guards |
 | --- | --- |
-| `fmug_filter_test.c` | the ladder against the hardware numbers (section 5) |
-| `fmug_app_test.c` | every page, SAVE / PRESETS over the 100 patches and user patches, each patch's ARP / LFO / FX / LEVEL / octave |
-| `fmug_fx_test.c` | the FMini-1 FX: reverb, delay and chorus types, TUBE drive, bypass at 0 |
-| `editor_test.c`, `web/test_editor_fmini.py` | the editor handler; the editor page against the real C handler in Chromium |
-| `regress.c` + `golden.txt`, `cpu_baseline.txt`, `target_budget.*` | render hashes of the 100 patches, voice modes, FX sends and the sequencer; level, DC, voices; CPU: the host's instruction counter may be missing (it was, in the sandbox: the budget is then not checked), the **static loop-instruction count** of the render functions in the chip's disassembly is always checked (+10 %) |
-| `persistence_test.c`, `upreset_test.c`, `storage_test.c` | the settings and the autosave, user presets, flash (FMini-1's records read) |
-| `midi_control_test.c`, `midi_uart_test.c`, `uac_test.c`, `usb_desc_test.c`, `ota_test.c`, `ldr_test.c` | MIDI IN, USB, the update entry and loader |
-| `web/emu/emu_test.mjs` | the browser emulator against its native twin |
+| `organ_test.c` | the organ against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases of levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence. `render OUT.f32` writes the port's output for `tools/setbfree_ref/compare.py` |
+| `organ_app_test.c` | the screens and the controls on the host: HOME and DRAWBARS drawn and told apart, the drawbar knobs and the SELECT window, PRESET over the factory and user presets (wrapping), SAVE, GLO (MIDI IN, channel, ABOUT), the octave keys |
+| `editor_test.c` | the editor's handler: INFO's tags, NAMES, PRESET, DUMP, user presets, organ patches (ORG_GET / ORG_PUT), live sync, USB and UART framing |
+| `upreset_test.c`, `persistence_test.c` | user presets and the organ patch across a power cycle; the settings and the autosave; FMini-1's records read as they are |
+| `midi_control_test.c`, `midi_uart_test.c`, `uac_test.c`, `usb_desc_test.c` | MIDI IN (notes to the organ's keys, the pedal, the channels), TRS MIDI, USB audio and descriptors |
+| `audio_test.c` | the real audio interrupt with a simulated DMA: overload, fades, the USB level, the keys under the splash |
+| `fx_test.c`, `speaker_test.c` | the FX buses (reverbs, delays, choruses, TUBE, bypass) and the SPEAKER EQ |
+| `regress.c` + `golden.txt`, `cpu_baseline.txt`, `target_budget.*` | render hashes of the 8 organ presets, the FX sends and the sequencer's pattern; the key budget, a held key under pressure, no hanging key after the note-offs; CPU; the static instruction cost of the render loops |
+| `ota_test.c`, `ldr_test.c`, `install_test.py`, `storage_test.c` | the update entry and loader, the installer CLI, flash |
+| `web/test_web.mjs`, `web/test_backup.mjs`, `web/emu/emu_test.mjs` | the installer's JavaScript and the browser emulator against its native twin (the last two need node; the emulator needs `WASI_SDK`) |
 
-CLAUDE.md says which sections fail and why. To listen to a change, render through the browser build (`tools/preset_lab.py`,
-`tools/render_envelope.mjs`) or write a small host program on `tests/host.h` (`tests/regress.c` shows how to drive the mixer). For sound work, write the measurement
-first (a test with the number to hit), then the code.
+Regenerating the goldens and the budgets is on purpose only: `GOLDEN_UPDATE=1` for `golden.txt` (review the diff; it rewrites the
+whole file from the current renders), `BUDGET_UPDATE=1 python3 tests/target_budget.py build/felucca.dis tests/target_budget.txt`
+for the loops. `cpu_baseline.txt` is measured on macOS, where the kernel counts instructions: `BUDGET_UPDATE=1` there.
 
-## 9. Site, installer, emulator, release
+**Host compiler.** `tests/host.h` includes `usb.c`, whose registers are reached through `hal/fm1_usb.h`, and that header carries
+the pi32 `csync` instruction as inline asm. A host `cc` (GNU as) rejects it. On the owner's toolchain that is the case to
+check first; in the Linux sandbox the suite ran through an assembler wrapper that drops `csync` / `ssync` lines, outside the
+repository.
 
-- `web/site_fmini.html` is the site (Portuguese, English, Japanese text in one script); `web/make_fmug_installer.py` embeds the
-  firmware package, the screenshots (`assets/site/`) and the installer logic into one self-contained page: `docs/index.html`.
+## 6. Site, installer, emulator, release
+
+- The site, the installer page and the editor are 0.5.0. Until then the workflow publishes only `web/placeholder.html` and the
+  splash, and no firmware. `web/make_fmug_installer.py` and `web/site_fmini.html` are FMini-1's and are rewritten for 0.5.0.
 - The browser emulator: `web/emu/felucca_web.c` compiles the firmware's sources against a simulated FM-1;
-  `web/emu/build_wasi.sh` (wasi-sdk 25, no Emscripten) writes `docs/emu/`. The preset lab uses the same wasm.
-- On a push to `main` that touches `firmware/`, `web/`, `tools/`, `assets/`, `docs/emu/`, `docs/fmini-ad*`, `build.sh` or the workflow,
-  `.github/workflows/installer.yml` builds the firmware and publishes the page, the package (`organvave-1-X.Y.Z.fwsc`), the editor and
-  the emulator to <https://ruppert.github.io/organvave-1/>. Until 0.5.0 it publishes only the placeholder page (`web/placeholder.html` and the splash).
-- **Release checklist:** bump `ORGANVAVE_VERSION` (`core.h`); build; run the tests; regenerate `docs/emu` and `docs/index.html`; refresh the
-  screenshots if screens changed (`tools/readme_shots.c`, then `tools/gen_readme_art.py` and the `assets/site/*.webp` it implies);
-  update the protocol doc and the site text; commit; push `main`; give the owner the `.fwsc`. The owner creates the
-  GitHub Release by hand. Unless the owner says otherwise, nothing has been tested on a real FM-1: say so.
-- Installing is at the owner's risk; recovery of a dead FM-1 needs FM-1-transporter (BUILDING.md).
+  `web/emu/build_wasi.sh` (wasi-sdk 25, no Emscripten) writes `docs/emu/`. Rebuild it after every version bump.
+- **Release checklist:** bump `ORGANVAVE_VERSION` (`core.h`); build; run the tests; regenerate `docs/emu` (and `docs/index.html`
+  when the installer exists); update the protocol and this guide; commit; push `main`; give the owner the `.fwsc` from a build
+  with the real AC79 SDK. The owner creates the GitHub Release by hand (the session's token cannot). Nothing here has been tested on
+  a real FM-1 unless the owner says so.
+- Installing is at the owner's risk; recovery of a dead FM-1 is in BUILDING.md.
 
-## 10. How the 1.7.0 filter was built (a method that worked)
+## 7. Starting another firmware from this base
 
-1. **Find the circuit and a trusted reference**, read it, and write down what is measured and what is inferred (here: the Model D's
-   ladder, and CA-72's calibration against a hardware reference).
-2. **Write the model in floating point** in `tools/` with the laws (dial -> frequency, emphasis -> gain, tracking) as small functions
-   and the reference measurements as constants; make it emit the firmware's tables, so the two cannot drift apart.
-3. **Choose the structure for fixed point before coding it** (zero-delay feedback with a linear prediction: no unit delay in the
-   loop, so the pitch and the resonance are exact) and decide the Q formats and where 64-bit is allowed.
-4. **Test against the reference's numbers on the host** (`tests/host.h`), including the extremes (lowest cutoff, highest, quiet input,
-   silence) where fixed point fails first.
-5. **Migrate the content** (presets) by matching what you can measure, then check loudness, brightness and the closest pairs.
-6. **Do the UI last** (dial text, graphs), then the editor, the docs, the budgets, the screenshots, the release.
-7. Keep the bank's units physical, so the next law change is a matter of rerunning a script.
-
-## 11. Starting another firmware from this base
-
-OrganVave-1 is one (ORGAN.md has its plan). A checklist, in the order that avoids rework.
-
-1. **A new repository seeded from this one** (clone it, set a new `origin`, keep the history and `LICENSE`: the code is GPL-3.0-only
-   and Felucca's authorship stays in the headers; add the new work to `CREDITS.md`). Use a product name without a trademark.
-2. **Identity**: `FELUCCA_ID` in `firmware/src/felucca.c` is the package identity (`FM-1_800` here, release builds `FM-1_8XY`;
-   FMini-1 is `FM-1_9xx`). The update loader always answers `ota-FM-1_900` and the installers compare only the model (the text
-   before `_`), so any FM-1 package installs over any other by design; the installer page refuses a package of another family
-   (`web/make_fmug_installer.py`). Then the product name, the version (`ORGANVAVE_VERSION` in `core.h`), the splash
-   (`tools/gen_splash.py`), the loader's USB name (`usb.c` STR2, and the port filters in `web/fm1ota.js` and
-   `tools/fm1_install.py`), the site, README and the workflow's Pages URL.
-3. **The engine**: a new `eng_<name>.c` included in `engines.c`, a new entry **appended** to `ENGINES[]`, `NENGINES` and an `ENGI_`
-   constant; fill `engine_t` (eight EDIT parameters, presets, `note_on`, `render`, `block` for free-running state, `mem` for state
-   that belongs to a part). `eng_fmug.c` shows the patch bytes, the `fmug_set_patch` / `fmug_eff` hand-off, the factory table and
-   the generated header.
-4. **The UI**: change the tables first (pages, knobs, extras), then the drawing. A control that does not fit a knob (nine drawbars)
-   is an extra with its own `FK_` kind and its own drawing.
-5. **The bank**: copy `fmug_bank.py` / `gen_fmug_presets.py` / `preset_lab.py`, keep the physical units, and make the generator
-   check its own output.
-6. **Editor and protocol**: new commands take the next free numbers in `EDITOR_PROTOCOL.md`, with an INFO tag so the editor can tell
-   old firmware from new; mirror `editor_fmug.c`, `editor_fmini.html`, `tests/editor_test.c` and `web/test_editor_fmini.py`.
+1. **A new repository seeded from this one** (keep the history and `LICENSE`: the code is GPL-3.0-only and the authorship in the
+   headers stays; add new work to `CREDITS.md`). Use a product name without a trademark.
+2. **Identity**: `FELUCCA_ID` in `firmware/src/felucca.c` is the package identity (`FM-1_800` here, release builds `FM-1_8XY`).
+   The update loader answers `ota-FM-1_900` and the installers compare only the model (the text before `_`), so a package installs
+   over any other FM-1 package by design. Then the product name, `ORGANVAVE_VERSION`, the splash (`tools/gen_splash.py`), the
+   loader's USB name (`usb.c`) and the port filters (`web/fm1ota.js`, `tools/fm1_install.py`), the site, the README and the workflow.
+3. **The engine**: a new `eng_<name>.c` included by `engines.c`, a new entry appended to `ENGINES[]` with a new `ENGI_` number, and
+   the hooks `track_render` and `trk_note_on` route to it (as the organ does). `eng_organ.c` shows the patch bytes, the publish step
+   and the generated header.
+4. **The UI**: the drawing is in `organ_app.c`; the layout follows the real console's panel (owner's rule: the screens are drawn
+   after the Hammond panel: drawbars, rocker tabs, the vibrato selector, wood and chrome).
+5. **The bank**: physical units in a Python bank, a generator that checks its own output, the generated header checked in.
+6. **Editor and protocol**: new commands take the next free numbers in `EDITOR_PROTOCOL.md`, with an INFO tag so the editor can
+   tell old firmware from new.
 7. **Tests with the code**, and the static budget for the new render functions (`tests/target_budget.py` FUNCS).
 8. **Site, installer, emulator** last: they are generated from the same sources.
 
-**The organ.** OrganVave-1 does not use Felucca's organ engine (`firmware/engines/src/eng_wheel.c` stays in the submodule, read-only
-and unused, not even as a starting point: owner's decision). The organ and the rotary speaker are ported from setBfree
-(GPL-2.0-or-later, compatible with this GPL-3.0-only tree; keep its notices in the derived files): float model and reference in
-`tools/`, then fixed point, then host tests against the reference, as section 10. Files without a licence header in setBfree
-(`b_overdrive/overdrive.c`, `b_whirl/b_whirl.h`, `src/defaultpgm.h`, `src/memstream.h`) are not copied; the preamp's FIRs are
-designed anew. ORGAN.md has the block-by-block map, the budget and the decisions.
+**The organ's source.** The organ and the rotary are ported from setBfree (GPL-2.0-or-later, compatible with this GPL-3.0-only tree;
+its notices stay in the derived files). Felucca's organ engine (`firmware/engines/src/eng_wheel.c`) is not used, not even as a
+starting point (the owner's decision). Files without a licence header in setBfree are not copied. Method: a float reference
+from setBfree, the fixed-point port, host tests against the reference, then the content, then the UI.
 
-## 12. Gotchas collected
+## 8. Gotchas collected
 
-- `build/` is not checked in; `build/gen` appears after `./build.sh`. A host test fails to compile without it.
-- `tests/run_tests.sh` compiles with `-w`: warnings are hidden. `./build.sh` builds with the chip's clang and shows the warnings that
-  matter (shift-precedence ones in the oscillator drift code and a dangling `else` in `fmug_app.c` are old).
-- A failing test that prints nothing is a `return 1` with no message (`fmug_app_test.c` did, with stale constants): run the binary
-  alone and look at the last line, then at the next `return 1`.
-- `tests/golden.txt` was rewritten when the tree was slimmed (Oct 2026): the 100 patches render bit for bit as the FMini-1 1.7.0
-  build did (FMUG-only, second core on: its LFO tick is split, `track_lfo_adv` / `track_lfo_end`, and that order is kept).
-- The firmware is integer-only by design; the wasm build adds `-ffp-contract=off` so the emulator matches the host renders.
+- `build/` is not checked in; `./build.sh` makes `build/gen`. A host test fails to compile without it.
+- `tests/run_tests.sh` compiles with `-w`: warnings are hidden. `./build.sh` uses the chip's clang and shows the warnings that matter.
+- The render loops are measured, not guessed: `org_render` cost 410 in its 4-way unrolled form and 235 as the plain loop, so the
+  plain loop stayed (`tests/target_budget.txt`).
 - The sandbox for Claude sessions is reclaimed after a while: files in `/tmp` and the toolchain directories disappear. Keep
   scratch work in the session's scratchpad directory and commit what matters.
 - The GitHub token of a session cannot create Releases (403). The owner does it.

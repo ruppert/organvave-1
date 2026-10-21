@@ -16,7 +16,8 @@ static void power_on(int clean)                 /* main.c's order: the settings,
     persist_boot();
     host_tracks_init();
     track_defaults(&trk[0]);
-    set_engine_of(&trk[0], ENGI_FMUG);
+    org_set_patch(ORG_FACTORY[0]);                  /* (the organ's patch as at power-on: nothing kept in RAM) */
+    set_engine_of(&trk[0], ENGI_ORGAN);
     trk[0].engine = trk[0].eng_req;
     song.sel = 0;
     autosave_boot(clean);
@@ -65,10 +66,10 @@ int main(void)
 
     /* autosave */
     {
-        uint8_t pk[FG_SIZE];
-        apply_preset(12);
-        memcpy(pk, fmug_patch[0], FG_SIZE); pk[FG_L1] = 99;
-        fmug_set_patch(0, pk); fmug_adopt(0);
+        uint8_t pk[ORG_PSIZE];
+        apply_preset(2);
+        memcpy(pk, org_patch, ORG_PSIZE); pk[OP_TEMP] = 1;
+        org_set_patch(pk);
         TSEL->p[P_LEVEL] = 77; song.g[G_BPM] = 133;
         e0 = host_erases;
         idle(AS_IDLE_MS - 1000u);
@@ -81,8 +82,8 @@ int main(void)
         idle(AS_GAP_MS);
         bad += check("  .. then is written", host_erases == e0 + 2u);
         power_on(1);
-        bad += check("power-on after a clean boot: the patch, LEVEL, the tempo and the preset back",
-                     fmug_patch[0][FG_L1] == 99 && TSEL->p[P_LEVEL] == 70 && song.g[G_BPM] == 133 && TSEL->preset == 12);
+        bad += check("power-on after a clean boot: the organ patch, LEVEL, the tempo and the preset back",
+                     org_patch[OP_TEMP] == 1 && TSEL->p[P_LEVEL] == 70 && song.g[G_BPM] == 133 && TSEL->preset == 2);
         power_on(0);
         bad += check("power-on after a crash: the defaults (the autosave is not loaded)",
                      TSEL->p[P_LEVEL] != 70 && TSEL->preset == 0);
@@ -100,7 +101,7 @@ int main(void)
         st_save(OBJ_AUTOSAVE, junk, sizeof junk);
         power_on(1);
         bad += check("FMini-1's settings record: LOW CUT and GLO's bytes read", fx_lowcut == 2u && set_bytes[8][5] == 17);
-        bad += check("FMini-1's autosave (a project): ignored, the defaults", TSEL->preset == 0 && TSEL->p[P_LEVEL] == TP[P_LEVEL].def);
+        bad += check("FMini-1's autosave (a project): ignored, the defaults", TSEL->preset == 0 && TSEL->p[P_LEVEL] == ORG_LEVEL[0]);
         fx_lowcut = 0; settings_save(); idle(100); power_on(1);
         bad += check("  .. a later save keeps the fields this firmware does not use",
                      persist_flash.palette == 3u && persist_flash.bytes.user == 0x1234u && fx_lowcut == 0u);

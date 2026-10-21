@@ -68,8 +68,6 @@
 
 /* -------------------------------------------------------------- UI --- */
 #include "ui.c"                  /* the UI's state, sound loads, LEDs, calibration */
-#include "ui_icons.h"            /* the icon ids the FMUG pages name (tools/gen_aa_icons.py) */
-#include "ui_fmug.c"             /* FMUG's pages (fmug_app.c draws them) */
 #include "upreset.c"             /* user presets */
 #include "settings.c"            /* the settings and the autosave */
 
@@ -80,5 +78,5 @@
 #include "editor.c"              /* web editor SysEx (needs the OTA SysEx plumbing) */
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
-#include "fmug_app.c"
+#include "organ_app.c"           /* the organ's interface (the screens after the console's panel) */
 #include "main.c"

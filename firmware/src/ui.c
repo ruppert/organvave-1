@@ -3,7 +3,7 @@
 /* The UI's shared state and helpers (Felucca's ui.c and ui_input.c, cut down to what the instrument's screen,
  * main.c, the editor and the stores use): a full redraw pending, the UPDATE MODE countdown, the message line; the
  * sound loads (a preset, an engine, MIDI Program Change); the LED picture's helpers; the panel calibration.
- * The screen itself is fmug_app.c. */
+ * The screen itself is organ_app.c. */
 static struct {
     uint8_t force;               /* full redraw pending */
     uint8_t uboot;               /* main.c: seconds left before UPDATE MODE (OCT- + OCT+ held), 0 = none */
@@ -94,7 +94,10 @@ static void apply_preset_to(track_t *t, uint32_t pi)
         for (i = 0; i < 4u; i++)
             t->p[P_DIST + i] = (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
     }
-    fmug_track_loaded(t);                             /* FMUG: the preset's patch (its SLOT) */
+    if (t->eng_req == ENGI_ORGAN) {                   /* the organ: the preset's patch and its level */
+        org_set_patch(ORG_FACTORY[pi % ORG_NFACTORY]);
+        t->p[P_LEVEL] = ORG_LEVEL[pi % ORG_NFACTORY];
+    }
 }
 
 /* the engine's defaults and its first preset. With the audio IRQ off: the ISR sees the old engine with its values or
@@ -113,10 +116,9 @@ static void set_engine_of(track_t *t, uint32_t ei)
 
 static void apply_preset(uint32_t pi) { apply_preset_to(TSEL, pi); }
 
-/* MIDI Program Change (1.5.1, #179 by renebohne): program n: the engine's n-th preset, loaded as from PRESETS (FMUG:
- * with its extras, fmug_app.c). A program past the last is ignored, not wrapped: a number is always the same sound */
-static void fa_factory_extras(track_t *t, uint32_t n);   /* (fmug_app.c) */
-static void midi_pc_poll(void)                           /* main loop (fmug_app.c fa_input) */
+/* MIDI Program Change (1.5.1, #179 by renebohne): program n: the engine's n-th preset, loaded as from PRESETS. A
+ * program past the last is ignored, not wrapped: a number is always the same sound */
+static void midi_pc_poll(void)                           /* main loop (organ_app.c oa_input) */
 {
     uint32_t v = midi_pc, e;
     if (!v)
@@ -127,14 +129,12 @@ static void midi_pc_poll(void)                           /* main loop (fmug_app.
     if (v >= ENGINES[e]->npresets)
         return;
     apply_preset_to(TSEL, v);
-    if (e == ENGI_FMUG)
-        fa_factory_extras(TSEL, v);                      /* the patch's arpeggiator, LFO, FX settings and octave */
     ui.force = 1;
 }
 
 /* ----------------------------------------------------------------- LEDs --- */
 /* The LED picture is built off-line and copied one byte per column: clearing and relighting would let the 10 kHz scan
- * catch the dark gap and flicker (fmug_app.c fa_leds) */
+ * catch the dark gap and flicker (organ_app.c oa_leds) */
 static uint8_t led_pos[41];                        /* (col << 3) | row bit, 0xFF = none */
 
 static void led_pos_init(void)

@@ -12,8 +12,8 @@
 #                   GOLDEN_UPDATE=1 / BUDGET_UPDATE=1 rewrite them: merge only the lines you mean to change.
 # target cost (tests/target_budget.py): the render loops in the pi32v2 disassembly against tests/target_budget.txt.
 # the organ: tests/organ_test.c (the tone generator against numbers from setBfree's: tools/setbfree_ref/compare.py).
-# the instrument: tests/fmug_app_test.c (every screen, SAVE / PRESETS, the factory patches' extras), fmug_filter_test.c
-#                   (the ladder), fmug_fx_test.c (reverbs, delays, choruses, TUBE, OUTPUT), speaker_test.c (SPEAKER EQ),
+# the instrument: tests/organ_app_test.c (the screens, PRESETS, SAVE, GLO, the keys), fx_test.c (reverbs, delays,
+#                   choruses, TUBE, OUTPUT), speaker_test.c (SPEAKER EQ),
 #                   audio_test.c (overload protection, fades, DMA diagnostics).
 # the stores: storage_test.c (A/B sectors, torn writes), upreset_test.c (user presets, their patches, other shapes),
 #                   persistence_test.c (the settings and the autosave, FMini-1's records).
@@ -23,9 +23,8 @@
 # the panel and the screen: input_test.c (debounce, the LED scan), theme_test.c, text_ref_test.c, text_spacing_test.py.
 # Sanitizers (ASan + UBSan when the compiler has them; SANITIZE=0 skips): the stores, the protocols and a short fuzz of
 #                   the editor (tests/fuzz_ed.c; longer: build/host/asan/fuzz_ed 300000 7).
-# web: the installer's JS (web/test_web.mjs, web/test_backup.mjs, node), the patch editor in Chromium against the real
-#                   editor handler (web/test_editor_fmini.py, python playwright), the browser emulator (web/emu: built with
-#                   WASI_SDK set, its native twin always; node web/emu/emu_test.mjs).
+# web: the installer's JS (web/test_web.mjs, web/test_backup.mjs, node), the browser emulator (web/emu: built with
+#                   WASI_SDK set, its native twin always; node web/emu/emu_test.mjs). (The organ's patch editor: 0.5.0.)
 set -e
 export AC79_SDK="${AC79_SDK:-$HOME/fw-AC79_AIoT_SDK}"
 cd "$(dirname "$0")/.."
@@ -65,24 +64,22 @@ python3 tools/fm1pkg_make.py "$OUT/old_app.bin" build/loader/ota.bin "$OUT/old.f
 $CC -o "$OUT/ldr_test" tests/ldr_test.c
 run "update loader: other app -> this build" "$OUT/ldr_test" "$OUT/old.fwsc" build/felucca.fwsc
 
-$HC -o "$OUT/fmug_app_test" tests/fmug_app_test.c -lm
-run "the instrument's app: the screen of every page, SAVE / PRESETS over 100 factory and the user patches, each patch its ARP, LFO, FX, LEVEL and octave, a new preset goes HOME" "$OUT/fmug_app_test" "$OUT/fa"
+$HC -o "$OUT/organ_app_test" tests/organ_app_test.c -lm
+run "the organ's app: HOME and DRAWBARS (the knobs, SELECT, a knob on HOME), PRESETS over the factory and the user presets, SAVE, GLO, octave, keys and MIDI to the organ" "$OUT/organ_app_test" "$OUT/oa"
 $HC -O2 -o "$OUT/organ_test" tests/organ_test.c -lm
 run "the organ's tone generator against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases' levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence" "$OUT/organ_test"
-$HC -O2 -o "$OUT/fmug_filter_test" tests/fmug_filter_test.c -lm
-run "the filter (Minimoog ladder): sings a sine from silence (pitch, THD, 1 V/oct over the keys, KBD 0), the CUTOFF dial's singing pitches, the EMPHASIS dial's passband loss and peak, no runaway" "$OUT/fmug_filter_test"
-$HC -O2 -o "$OUT/fmug_fx_test" tests/fmug_fx_test.c -lm
-run "FX: five stereo reverbs (decay, level, corners, type changes), seven delays, three choruses, TUBE and OUTPUT, bypass at 0" "$OUT/fmug_fx_test"
+$HC -O2 -o "$OUT/fx_test" tests/fx_test.c -lm
+run "FX: five stereo reverbs (decay, level, corners, type changes), seven delays, three choruses, TUBE and OUTPUT, bypass at 0" "$OUT/fx_test"
 $HC -O2 -o "$OUT/speaker_test" tests/speaker_test.c -lm
 run "SPEAKER EQ: FLAT / LOWCUT / BASS+ responses, BASS+ harmonics of the bass, the sub cut, no offset after, headroom on a full-scale kick (#180)" "$OUT/speaker_test"
 $HC -o "$OUT/audio_test" tests/audio_test.c -lm
 run "audio: overload protection, bounded fades and DMA diagnostics" "$OUT/audio_test"
 $HC -o "$OUT/upreset_test" tests/upreset_test.c -lm
-run "user presets: banks and patches across a power cycle, other shapes empty, mapped by count, a retired engine on FMUG, failures" "$OUT/upreset_test"
+run "user presets: banks and organ patches across a power cycle, other shapes empty, mapped by count, a retired engine on the organ, failures" "$OUT/upreset_test"
 $HC -o "$OUT/persistence_test" tests/persistence_test.c -lm
 run "persistence: the settings (quiet, unchanged, retry), the autosave (idle, gap, clean boot), FMini-1's records" "$OUT/persistence_test"
 $HC -o "$OUT/editor_test" tests/editor_test.c -lm
-run "editor: the real C protocol (INFO, DUMP, presets, user presets, FMUG patches, live sync), USB and UART framing and recovery" "$OUT/editor_test"
+run "editor: the real C protocol (INFO, DUMP, presets, user presets, organ patches, live sync), USB and UART framing and recovery" "$OUT/editor_test"
 $HC -o "$OUT/midi_control_test" tests/midi_control_test.c -lm
 run "MIDI IN: notes, pedal per channel, bend ranges, CC1 / 120 / 121 / 123, the CC map, Program Change, filters, overflow" "$OUT/midi_control_test"
 $HC -o "$OUT/theme_test" tests/theme_test.c -lm
@@ -134,14 +131,6 @@ if command -v node >/dev/null 2>&1; then
     run "web backup: capture, validation before writes, restore order" node web/test_backup.mjs
 else
     echo "== skip web tests (no node)"
-fi
-
-if python3 -c "import playwright" >/dev/null 2>&1; then
-    $HC -o "$OUT/editor_bridge" tests/editor_bridge.c -lm
-    run "the patch editor (web/editor_fmini.html): Chromium + the firmware's real editor handler, patch commands 82 / 83" \
-        python3 web/test_editor_fmini.py "$OUT/editor_bridge"
-else
-    echo "== skip the patch editor test (no python playwright)"
 fi
 
 cc -O2 -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o "$OUT/emu_native" web/emu/native_check.c -lm
