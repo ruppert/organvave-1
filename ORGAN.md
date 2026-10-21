@@ -8,8 +8,8 @@ host (`tools/`). Felucca's organ engine (`eng_wheel.c`) is not used. Approved by
 amendments marked **(owner)**.
 
 **Revision 2026-10-21 (after the slimming).** The budget below is measured on the slimmed tree; the rotary section is
-revised: two rotary models, selectable on the screen **(owner)**, and a better reduced whirl that the freed SRAM allows.
-The improved whirl's table method and resolution are proposals awaiting the owner's approval.
+revised: two rotary models, selectable on the screen and stored in every preset **(owner)**, and a better reduced
+whirl that the freed SRAM allows (1024 angles, interpolated coefficients: approved by the owner on 2026-10-21).
 
 Method (DEVELOPING.md section 10): float model, then fixed point, then host tests against the reference, then content,
 then the UI.
@@ -54,7 +54,7 @@ Static loop-instruction cost (method of `tests/target_budget.py`, probe kernels 
 | rotary, setBfree whirl reduced (256-angle tables, the first plan) | 767 |
 | rotary CLASSIC: whirl, 1024 angles, interpolated coefficients (below) | 951 |
 | rotary CLASSIC, economy variant: 1024 angles, nearest coefficients | ~767 |
-| rotary LIGHT: minimal physical model (stereo) | 210 |
+| rotary LIGHT: minimal physical model (stereo), + HORN tone filter | 210 + ~10 |
 
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
@@ -67,10 +67,18 @@ and the drive on, the economy variant (same sidebands, about 19 dB more residual
 ## Rotary speaker: two models, selectable **(owner)**
 
 The ROTARY pop-up has a MODEL field: **CLASSIC** (the owner's option 2: setBfree's `whirl.c`, reduced) and **LIGHT** (the
-owner's option 3: the minimal physical model). It is a setting of the instrument, kept with the settings (not in the
-presets: a registration should sound the same whichever model the player chose; presets keep the speed, the balance and
-the rest of the rotary's values). Switching fades the output over about 20 ms and starts the other model from its
-current rotor angles and speeds, so the rotation goes on without a jump. Both models are always allocated.
+owner's option 3: the minimal physical model). **(owner)** MODEL is part of every preset: loading a preset sets it, like
+the rest of the rotary's values; there is no global override. Switching fades the output over about 20 ms and starts the
+other model from its current rotor angles and speeds, so the rotation goes on without a jump. Both models are always
+allocated.
+
+**One set of parameters for both models**, so a preset's values mean the same whichever MODEL it names: horn and drum
+speeds (slow, fast), acceleration and deceleration of each, STOP (the rotors brake and halt), HORN / DRUM balance, width
+(the mic angle), leakage (the direct signal around the cabinet) and HORN character (default, mellow, sharp). In LIGHT the
+HORN character is a tone filter on the horn path (about 10 instructions a sample) fitted to CLASSIC's three filter sets;
+LIGHT's own internals (crossover frequency, AM and Doppler depths, reflection level) are factory tuning against CLASSIC,
+not on the screen. CLASSIC's geometry (horn and drum radius, mic distance) is fixed: its angle tables are generated from
+it in `tools/`.
 
 ### CLASSIC: the improved reduced whirl
 
@@ -88,7 +96,7 @@ against the full 16384-angle `whirl.c`):
   angles 64 dB, **1024 angles 71 dB** at 2 to 5 kHz (81 to 96 dB at 300 Hz), sidebands within 0.03 dB, spurs as the full
   one. With nearest coefficients instead (the economy variant): 52 dB at 1024 angles, 58 dB at 2048, sidebands within
   0.03 dB.
-- **Proposed: 1024 angles with interpolated coefficients.** Tables: forward and backward displacement for horn and drum
+- **Chosen (owner, 2026-10-21): 1024 angles with interpolated coefficients.** Tables: forward and backward displacement for horn and drum
   (int32 Q8) and the forward and backward angle FIRs (int16 Q14): 37 KB, generated in `tools/` from the full model and
   copied to SRAM at boot (no flash reads in the audio interrupt). Lines of 1024 samples (the default geometry needs
   about 360; the headroom allows other mic distances and radii), int32: 16 KB. Cost 951 instructions a sample (static,
@@ -161,7 +169,7 @@ commands from 85 (ORG_GET / ORG_PUT / ORG_PRESET), an INFO tag, a drawbar value 
 
 ## Presets
 
-A bank in physical units (registration "888000000", percussion, vibrato, rotary, drive in dB, click, level), 16 to 32
+A bank in physical units (registration "888000000", percussion, vibrato, rotary with its MODEL, drive in dB, click, level), 16 to 32
 classic registrations with descriptive names (no trademarks, no artists), levels from `tools/preset_lab.py` on a chord.
 
 ## Tests (measure before listening, against setBfree)
