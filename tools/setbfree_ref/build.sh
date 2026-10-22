@@ -22,3 +22,8 @@ B="$OUT/setBfree/b_whirl"
 cc -O2 -std=gnu99 -w -I"$S" -I"$B" -DHAVE_ASEQ=0 -o "$OUT/whirl_tables" "$HERE/whirl_tables.c" "$B/eqcomp.c" -lm
 cc -O2 -std=gnu99 -w -I"$S" -I"$B" -DHAVE_ASEQ=0 -o "$OUT/whirl_render" "$HERE/whirl_render.c" "$B/eqcomp.c" -lm
 echo "built $OUT/whirl_tables and $OUT/whirl_render"
+
+# the drive's reference: setBfree's overdrive.c as it is
+D="$OUT/setBfree/b_overdrive"
+cc -O2 -std=gnu99 -w -I"$S" -I"$D" -DHAVE_ASEQ=0 -o "$OUT/drive_render" "$HERE/drive_render.c" -lm
+echo "built $OUT/drive_render"

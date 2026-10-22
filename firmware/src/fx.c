@@ -1056,6 +1056,10 @@ static void mix_part(track_t *t, uint32_t n)
 static void events_block(uint32_t n);                 /* (seq.c) */
 #include "eng_rotary.c"             /* the rotary speaker, CLASSIC */
 #include "eng_rotary_light.c"       /* ... and LIGHT, and the switch between the two */
+#include "eng_drive.c"              /* the drive: the organ's preamp, before the master and the rotary */
+_Static_assert(CTL <= DR_MAX, "the drive's longest block");
+static dr_t dr_st;
+static volatile uint8_t dr_on;                          /* 0 off, 1 on (the effects section sets it) */
 /* the rotary speaker (eng_rotary.c) between the mix and the master: off (rot_on 0) the mix is as it was; on, the mono
  * sum of the mix and the reverb's return goes through the cabinet and comes out in stereo */
 static rot_t rot_st __attribute__((section(".pool")));
@@ -1076,6 +1080,16 @@ static void mix_block(int32_t *out, uint32_t n)
     for (i = 0; i < NPART; i++)                         /* the LFOs' blocks (voice.c) */
         track_lfo_end(&trk[i]);
     fx_buses(send_c, send_d, send_r, wet, n);
+    if (dr_on) {                                        /* the preamp: the mono dry sum, before MASTER. The mix has setBfree's */
+        int32_t m[CTL];                                 /* 1.0 at 16384 (the organ is half its scale): the drive takes Q13 (1.0 = 8192, */
+        for (i = 0; i < n; i++) {                       /* up to 4.0) and gives Q15 */
+            int32_t v = (mix_l[i] + mix_r[i]) >> 2;
+            m[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+        }
+        dr_run(&dr_st, m, m, n);
+        for (i = 0; i < n; i++)
+            mix_l[i] = mix_r[i] = m[i] >> 1;
+    }
     if (rot_on) {
         int32_t xin[CTL], ol[CTL], orr[CTL];
         for (i = 0; i < n; i++)

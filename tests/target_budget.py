@@ -14,7 +14,7 @@ import os
 import re
 import sys
 
-FUNCS = ["rot_samples", "horn_tap", "lt_samples", "lt_targets",   # the rotary CLASSIC (eng_rotary.c): a sample (horn_tap is called 6 times in it), one horn tap; LIGHT (eng_rotary_light.c): a sample, a block's targets
+FUNCS = ["rot_samples", "horn_tap", "lt_samples", "lt_targets", "dr_run",   # the rotary CLASSIC (eng_rotary.c): a sample (horn_tap is called 6 times in it), one horn tap; LIGHT (eng_rotary_light.c): a sample, a block's targets
          "org_render", "org_fragment", "org_msg", "org_wheel_pc", "org_vib",   # the organ (eng_organ.c): the wheels, a fragment's start, a key, the percussion's wheel, the vibrato
          "fm1_alnk0_irq", "fm1_timer5_irq",               # the audio ISR (the mix and DRIVE inlined); TIMER5: the key / LED scan
          "uac_tap48",                                       # the USB audio input at 48 kHz: the 44.1 -> 48 resampler (usb.c)

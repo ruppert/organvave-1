@@ -158,9 +158,20 @@ standard libraries, Pd's standard objects or Csound's opcodes.
 - **Drawbar law**: **(owner)** linear, as setBfree (8 -> 4 = -6 dB).
 - **Scanner vibrato / chorus** (`vibrato.c`): write-side interpolated variable delay, 7.25 Hz, depths 3 / 6 / 9 samples;
   chorus = the same mixed with the dry signal at 0.707. (Not the original's 16-stage LC line.)
-- **Preamp / overdrive** (`overdrive.c`): an effective 9-tap input FIR, the biased 1/(1+x^2) curve with sag and feedback
-  poles, a 33-tap output FIR (no real oversampling). `overdrive.c` has no licence header (generated tables): the FIRs are
-  designed anew in `tools/`, the curve follows `ovt_biased.c` (GPL-2.0-or-later).
+- **Preamp / overdrive** (`overdrive.c`, ported in `src/eng_drive.c`, 0.3.0): an effective 9-tap input FIR, the biased curve
+  with sag and feedback poles, a 33-tap output FIR (no real oversampling: setBfree sums the four polyphase rows of its
+  interpolation filter for every sample and filters the curve's output at the same rate). The FIRs are not redesigned: the
+  firmware takes setBfree's own taps (the sum of the four rows, and the output filter, which has only odd taps and the centre),
+  dumped by `tools/setbfree_ref/drive_render --fir` into `tools/setbfree_ref/drive_fir.txt` and turned into
+  `src/eng_drive_tables.h` by `tools/gen_drive_tables.py`. The curve of `ovt_biased.c` is odd, v(u) = sign(u) (D(|u| + bias) -
+  D(bias)) with D(x) = x^2 / (1 + x^2), so one 1025-entry table (1/64 steps up to 16, 2 KB) serves it, and the post-differentiator
+  (pole 0.999) is written as a low-pass with a 28-bit state (a 16-bit one stalls at its tiny coefficient). The input is Q13 (1.0 = 8192, up to 4.0: a loud chord is several times 1.0), the output Q15. The sag, the
+  feedback poles and the global feedback are setBfree's defaults (gain 3.5675 in, 0.8795 out, fb 0.5821, fb2 0.999, gfb 0.6214,
+  bias 0.5347, sag 0.991 / 0.0094). Measured against `overdrive.c` itself (sines at 110 Hz and 1 kHz, 0.1 to 1.0 full
+  scale): the odd harmonics within 0.11 dB, no even ones (below -99 dB, as the reference), waveform SNR 48 to 62 dB; the cost
+  is 201 loop instructions a block (about 150 a sample). Limits: the pre-differentiator's state is clamped (its gain is
+  1 / (1 - fb), 1000 at fb 0.999, outside the usable range); the input of the stage after the drive must be clamped (the
+  largest gains put the output at 7 times full scale). Nothing here is tested on a real FM-1.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, LIGHT our own).
 

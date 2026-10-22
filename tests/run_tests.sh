@@ -70,6 +70,8 @@ $HC -O2 -o "$OUT/organ_test" tests/organ_test.c -lm
 run "the organ's tone generator against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases' levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence" "$OUT/organ_test"
 $HC -O2 -o "$OUT/rotary_test" tests/rotary_test.c -lm
 run "the rotary CLASSIC against setBfree's: the sidebands, stopped rotors, the speed ramp reaching its targets, bounds at full scale and at the filters' resonances, silence" "$OUT/rotary_test"
+$HC -O2 -o "$OUT/drive_test" tests/drive_test.c -lm
+run "the drive against setBfree's: the odd harmonics of sines at 110 Hz and 1 kHz, no even ones, block-size independence, bounds at the largest gains, silence, a DC step blocked" "$OUT/drive_test"
 $HC -O2 -o "$OUT/rotary_light_test" tests/rotary_light_test.c -lm
 run "the rotary LIGHT against CLASSIC: sidebands and levels (nine tones), bounds, silence, the model switch (a 20 ms fade, no jump, each model alone afterwards)" "$OUT/rotary_light_test"
 $HC -O2 -o "$OUT/fx_test" tests/fx_test.c -lm
