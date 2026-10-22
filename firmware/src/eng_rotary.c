@@ -8,15 +8,13 @@
  * The angle tables are generated from setBfree's own code (eng_rotary_tables.h): 1024 angles, interpolated.
  *
  * Measured against tools/setbfree_ref/whirl_render (2 s, 440 Hz at 0.5, horn 400 rpm, drum stopped):
- *   sidebands at 440 -/+ 6.67 Hz and -13.3 Hz: -16.1 / -26.9 / -30.4 dB, setBfree -16.2 / -27.0 / -30.5 dB (0.2 dB);
- *   RMS within 0.3%; the stopped rotor has no sidebands (below -240 dB), setBfree -140 dB.
- *   The waveform: 33 dB SNR (L), 19 dB (R). NOT yet acceptable: the error is the drum's high-shelf (setBfree's
- *   EQC_HIGH, 811.97 Hz, -38.9 dB): it has poles at radius 0.988 near 254 Hz and a DC gain of about 700 for an error
- *   in its feedback loop. A 32-bit biquad rounds at 2^-14 (Q14 samples), which gives about 30 dB of error there.
- *   The horn's 300 Hz shelf (DC gain about 100) is fine at Q14 with direct form I. Options, for the owner: (a) allow a
- *   32x32 -> high-word multiply for the drum biquad (about 4 per sample), (b) a better-conditioned realization of the
- *   same response (its coefficients would change slightly), (c) accept the waveform error (the spectrum is right).
- *
+ *   sidebands at 440 -/+ 6.67 Hz and -13.3 Hz: -16.2 / -27.0 / -30.5 dB, the same as setBfree;
+ *   RMS within 0.1%; the stopped rotor has no sidebands (below -240 dB);
+ *   waveform SNR 52 dB (L) and 43 dB (R) rotating, 68 and 56 dB stopped. Still below the 71 dB of the float tables.
+ *   Open: the R channel is 9 dB below L with the same filters and the same taps; the tap timing at 1/4096 sample does
+ *   not change it (tried), so the cause is elsewhere (the interpolated FIR of the horn's R taps is a candidate).
+ *   The five filters are in coupled form (rot_cpl): setBfree's direct form I rounds at 2^-14 and its poles near radius
+ *   0.99 with a DC gain up to 700 amplify that; coupled, the filters' own error is 73 to 79 dB (see tools/).
  * Formats. Inside the engine samples are Q14 (1.0 = 16384): the ports are Q15 (the organ's output), halved on the way in
  * and doubled on the way out. Products never exceed 32 bits: a Q14 coefficient multiplies a sample in two parts (mul14),
  * a Q24 biquad coefficient in two parts (mul24), each part rounded (truncation biased the drum's DC: about 850 LSB).
@@ -46,8 +44,8 @@ typedef struct {
     int8_t acdc_h, acdc_d;             /* +1 accelerating, -1 decelerating, 0 holding (setBfree's hornAcDc) */
     uint32_t mic_fw, mic_bw;           /* the mic angles' offsets (setBfree's micAngle * 0.25, and 1 - that), phase */
     int32_t hl, leak;                  /* the horn level and the leakage, Q14 (0.7 and 0.15 * 0.7) */
-    int32_t hA[4], hB[4];              /* the horn filters' states (x1, x2, y1, y2) */
-    int32_t dL[4], dR[4];              /* the drum output filters' states */
+    int32_t hA[2], hB[2];              /* the horn filters' states (coupled form: u, v) */
+    int32_t dL[2], dR[2];              /* the drum output filters' states (coupled form: u, v) */
     int32_t rf[4];                     /* the reflections' previous inputs: horn 0, 1; drum 2, 3 (FILTER_C) */
     int32_t hh[3][4];                  /* the horn's history for the three tap pairs (adx0..2), newest first */
     int32_t HL[ROT_LINE], HR[ROT_LINE], DL[ROT_LINE], DR[ROT_LINE];
@@ -65,16 +63,18 @@ static inline int32_t mul14(int32_t a, int32_t c)
     return (((a * (c >> 7)) + 64) >> 7) + (((a * (c & 127)) + 8192) >> 14);
 }
 
-/* one biquad, the same filter as setBfree's EQ_IIR (1 + a1 z^-1 + a2 z^-2 in the denominator), in direct form I: the
- * states are the last two inputs and outputs, z = {x1, x2, y1, y2}. (setBfree's form II keeps an internal state that
- * is about 100 times the input at DC for the horn's 300 Hz shelf: it does not fit in 32 bits. The outputs do.) */
-static inline int32_t rot_biquad(int32_t *z, const int32_t *c, int32_t x)
+/* one of the five filters in coupled form (the table's ROT_CPL[k] = s, w, c0, c1, d; A = [[s, w], [-w, s]], B = (1, 0),
+ * C = (c0, c1), D = d), z = {u, v} the state. The same filter as setBfree's biquad. Its rounding is far lower: the biquads
+ * (direct form I) round at 2^-14 and their poles near radius 0.99 with a DC gain up to about 700 amplify that
+ * (32 dB of error for the drum, 45 for horn B). Coupled, the error is 73 to 79 dB below the signal. The state peaks near
+ * 2^17.3 for a full-scale input, which the mul24 split holds (it needs |state| < 2^19). */
+static inline int32_t rot_cpl(int32_t *z, const int32_t *c, int32_t x)
 {
-    int32_t y = mul24(x, c[2]) + mul24(z[0], c[3]) + mul24(z[1], c[4]) - mul24(z[2], c[0]) - mul24(z[3], c[1]);
-    z[1] = z[0];
-    z[0] = x;
-    z[3] = z[2];
-    z[2] = y;
+    int32_t y = mul24(z[0], c[2]) + mul24(z[1], c[3]) + mul24(x, c[4]);
+    int32_t u = mul24(z[0], c[0]) + mul24(z[1], c[1]) + x;
+    int32_t v = mul24(z[1], c[0]) - mul24(z[0], c[1]);
+    z[0] = u;
+    z[1] = v;
     return y;
 }
 
@@ -205,8 +205,8 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         uint32_t ang_d = r->ph_d;
 
         /* 1) the horn's filters A and B */
-        x = rot_biquad(r->hA, ROT_BQ[0], xx);
-        x = rot_biquad(r->hB, ROT_BQ[1], x);
+        x = rot_cpl(r->hA, ROT_CPL[0], xx);
+        x = rot_cpl(r->hB, ROT_CPL[1], x);
         leak = mul14(x, r->leak);
 
         /* 2) the horn: taps 0 and 1 (history 0), reflection 1, taps 2 and 3 (history 1), reflection 2, taps 4 and 5 */
@@ -235,9 +235,9 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         drum_tap(r, ang_d, 5, ROT_DISP[3], x, r->DR);
 
         /* 4) the outputs: the drum's shelf and the horn, and the leakage on both */
-        y = rot_biquad(r->dL, ROT_BQ[2], r->DL[op]);
+        y = rot_cpl(r->dL, ROT_CPL[2], r->DL[op]);
         lo = y + mul14(r->HL[op], r->hl) + leak;
-        y = rot_biquad(r->dR, ROT_BQ[2], r->DR[op]);
+        y = rot_cpl(r->dR, ROT_CPL[2], r->DR[op]);
         ro = y + mul14(r->HR[op], r->hl) + leak;
         outL[i] = lo << 1;                                 /* Q14 -> Q15 */
         outR[i] = ro << 1;

@@ -94,13 +94,23 @@ def main():
     out.append("static const int32_t ROT_SPACE[12] = {")
     out.append(arr(space, 6))
     out.append("};")
-    out.append("/* the biquads, a1 a2 b0 b1 b2 each, Q24 (setBfree's setIIRFilter): [0] default horn A (low-pass 4500 Hz),")
-    out.append(" * [1] default horn B (low-shelf 300 Hz), [2] the drum's high-shelf (811.97 Hz, -38.93 dB), [3] sharp horn A")
-    out.append(" * (3900 Hz), [4] sharp horn B (300 Hz, -60 dB). */")
-    out.append("#define ROT_BQ_NSET 5")
-    out.append("static const int32_t ROT_BQ[ROT_BQ_NSET][5] = {")
+    # the five filters (setBfree's setIIRFilter: horn A, horn B, the drum's high-shelf, sharp horn A, sharp horn B) in
+    # coupled form, Q24. With B = (1, 0) and A = [[s, w], [-w, s]] (poles s +- jw) and C = (c0, c1), D = b0 follow from
+    # the biquad in closed form: s = -a1/2, w = sqrt(a2 - a1^2/4), c0 = b1 - b0 a1, c1 = (b0 a2 - c0 s - b2) / w.
+    # The engine's direct form I of these biquads rounds at 2^-14: 45 dB (horn B) to 32 dB (drum) of error. Coupled,
+    # 73 to 79 dB (eng_rotary.c, rot_cpl). Each set: s, w, c0, c1, d.
+    out.append("/* the five filters in coupled form, Q24 (see tools/gen_rotary_tables.py): per set s, w (A = [[s, w], [-w, s]]),")
+    out.append(" * c0, c1 (C), d (D = b0). [0] default horn A (low-pass 4500 Hz), [1] default horn B (low-shelf 300 Hz),")
+    out.append(" * [2] the drum's high-shelf (811.97 Hz, -38.93 dB), [3] sharp horn A (3900 Hz), [4] sharp horn B (300 Hz, -47.9 dB). */")
+    out.append("#define ROT_CPL_NSET 5")
+    out.append("static const int32_t ROT_CPL[ROT_CPL_NSET][5] = {")
     for k in range(5):
-        out.append("  {" + ", ".join(str(round(bq[k * 5 + j] * (1 << 24))) for j in range(5)) + "},")
+        a1, a2, b0, b1, b2 = bq[k * 5:k * 5 + 5]
+        sg = -a1 / 2.0
+        wg = (a2 - a1 * a1 / 4.0) ** 0.5
+        c0 = b1 - b0 * a1
+        c1 = (b0 * a2 - c0 * sg - b2) / wg
+        out.append("  {" + ", ".join(str(round(x * (1 << 24))) for x in (sg, wg, c0, c1, b0)) + "},")
     out.append("};")
     out.append("")
     with open(SRC, "w") as f:

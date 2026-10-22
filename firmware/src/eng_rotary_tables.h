@@ -2426,14 +2426,14 @@ static const int32_t ROT_SPACE[12] = {
     12761, 15826, 33706, 32173, 60781, 65889,
     25951, 27484, 47918, 51493, 70395, 66819,
 };
-/* the biquads, a1 a2 b0 b1 b2 each, Q24 (setBfree's setIIRFilter): [0] default horn A (low-pass 4500 Hz),
- * [1] default horn B (low-shelf 300 Hz), [2] the drum's high-shelf (811.97 Hz, -38.93 dB), [3] sharp horn A
- * (3900 Hz), [4] sharp horn B (300 Hz, -60 dB). */
-#define ROT_BQ_NSET 5
-static const int32_t ROT_BQ[ROT_BQ_NSET][5] = {
-  {-24249666, 13481398, 1502237, 3004474, 1502237},
-  {-31775950, 15162432, 16073771, -31855210, 15786617},
-  {-33139878, 16386309, 214208, -363193, 172632},
-  {-23987286, 11457913, 1061961, 2123922, 1061961},
-  {-31737894, 15420982, 16027520, -31967120, 15941453},
+/* the five filters in coupled form, Q24 (see tools/gen_rotary_tables.py): per set s, w (A = [[s, w], [-w, s]]),
+ * c0, c1 (C), d (D = b0). [0] default horn A (low-pass 4500 Hz), [1] default horn B (low-shelf 300 Hz),
+ * [2] the drum's high-shelf (811.97 Hz, -38.93 dB), [3] sharp horn A (3900 Hz), [4] sharp horn B (300 Hz, -47.9 dB). */
+#define ROT_CPL_NSET 5
+static const int32_t ROT_CPL[ROT_CPL_NSET][5] = {
+  {12124833, 8897682, 5175797, -7609484, 1502237},
+  {15887975, 1398445, -1411581, 921836, 16073771},
+  {16569939, 594783, 59931, -637622, 214208},
+  {11993643, 6955890, 3642264, -7092249, 1061961},
+  {15868947, 2626341, -1647445, 2227479, 16027520},
 };
