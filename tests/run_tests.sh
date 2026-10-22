@@ -68,6 +68,8 @@ $HC -o "$OUT/organ_app_test" tests/organ_app_test.c -lm
 run "the organ's app: HOME and DRAWBARS (the knobs, SELECT, a knob on HOME), PRESETS over the factory and the user presets, SAVE, GLO, octave, keys and MIDI to the organ" "$OUT/organ_app_test" "$OUT/oa"
 $HC -O2 -o "$OUT/organ_test" tests/organ_test.c -lm
 run "the organ's tone generator against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases' levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence" "$OUT/organ_test"
+$HC -O2 -o "$OUT/rotary_test" tests/rotary_test.c -lm
+run "the rotary CLASSIC against setBfree's: the sidebands, stopped rotors, the speed ramp reaching its targets, bounds at full scale and at the filters' resonances, silence" "$OUT/rotary_test"
 $HC -O2 -o "$OUT/fx_test" tests/fx_test.c -lm
 run "FX: five stereo reverbs (decay, level, corners, type changes), seven delays, three choruses, TUBE and OUTPUT, bypass at 0" "$OUT/fx_test"
 $HC -O2 -o "$OUT/speaker_test" tests/speaker_test.c -lm
