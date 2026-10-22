@@ -28,6 +28,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.5.0 | the equaliser: LOW and HIGH shelves, a MID peak with twelve frequencies, -12 .. +12 dB (EQ page on the FX button, editor controls; not yet on an FM-1) |
 | 0.9.0 | beta: overload fallback (when the CPU runs late: "CPU HIGH" on screen, the delay off for 2 s, the oldest held key let go; the rotary and the drive are never changed), all-keys stress tests, user manual (not yet on an FM-1) |
 | 0.9.1 | fix: distortion with the rotary on (CLASSIC and LIGHT): the cabinet clipped its input at 1.0; a chord is several times that. Now it takes the mix down by 4 and brings it back after (not yet on an FM-1) |
+| 0.9.2 | the panel: SELECT picks an item and ALGORITHM changes it on every page; DRIVE with TYPE (DISTORTION / TUBE), GAIN, TONE, OUTPUT; every Leslie setting on the ROTARY page; LOWER and PEDAL on one page, the pedal with its two bars (not yet on an FM-1) |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing
@@ -48,6 +49,7 @@ them, and uses no other trademarks in its names.
 ## User manual (0.9.0)
 
 - **Keys and MIDI**: channel 1 plays the upper manual, 2 the lower, 3 the pedals (with GLO on channel N: N, N + 1, N + 2). CC 7 / 11 is the swell, CC 70..78 the nine drawbars of the channel's manual, CC 1 the rotor speed (0..42 SLOW, 43..85 STOP, 86..127 FAST), CC 64 toggles SLOW / FAST, CC 123 / 120 release the notes.
-- **Pages**: EDIT walks the drawbar pages (UPPER, LOWER, PEDAL). The FX button walks PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, EQ and back home.
+- **Pages**: EDIT walks the drawbar pages (UPPER, then LOWER with the PEDAL's two bars: 16' and 8', as on the console). The FX button walks PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, EQ and back home.
+- **Editing**: on every page SELECT picks an item (it is lit) and ALGORITHM changes it (clockwise: more). The knobs 1 to 4 still go straight to the first four items (on the drawbar pages: to the picked bar and the three after it). The ROTARY page has the Leslie's every setting and scrolls: rotary on or off, model, horn, speed, width, horn level, the horn's and the drum's slow and fast speeds and the two rotors' acceleration times. DRIVE has TYPE (DISTORTION: the preamp, or TUBE: a valve's soft saturation), GAIN, TONE and OUTPUT.
 - **Overload**: if the CPU runs late the footer of every page reads "CPU HIGH", the delay is switched off for 2 s (re-armed while the overload lasts) and the oldest held key is let go, one per request, never the last. The rotary and the drive are not touched.
 - Nothing here has been tested on a real FM-1.

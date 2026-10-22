@@ -23,7 +23,8 @@ DUMP = os.path.join(HERE, "setbfree_ref", "tonegen_dump.txt")
 PSIZE = 64
 OP_UB, OP_LB, OP_PB, OP_TEMP, OP_XTALK = 0, 9, 18, 27, 28
 OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC, OP_ROT_BAL = 34, 35, 36, 37, 38, 39
-OP_DRV, OP_DRV_GAIN, OP_DRV_FAT = 40, 41, 42
+OP_DRV, OP_DRV_GAIN = 40, 41
+OP_DRV_TYPE, OP_DRV_TONE, OP_DRV_OUT = 48, 49, 50     # 0.9.2: the type, the tone and the output (9 steps, "zero is the default")
 TEMPS = {"gear60": 0, "gear50": 1, "equal": 2}
 
 
@@ -43,11 +44,13 @@ def effects(p, fx):
         p[OP_ROT_MIC] = (180 - width) // 30
         p[OP_ROT_BAL] = 4 + int(round(hdb / 1.5))
     if "drv" in fx:
-        gdb, char = fx["drv"]
-        assert -12 <= gdb <= 12 and 0 <= char <= 8
+        gdb, typ, tone, odb = fx["drv"]
+        assert -12 <= gdb <= 12 and typ in ("distortion", "tube") and -4 <= tone <= 4 and -8 <= odb <= 8 and odb % 2 == 0
         p[OP_DRV] = 1
         p[OP_DRV_GAIN] = 6 + int(round(gdb / 2))
-        p[OP_DRV_FAT] = char
+        p[OP_DRV_TYPE] = 0 if typ == "distortion" else 1
+        p[OP_DRV_TONE] = (tone + 4 + 5) % 9              # the byte for the index (the default 4 is byte 0)
+        p[OP_DRV_OUT] = (odb // 2 + 4 + 5) % 9
 
 
 def bars(s):

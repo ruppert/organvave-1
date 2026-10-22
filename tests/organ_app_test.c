@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Copyright (C) 2026 Guilherme Ruppert (organvave-1) */
 /* The organ's screens and controls (firmware/src/organ_app.c) on the host: HOME and DRAWBARS drawn and told apart, the
- * drawbar knobs (the four marked bars, SELECT moves them, the range clamped), PRESET over the factory and the user
+ * drawbar controls (SELECT picks a bar, ALGORITHM pulls it, the knobs 1-4 pull the picked bar and the next three, the range
+ * clamped; LOWER shares its page with the pedal's two bars), PRESET over the factory and the user
  * presets (wrapping), SAVE (the first free slot, the name, the patch kept), GLO (MIDI IN, MIDI CHANNEL, ABOUT closes),
- * the octave keys, PERC & VIB, ROTARY and DRIVE (the knobs, SCL; with a directory argument the pages are written as .ppm). */
+ * the octave keys, and the FX pages PERC & VIB, ROTARY, DRIVE, REVERB, DELAY and EQ: SELECT picks a row, ALGORITHM changes it,
+ * the knobs 1-4 go to the first four rows (with a directory argument the pages are written as .ppm). */
 #define CHECK_TAG "organ app"
 #include "editor_host.h"
 
@@ -39,24 +41,33 @@ int main(int argc, char **argv)
     h_draw = frame_hash();
     bad += check("EDIT: DRAWBARS, a different picture", oa_page == 1 && h_draw != h_home);
 
-    /* drawbars: the four marked bars under the knobs, SELECT moves them, the range 0..8 */
-    v0 = org_patch[OP_UB + oa_win];
+    /* drawbars: SELECT picks a bar, ALGORITHM pulls it, the knobs 1-4 pull the picked bar and the three after it, the range 0..8 */
+    v0 = org_patch[OP_UB + oa_sel];
     turn(EN_K1, v0 < 8 ? 1 : -1);
-    bad += check("K1 moves the first marked bar by one step",
-                 org_patch[OP_UB + oa_win] == (v0 < 8 ? v0 + 1 : v0 - 1));
+    bad += check("K1 moves the picked bar by one step",
+                 org_patch[OP_UB + oa_sel] == (v0 < 8 ? v0 + 1 : v0 - 1));
     turn(EN_K1, 20);
-    bad += check("  .. a big turn clamps at 8", org_patch[OP_UB + oa_win] == 8);
+    bad += check("  .. a big turn clamps at 8", org_patch[OP_UB + oa_sel] == 8);
     turn(EN_K1, -20);
-    bad += check("  .. and at 0", org_patch[OP_UB + oa_win] == 0);
-    org_set(OP_UB + 0u, 3u);
-    k = oa_win;
+    bad += check("  .. and at 0", org_patch[OP_UB + oa_sel] == 0);
+    k = oa_sel;
     turn(EN_SELECT, 1);
-    bad += check("SELECT moves the marked bars one bar along", oa_win == (uint8_t)(k + 1u));
-    for (i = 0; i < 4u; i++)                              /* (one bar a detent, as the encoder sends it) */
+    bad += check("SELECT picks the next bar", oa_sel == (uint8_t)(k + 1u));
+    for (i = 0; i < 12u; i++)
+        turn(EN_SELECT, 1);
+    bad += check("  .. to the last of the nine and no further", oa_sel == 8);
+    for (i = 0; i < 12u; i++)                             /* (one bar a detent, as the encoder sends it) */
         turn(EN_SELECT, -1);
-    bad += check("  .. to the top bar and no further", oa_win == 0);
+    bad += check("  .. and back to the first and no further", oa_sel == 0);
+    org_set(OP_UB + 0u, 3u);
+    turn(EN_ALGO, 2);
+    bad += check("ALGORITHM pulls the picked bar (two detents)", org_patch[OP_UB + 0] == 5);
+    turn(EN_ALGO, -20);
+    bad += check("  .. and stops at 0", org_patch[OP_UB + 0] == 0);
+    org_set(OP_UB + 0u, 3u);
+    org_set(OP_UB + 1u, 8u);
     turn(EN_K2, -1);
-    bad += check("K2 is the second marked bar", org_patch[OP_UB + 1] == 7 && org_patch[OP_UB + 0] == 3);
+    bad += check("K2 is the bar after the picked one", org_patch[OP_UB + 1] == 7 && org_patch[OP_UB + 0] == 3);
     for (i = 0; i < 3u; i++) { press(B_HOME); press(B_EDIT); }
     bad += check("HOME, EDIT: the page changes back and again", oa_page == 1);
 
@@ -64,7 +75,7 @@ int main(int argc, char **argv)
     press(B_HOME);
     bad += check("HOME: the first page", oa_page == 0);
     turn(EN_K1, 1);
-    bad += check("  .. a knob there opens DRAWBARS and moves its bar", oa_page == 1 && org_patch[OP_UB + oa_win] > 0);
+    bad += check("  .. a knob there opens DRAWBARS and moves its bar", oa_page == 1 && org_patch[OP_UB + oa_sel] > 0);
     press(B_HOME);
     turn(EN_PRESET, 1);
     bad += check("PRESET +1: the second factory patch, its LEVEL",
@@ -129,24 +140,30 @@ int main(int argc, char **argv)
         h_pv = frame_hash();
         bad += check("  .. a different picture", h_pv != h_home2);
         turn(EN_K1, 1);
-        bad += check("  .. KNOB 1 switches the percussion on", org_patch[OP_PERC] == 1);
-        turn(EN_K1, 1);
-        bad += check("  .. and off again", org_patch[OP_PERC] == 0);
+        bad += check("  .. KNOB 1 clockwise switches the percussion on", org_patch[OP_PERC] == 1);
+        turn(EN_K1, -1);
+        bad += check("  .. counter-clockwise, off again", org_patch[OP_PERC] == 0);
         turn(EN_K2, 1);
         bad += check("  .. KNOB 2: soft", org_patch[OP_PERC_SOFT] == 1);
         turn(EN_K3, 1);
         bad += check("  .. KNOB 3: fast", org_patch[OP_PERC_FAST] == 1);
         turn(EN_K4, 1);
         bad += check("  .. KNOB 4: the 2 2/3' third", org_patch[OP_PERC_SEL] == 1);
+        bad += check("  .. SELECT starts on the first row", oa_row[2] == 0);
+        for (i = 0; i < 4u; i++)
+            turn(EN_SELECT, 1);
+        bad += check("  .. SELECT picks the fifth row, the vibrato", oa_row[2] == 4);
         turn(EN_ALGO, 1);
         bad += check("  .. ALGORITHM: VIB 1", org_patch[OP_VIB] == 1);
         turn(EN_ALGO, 9);
         bad += check("  .. the selector stops at CHO 3", org_patch[OP_VIB] == 6);
-        {
-            uint8_t before = org_patch[OP_UB + oa_win];
-            turn(EN_SELECT, 1);
-            bad += check("  .. SELECT moves no bar here (the page stays)", oa_page == 2 && org_patch[OP_UB + oa_win] == before);
-        }
+        turn(EN_SELECT, 1);
+        bad += check("  .. SELECT past the last row wraps to the first (the page stays)", oa_row[2] == 0 && oa_page == 2);
+        turn(EN_ALGO, 1);
+        bad += check("  .. ALGORITHM on the first row: the percussion on", org_patch[OP_PERC] == 1);
+        turn(EN_ALGO, -1);
+        bad += check("  .. and off", org_patch[OP_PERC] == 0);
+        org_set(OP_PERC_SOFT, 0); org_set(OP_PERC_FAST, 0); org_set(OP_PERC_SEL, 0); org_set(OP_VIB, 6);
         press(B_FX);
         bad += check("FX again: the ROTARY page", oa_page == 3);
         press(B_FX);
@@ -184,17 +201,22 @@ int main(int argc, char **argv)
         press(B_FX); press(B_FX);
         bad += check("FX twice from HOME: the ROTARY page (PERC & VIB first)", oa_page == 3);
         h_r = frame_hash();
-        turn(EN_K1, 1);
-        bad += check("ROTARY: KNOB 1 switches it off", org_patch[OP_ROT] == 0);
+        turn(EN_K1, -1);
+        bad += check("ROTARY: KNOB 1 counter-clockwise switches it off", org_patch[OP_ROT] == 0);
         turn(EN_K1, 1);
         turn(EN_K2, 1);
         bad += check("  .. KNOB 2: LIGHT", org_patch[OP_ROT_MODEL] == 1);
-        turn(EN_K3, -1);
+        turn(EN_K3, 1);
         bad += check("  .. KNOB 3: the sharp horn", org_patch[OP_ROT_HORN] == 1);
+        org_set(OP_ROT_SPEED, 1);
         turn(EN_K4, 1);
         bad += check("  .. KNOB 4: FAST", org_patch[OP_ROT_SPEED] == 2);
         turn(EN_K4, 1);
         bad += check("  .. KNOB 4 stops at FAST", org_patch[OP_ROT_SPEED] == 2);
+        bad += check("  .. twelve rows: the list scrolls", OA_NR[3] == 12 && oa_row[3] == 0 && oa_top[3] == 0);
+        for (i = 0; i < 4u; i++)
+            turn(EN_SELECT, 1);
+        bad += check("  .. SELECT picks the fifth row: the width", oa_row[3] == 4);
         turn(EN_ALGO, -1);
         bad += check("  .. ALGORITHM counter-clockwise narrows the image", org_patch[OP_ROT_MIC] == 1);
         for (i = 0; i < 8u; i++)
@@ -202,23 +224,56 @@ int main(int argc, char **argv)
         bad += check("  .. and stops at mono", org_patch[OP_ROT_MIC] == 6);
         turn(EN_SELECT, 1);
         org_set(OP_ROT_BAL, 4);
-        turn(EN_SELECT, -1);
-        bad += check("  .. SELECT: the horn level", org_patch[OP_ROT_BAL] == 3);
+        turn(EN_ALGO, -1);
+        bad += check("  .. SELECT then ALGORITHM: the horn level", oa_row[3] == 5 && org_patch[OP_ROT_BAL] == 3);
+        {   /* the Leslie's own parameters: the speeds and the ramps, nine steps each, the byte 0 the default */
+            static const uint8_t OPS[6] = {OP_ROT_HSLOW, OP_ROT_HFAST, OP_ROT_DSLOW, OP_ROT_DFAST, OP_ROT_HRAMP, OP_ROT_DRAMP};
+            uint32_t j;
+            for (j = 0; j < 6u; j++) {
+                turn(EN_SELECT, 1);
+                bad += check("  .. SELECT picks the next Leslie parameter", oa_row[3] == 6u + j);
+                bad += check("  .. it starts at the default (byte 0)", org_patch[OPS[j]] == 0);
+                turn(EN_ALGO, 1);
+                bad += check("  .. one step up (byte 1, index 5)", org_patch[OPS[j]] == 1 && org_c9(org_patch[OPS[j]]) == 5);
+                turn(EN_ALGO, 40);
+                bad += check("  .. stops at the top (index 8)", org_c9(org_patch[OPS[j]]) == 8);
+                turn(EN_ALGO, -40);
+                bad += check("  .. and at the bottom (index 0)", org_c9(org_patch[OPS[j]]) == 0);
+                org_set(OPS[j], 0);
+            }
+            (void)frame_hash();
+            bad += check("  .. the list scrolled to keep the pick in view", oa_top[3] + OA_VIS > oa_row[3] && oa_top[3] <= oa_row[3] && oa_top[3] > 0);
+            turn(EN_SELECT, 1);
+            (void)frame_hash();
+            bad += check("  .. past the last row it wraps to the first", oa_row[3] == 0 && oa_top[3] == 0);
+        }
         bad += check("  .. a different picture from the first", frame_hash() != h_r);
         press(B_FX);
         bad += check("FX: the DRIVE page", oa_page == 4);
         h_d = frame_hash();
         turn(EN_K1, 1);
         bad += check("DRIVE: KNOB 1 switches it on", org_patch[OP_DRV] == 1);
-        org_set(OP_DRV_GAIN, 6);
+        bad += check("  .. five rows, no character", OA_NR[4] == 5 && !strcmp(OA_LB[4][1], "TYPE") && !strcmp(OA_LB[4][2], "GAIN") &&
+                     !strcmp(OA_LB[4][3], "TONE") && !strcmp(OA_LB[4][4], "OUTPUT"));
         turn(EN_K2, 1);
-        bad += check("  .. KNOB 2: the gain up a step", org_patch[OP_DRV_GAIN] == 7);
+        bad += check("  .. KNOB 2: the type TUBE", org_patch[OP_DRV_TYPE] == 1);
+        turn(EN_K2, -1);
+        bad += check("  .. and DISTORTION", org_patch[OP_DRV_TYPE] == 0);
+        org_set(OP_DRV_GAIN, 6);
+        turn(EN_K3, 1);
+        bad += check("  .. KNOB 3: the gain up a step", org_patch[OP_DRV_GAIN] == 7);
         for (i = 0; i < 14u; i++)
-            turn(EN_K2, -1);
+            turn(EN_K3, -1);
         bad += check("  .. and down to the bottom", org_patch[OP_DRV_GAIN] == 0);
-        turn(EN_K3, 3);
-        bad += check("  .. KNOB 3: the character", org_patch[OP_DRV_FAT] == 1);
+        turn(EN_K4, 1);
+        bad += check("  .. KNOB 4: the tone up a step (byte 1, index 5)", org_patch[OP_DRV_TONE] == 1 && org_c9(org_patch[OP_DRV_TONE]) == 5);
+        for (i = 0; i < 4u; i++)
+            turn(EN_SELECT, 1);
+        bad += check("  .. SELECT picks the fifth row, the output", oa_row[4] == 4);
+        turn(EN_ALGO, -2);
+        bad += check("  .. ALGORITHM: the output down two steps (-4 dB, index 2)", org_c9(org_patch[OP_DRV_OUT]) == 2);
         bad += check("  .. a different picture", frame_hash() != h_d);
+        org_set(OP_DRV_TONE, 0); org_set(OP_DRV_OUT, 0); org_set(OP_DRV_GAIN, 6);
         /* EDIT walks the manuals' drawbars: UPPER, LOWER, PEDAL (the last two play over MIDI) */
         {
             uint32_t h_up, h_lo;
@@ -227,22 +282,36 @@ int main(int argc, char **argv)
             bad += check("EDIT: the DRAWBARS page, the upper manual", oa_page == 1 && oa_man == 0);
             h_up = frame_hash();
             press(B_EDIT);
-            bad += check("EDIT again: the lower manual (a different picture)", oa_page == 1 && oa_man == 1 && frame_hash() != h_up);
+            bad += check("EDIT again: the lower manual with the pedal's two bars (a different picture)", oa_page == 1 && oa_man == 1 && frame_hash() != h_up);
             h_lo = frame_hash();
-            org_set(OP_LB + oa_win, 3);
-            org_set(OP_UB + oa_win, 8);
+            bad += check("  .. eleven bars: SELECT picks the pedal's 16' first", oa_sel == 0);
+            org_set(OP_PB + 0, 3);
+            org_set(OP_PB + 2, 3);
+            org_set(OP_LB + 0, 3);
+            org_set(OP_UB + 0, 8);
             turn(EN_K1, 1);
-            bad += check("  .. the knobs pull the lower bars (the marked window)", org_patch[OP_LB + oa_win] == 4 && org_patch[OP_UB + oa_win] == 8);
+            turn(EN_K2, 1);
+            turn(EN_K3, 1);
+            bad += check("  .. the knobs pull the pedal's 16' and 8', then the lower's 16'",
+                         org_patch[OP_PB + 0] == 4 && org_patch[OP_PB + 2] == 4 && org_patch[OP_LB + 0] == 4 && org_patch[OP_UB + 0] == 8);
+            bad += check("  .. the other pedal bytes are not touched", org_patch[OP_PB + 1] == 0 && org_patch[OP_PB + 3] == 0 && org_patch[OP_PB + 8] == 0);
             bad += check("  .. and the picture follows", frame_hash() != h_lo);
+            for (i = 0; i < 20u; i++)
+                turn(EN_SELECT, 1);
+            bad += check("  .. SELECT runs to the lower's 1' (the eleventh bar) and stops", oa_sel == 10);
+            org_set(OP_LB + 8, 2);
+            turn(EN_ALGO, 3);
+            bad += check("  .. ALGORITHM pulls it", org_patch[OP_LB + 8] == 5);
+            for (i = 0; i < 20u; i++)
+                turn(EN_SELECT, -1);
+            turn(EN_SELECT, 1);
+            turn(EN_ALGO, -1);
+            bad += check("  .. the pedal's 8' is the second bar", oa_sel == 1 && org_patch[OP_PB + 2] == 3);
             press(B_EDIT);
-            bad += check("EDIT again: the pedals", oa_man == 2);
-            org_set(OP_PB + oa_win, 5);
-            turn(EN_K1, -1);
-            bad += check("  .. the knobs pull the pedal bars", org_patch[OP_PB + oa_win] == 4);
-            press(B_EDIT);
-            bad += check("EDIT again: back to the upper manual", oa_man == 0 && oa_page == 1);
-            press(B_EDIT); press(B_HOME); press(B_EDIT);
+            bad += check("EDIT again: back to the upper manual (no pedal page)", oa_man == 0 && oa_page == 1 && oa_sel == 0);
+            press(B_EDIT); press(B_EDIT); press(B_HOME); press(B_EDIT);
             bad += check("  .. and from HOME it opens the upper manual", oa_man == 0);
+            org_set(OP_PB + 0, 0); org_set(OP_PB + 2, 0); org_set(OP_LB + 0, 0); org_set(OP_LB + 8, 0);
         }
         /* REVERB and DELAY (0.4.0): the send is the part's, the rest the instrument's globals */
         {
@@ -279,11 +348,14 @@ int main(int argc, char **argv)
             turn(EN_K2, -1);
             turn(EN_K3, 1);
             turn(EN_K4, 1);
+            for (i = 0; i < 4u; i++)
+                turn(EN_SELECT, 1);
             turn(EN_ALGO, -1);
             turn(EN_SELECT, 1);
-            bad += check("DELAY: send, type (wraps back to REVERSE), time, feedback, colour, mix",
-                         TSEL->p[P_DLY] == 8 && song.g[G_DTIME] == 6 && song.g[G_DRREV] == 72 && song.g[G_DFDBK] == 68 &&
-                         song.g[G_DCOLOR] == 56 && song.g[G_DMIX] == 72);
+            turn(EN_ALGO, 1);
+            bad += check("DELAY: send (two detents), type (wraps back to REVERSE), time, feedback; SELECT then ALGORITHM: colour, mix",
+                         TSEL->p[P_DLY] == 16 && song.g[G_DTIME] == 6 && song.g[G_DRREV] == 72 && song.g[G_DFDBK] == 68 &&
+                         song.g[G_DCOLOR] == 56 && song.g[G_DMIX] == 72 && oa_row[6] == 5);
             for (i = 0; i < 30u; i++)
                 turn(EN_K4, 1);
             bad += check("  .. the feedback stops at 120", song.g[G_DFDBK] == 120);
@@ -312,6 +384,9 @@ int main(int argc, char **argv)
             bad += check("  .. KNOB 3: MID stops at +12 dB", eq_db(org_patch[OP_EQ_MID]) == 12);
             turn(EN_K4, 1);
             bad += check("  .. KNOB 4: HIGH up 1 dB", eq_db(org_patch[OP_EQ_HIGH]) == 1);
+            for (i = 0; i < 4u; i++)
+                turn(EN_SELECT, 1);
+            bad += check("  .. SELECT picks the fifth row, the MID's frequency", oa_row[7] == 4);
             turn(EN_ALGO, 1);
             bad += check("  .. ALGORITHM: the MID's frequency 900 -> 1280 Hz", EQ_FREQ_HZ[eq_fidx(org_patch[OP_EQ_FREQ])] == 1280);
             for (i = 0; i < 20u; i++)
@@ -325,20 +400,22 @@ int main(int argc, char **argv)
             oa_page = 4;
         }
         if (shot_dir) {
-            static const char *const N[8] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq"};
+            static const char *const N[9] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq", "lower"};
             uint32_t pg;
             org_set(OP_ROT, 1);
             org_set(OP_DRV, 1);
             oa_msg_until = 0;
             oa_pp_until = 0;
-            for (pg = 0; pg < 8u; pg++) {
+            for (pg = 0; pg < 9u; pg++) {
                 char path[200];
                 FILE *f;
                 if (pg == 7u) {                               /* (the EQ's shot shows something set) */
                     org_set(OP_EQ, 1); org_set(OP_EQ_LOW, eq_byte(5)); org_set(OP_EQ_MID, eq_byte(-3)); org_set(OP_EQ_FREQ, eq_fbyte(7));
                     org_set(OP_EQ_HIGH, eq_byte(2));
                 }
-                oa_page = (uint8_t)pg;
+                oa_page = (uint8_t)(pg == 8u ? 1u : pg);
+                oa_man = (uint8_t)(pg == 8u);
+                oa_sel = (uint8_t)(pg == 8u ? 3u : 0u);
                 (void)frame_hash();
                 snprintf(path, sizeof path, "%s/%s.ppm", shot_dir, N[pg]);
                 f = fopen(path, "wb");

@@ -1044,12 +1044,23 @@ setBfree's whirl, 1 LIGHT, the cheaper model; `OP_ROT_SPEED` 36: 0 stop, 1 slow,
 1 the sharp one; `OP_ROT_MIC` 38: 0..6, the mics' angle, 180 degrees minus 30 a step, so 0 is the widest image and 6 the
 narrowest; `OP_ROT_BAL` 39: 0..8, the horn's level against the drum, 1.5 dB a step around 4, which is even) and the drive
 (`OP_DRV` 40: 0 off, 1 on; `OP_DRV_GAIN` 41: 0..12, the input gain, 2 dB a step around 6, setBfree's default of 3.5675;
-`OP_DRV_FAT` 42: 0..8, the character: 0 is setBfree's default, higher values put more bass into the curve and then more
-out of it) and, from 0.5.0, the equaliser (`OP_EQ` 43: 0 off, 1 on; `OP_EQ_LOW` 44, `OP_EQ_MID` 45, `OP_EQ_HIGH` 47: 0..24, the
+`OP_DRV_FAT` 42: unused since 0.9.2, see below) and, from 0.5.0, the equaliser (`OP_EQ` 43: 0 off, 1 on; `OP_EQ_LOW` 44, `OP_EQ_MID` 45, `OP_EQ_HIGH` 47: 0..24, the
 gain of the 120 Hz low shelf, the peak and the 4 kHz high shelf, coded so that **0 is flat**: a byte s is s dB for 0..12 and
 s - 25 dB for 13..24, so 13 is -12 dB and 24 is -1 dB; `OP_EQ_FREQ` 46: 0..11, the peak's frequency, the index (f + 5) mod 12 of
-160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200 Hz, so 0 is 900 Hz). The rest are reserved, 0. The lower and pedal
+160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200 Hz, so 0 is 900 Hz). The lower and pedal
 bars are played over MIDI since 0.4.0 (channel 2 and 3, or the GLO channel + 1 and + 2).
+
+From 0.9.2: `OP_DRV_FAT` 42 (the drive's character) is gone: the byte is stored and ignored, and the drive uses setBfree's
+default character (a stored patch with a character other than 0 sounds a little different). The drive has a type, a tone and an
+output level: `OP_DRV_TYPE` 48: 0 DISTORTION (setBfree's preamp, what the drive was), 1 TUBE (a valve's soft saturation, gentler);
+`OP_DRV_TONE` 49 and `OP_DRV_OUT` 50: 0..8, and the Leslie's own settings, `OP_ROT_HSLOW` 51, `OP_ROT_HFAST` 52, `OP_ROT_DSLOW` 53,
+`OP_ROT_DFAST` 54 (the horn's and the drum's slow and fast speeds), `OP_ROT_HRAMP` 55 and `OP_ROT_DRAMP` 56 (how long each rotor
+takes to speed up; it slows down 2 times (horn) and 0.33 times (drum) of that as setBfree does): all these seven are nine-step
+bytes that **code the default as 0**, so that a patch from before is the default: a byte s is the index (s + 4) mod 9, 0..8,
+and the default is the index 4 (a byte for an index i is (i + 5) mod 9). TONE: index 0 the darkest (a low-pass at 1 kHz), 4 flat,
+8 the brightest (+8 dB of treble); OUT: 2 dB a step, index 4 is 0 dB (-8 .. +8 dB); the speeds 12 % a step around setBfree's
+(horn 40.3 and 423 rpm, drum 36 and 357 rpm); the ramps x1.4 a step in time around setBfree's (horn 0.161 s, drum 4.127 s;
+higher is slower). `ORG_PUT` carries at most 48 bytes a frame: the editor sends the 57 used bytes in two. Bytes 57..63 are reserved.
 
 Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 0.1.0 (a user preset, the autosave, a
 factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Version 0.3.0 gave meaning to

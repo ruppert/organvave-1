@@ -429,14 +429,27 @@ enum {
     OP_ROT_BAL = 39,            /* horn level against the drum: 0..8, 4 even (1.5 dB a step, -6 .. +6 dB) */
     OP_DRV = 40,                /* drive (the preamp): 0 off, 1 on */
     OP_DRV_GAIN = 41,           /* its input gain: 0..12, 2 dB a step, 6 setBfree's default (3.5675) */
-    OP_DRV_FAT = 42,            /* its character: 0..8, 0 setBfree's default; higher: more bass into, then out of, the curve */
+    OP_DRV_FAT = 42,            /* unused since 0.9.2 (the character went); stored 0..8 in older patches, ignored */
     OP_EQ = 43,                 /* the equaliser (version 0.5.0; 0 in older patches): 0 off, 1 on */
     OP_EQ_LOW = 44,             /* LOW (120 Hz shelf), -12 .. +12 dB: 0 flat, 1..12 dB up, 13..24 dB down (s - 25) */
     OP_EQ_MID = 45,             /* MID (the peak), the same coding */
     OP_EQ_FREQ = 46,            /* the peak's frequency, 0..11: 0 900 Hz, then 1280 Hz .. 7.2 kHz, 7 is 160 Hz .. 11 is 640 Hz */
     OP_EQ_HIGH = 47,            /* HIGH (4 kHz shelf), the same coding as LOW */
-    OP_NUM                      /* (48..63: reserved: 0 until then) */
+    OP_DRV_TYPE = 48,           /* the drive's type (version 0.9.2; 0 in older patches): 0 DISTORTION (setBfree's preamp), 1 TUBE (a valve's soft saturation) */
+    OP_DRV_TONE = 49,           /* its tone: 0..8 "zero is the default" (c9: index (s + 4) % 9, 4 flat, 0 dark .. 8 bright) */
+    OP_DRV_OUT = 50,            /* its output level, the same coding: index 4 is 0 dB, 2 dB a step (-8 .. +8 dB) */
+    OP_ROT_HSLOW = 51,          /* the rotary's horn SLOW speed (version 0.9.2; 0 in older patches), c9: index 4 is 40 rpm, 12 % a step */
+    OP_ROT_HFAST = 52,          /* horn FAST speed, c9: index 4 is 423 rpm */
+    OP_ROT_DSLOW = 53,          /* drum SLOW speed, c9: index 4 is 36 rpm */
+    OP_ROT_DFAST = 54,          /* drum FAST speed, c9: index 4 is 357 rpm */
+    OP_ROT_HRAMP = 55,          /* horn acceleration time (and deceleration, twice it), c9: index 4 is 0.16 s, x1.4 a step (higher: slower) */
+    OP_ROT_DRAMP = 56,          /* drum acceleration time, c9: index 4 is 4.1 s, x1.4 a step */
+    OP_NUM                      /* (57..63: reserved: 0 until then) */
 };
+/* the "zero is the default" coding of the 9-step bytes (the default in the middle, so a patch of zeros is the default): the
+ * index 0..8 the panel shows, and the byte for an index */
+static inline uint32_t org_c9(uint32_t s) { return (s + 4u) % 9u; }
+static inline uint32_t org_b9(uint32_t idx) { return (idx + 5u) % 9u; }
 static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
 static volatile uint8_t org_pgen;
 static uint8_t org_pgen_seen = 0xFF;
@@ -455,8 +468,10 @@ static uint32_t org_pmax(uint32_t i)
         return 1u;
     if (i == OP_ROT_SPEED)
         return 2u;
-    if (i == OP_ROT_BAL || i == OP_DRV_FAT)
+    if (i == OP_ROT_BAL || i == OP_DRV_FAT || (i >= OP_DRV_TONE && i <= OP_ROT_DRAMP))
         return 8u;
+    if (i == OP_DRV_TYPE)
+        return 1u;
     if (i == OP_DRV_GAIN)
         return 12u;
     if (i == OP_EQ)

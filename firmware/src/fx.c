@@ -1078,6 +1078,17 @@ static const uint16_t DRV_IG[13] = {3670, 4621, 5817, 7324, 9220, 11607, 14612, 
 static const int32_t DRV_FB[9] = {9766017, 9766017, 9766017, 13150415, 15099494, 15099494, 15099494, 15099494, 15099494};
 static const int32_t DRV_FB2[9] = {16760439, 13376041, 9766017, 9766017, 9766017, 11431356, 13207717, 14984078, 16760439};
 static const uint16_t ROT_BAL_HL[9] = {5734, 6820, 8110, 9644, 11469, 13639, 16220, 19288, 22938};
+/* the rotary's speed and ramp scales (the bytes OP_ROT_HSLOW .. OP_ROT_DRAMP, index 0..8, 4 the default): 1.12^(i-4) and 1.4^(i-4), Q8 */
+static const uint16_t ROT_SPF[9] = {163, 182, 204, 229, 256, 287, 321, 360, 403};
+static const uint16_t ROT_RTF[9] = {67, 93, 131, 183, 256, 358, 502, 702, 983};
+/* rot_k (the ramp's step per block, Q30) of the four base times (horn up 0.161 s, horn down 0.321 s, drum up 4.127 s, drum down
+ * 1.371 s) times ROT_RTF: a table, because rot_k divides in 64 bits (tests/effects_test.c checks every entry against it) */
+static const int32_t ROT_KT[4][9] = {
+    {18332593, 13238941, 9415571, 6748527, 4828442, 3454963, 2465039, 1763321, 1259556},
+    {9234235, 6660607, 4732797, 3390081, 2424462, 1734253, 1237066, 884770, 631924},
+    {721101, 519552, 368868, 264066, 188773, 134992, 96270, 68844, 49164},
+    {2169204, 1563201, 1109987, 794698, 568144, 406302, 289768, 207222, 147989},
+};
 static uint8_t fxo_seen = 0xFF;
 /* CPU overload (audio.c shed_voice): CPU_HIGH_BLOCKS blocks (2 s) of "CPU HIGH" per request, during which the delay is off and
  * the oldest key is let go (eng_organ.c org_fragment). The rotary and the drive are left as they are */
@@ -1095,14 +1106,26 @@ static void fx_organ_apply(void)
     fxo_seen = org_pgen;
     rot_on = org_patch[OP_ROT];
     rot_model_req = org_patch[OP_ROT_MODEL];
-    sp = org_patch[OP_ROT_SPEED];       /* setBfree's speeds: horn 0.672 / 7.056 Hz, drum 0.600 / 5.955 Hz */
-    rot_target(&rot_st, sp ? rot_inc(sp == 1u ? 672u : 7056u) : 0u, sp ? rot_inc(sp == 1u ? 600u : 5955u) : 0u);
+    sp = org_patch[OP_ROT_SPEED];       /* setBfree's speeds: horn 0.672 / 7.056 Hz, drum 0.600 / 5.955 Hz, each scaled by its byte (12 % a step) */
+    rot_target(&rot_st,
+               sp ? rot_inc(((sp == 1u ? 672u : 7056u) * ROT_SPF[org_c9(org_patch[sp == 1u ? OP_ROT_HSLOW : OP_ROT_HFAST])]) >> 8) : 0u,
+               sp ? rot_inc(((sp == 1u ? 600u : 5955u) * ROT_SPF[org_c9(org_patch[sp == 1u ? OP_ROT_DSLOW : OP_ROT_DFAST])]) >> 8) : 0u);
+    {   /* the ramps: setBfree's horn 0.161 s up / 0.321 s down, drum 4.127 s / 1.371 s, each scaled (x1.4 a step): ROT_KT, no division here */
+        uint32_t hi = org_c9(org_patch[OP_ROT_HRAMP]), di = org_c9(org_patch[OP_ROT_DRAMP]);
+        rot_st.k_ha = ROT_KT[0][hi];
+        rot_st.k_hd = ROT_KT[1][hi];
+        rot_st.k_da = ROT_KT[2][di];
+        rot_st.k_dd = ROT_KT[3][di];
+    }
     rot_st.hset = org_patch[OP_ROT_HORN];
     rot_mic(&rot_st, 180u - 30u * org_patch[OP_ROT_MIC]);
     rot_st.hl = ROT_BAL_HL[org_patch[OP_ROT_BAL] % 9u];
     g = org_patch[OP_DRV_GAIN] % 13u;
-    f = org_patch[OP_DRV_FAT] % 9u;
+    f = 0;                              /* (the character went in 0.9.2: setBfree's own) */
     dr_set(&dr_st, DRV_IG[g], DRV_OG, DRV_FB[f], DRV_FB2[f], 10425000, 35043, 157700, 16626000);
+    if (dr_st.type != (int32_t)(org_patch[OP_DRV_TYPE] ? 1 : 0))
+        dr_clear(&dr_st);               /* (the other curve starts from silence) */
+    dr_user(&dr_st, org_patch[OP_DRV_TYPE], org_c9(org_patch[OP_DRV_TONE]), org_c9(org_patch[OP_DRV_OUT]));
     dr_on = org_patch[OP_DRV];
     eq_set(&eq_st, org_patch[OP_EQ_LOW], org_patch[OP_EQ_MID], org_patch[OP_EQ_FREQ], org_patch[OP_EQ_HIGH]);
     eq_on = org_patch[OP_EQ];
@@ -1113,6 +1136,7 @@ static void fx_organ_apply(void)
 static int32_t dr_w, rot_w, eq_w;                             /* Q15: how much of the drive / the rotary is in the mix */
 #define ROT_IDLE_BLOCKS 1500u                           /* quiet blocks (32 samples) before the cabinet is emptied */
 static uint32_t rot_idle, eq_idle;
+static int32_t rot_dc;                                  /* the rotary input's DC estimate (x 1024) */
 static inline int32_t fx_lerp(int32_t a, int32_t b, int32_t w)      /* a + (b - a) w, w Q15; |b - a| < 2^20 */
 {
     return a + ((((b - a) >> 2) * (w >> 3)) >> 10);
@@ -1176,7 +1200,7 @@ static void mix_block(int32_t *out, uint32_t n)
             int32_t v = (mix_l[i] + mix_r[i]) >> 2;
             m[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
         }
-        dr_run(&dr_st, m, m, n);
+        dr_run_ex(&dr_st, m, m, n);
         dr_w += dr_on ? FX_FADE : -FX_FADE;
         dr_w = dr_w < 0 ? 0 : dr_w > 32768 ? 32768 : dr_w;
         for (i = 0; i < n; i++) {
@@ -1187,6 +1211,7 @@ static void mix_block(int32_t *out, uint32_t n)
     if (rot_on || rot_w) {                              /* the rotary: the mono sum of the mix and the reverb's return, in stereo */
         int32_t xin[CTL];
         if (rot_on && !rot_w) {                         /* coming in: the cabinet starts empty */
+            rot_dc = 0;
             rot_flush(&rot_st);
             lt_init(&lt_st, &rot_st);
             rot_mix.fade = 0;
@@ -1195,6 +1220,8 @@ static void mix_block(int32_t *out, uint32_t n)
         for (i = 0; i < n; i++) {
             int32_t a;
             int32_t v = ((mix_l[i] + mix_r[i]) >> 1) + wet[i];  /* (MASTER after the cabinet: at 0 it is silent, whatever the cabinet's states hold) */
+            v -= rot_dc >> 10;                          /* the reverb's return holds a constant (-41 / 32768 in its tail): the rotors would turn it */
+            rot_dc += v;                                /* into a tone (a one-pole high-pass, 7 Hz) */
             a = v < 0 ? -v : v;
             pk = a > pk ? a : pk;
             xin[i] = v >> 2;                            /* the cabinet takes at most 1.0 (32767): a chord is several times that, and the dry */
@@ -1207,6 +1234,9 @@ static void mix_block(int32_t *out, uint32_t n)
             rot_flush(&rot_st);
             lt_init(&lt_st, &rot_st);
         }
+        if (rot_idle >= ROT_IDLE_BLOCKS)                /* (and the input stays zero while it is that quiet: v >> 2 of a faint, */
+            for (i = 0; i < n; i++)                     /* mostly negative remainder is a constant -1 the cabinet would carry to the output x4) */
+                xin[i] = 0;
         if (rot_model_req != rot_mix.model)
             rotary_model(&rot_mix, &rot_st, &lt_st, rot_model_req);
         rotary_run(&rot_mix, &rot_st, &lt_st, xin, ol, orr, n);

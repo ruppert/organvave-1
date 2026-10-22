@@ -121,15 +121,43 @@
         <input type="range" id="rbal" min="0" max="8" step="1"> <output id="rbalo"></output>
       </label>
     </div>
+    <div class="set row">
+      <label>Horn slow speed
+        <input type="range" id="rhs" min="0" max="8" step="1"> <output id="rhso"></output>
+      </label>
+      <label>Horn fast speed
+        <input type="range" id="rhf" min="0" max="8" step="1"> <output id="rhfo"></output>
+      </label>
+      <label>Drum slow speed
+        <input type="range" id="rds" min="0" max="8" step="1"> <output id="rdso"></output>
+      </label>
+      <label>Drum fast speed
+        <input type="range" id="rdf" min="0" max="8" step="1"> <output id="rdfo"></output>
+      </label>
+    </div>
+    <div class="set row">
+      <label>Horn ramp (acceleration time)
+        <input type="range" id="rhr" min="0" max="8" step="1"> <output id="rhro"></output>
+      </label>
+      <label>Drum ramp (acceleration time)
+        <input type="range" id="rdr" min="0" max="8" step="1"> <output id="rdro"></output>
+      </label>
+    </div>
 
-    <div class="set"><h3>Drive (0.3.0)</h3></div>
+    <div class="set"><h3>Drive (0.3.0, types and tone 0.9.2)</h3></div>
     <div class="set row">
       <label class="chk"><input type="checkbox" id="drv"> Drive on</label>
+      <label>Type
+        <select id="dtype"><option value="0">Distortion (setBfree's preamp)</option><option value="1">Tube drive (valve, gentle)</option></select>
+      </label>
       <label>Gain
         <input type="range" id="dgain" min="0" max="12" step="1"> <output id="dgaino"></output>
       </label>
-      <label>Character
-        <input type="range" id="dfat" min="0" max="8" step="1"> <output id="dfato"></output>
+      <label>Tone
+        <input type="range" id="dtone" min="0" max="8" step="1"> <output id="dtoneo"></output>
+      </label>
+      <label>Output
+        <input type="range" id="dout" min="0" max="8" step="1"> <output id="douto"></output>
       </label>
     </div>
 
@@ -157,12 +185,22 @@
 const CMD = { INFO: 1, ORG_GET: 85, ORG_PUT: 86 };
 const ORG_PSIZE = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, OP_PERC = 29, OP_PERC_SOFT = 30,
       OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, OP_ROT = 34, OP_ROT_MODEL = 35, OP_ROT_SPEED = 36,
-      OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_DRV_FAT = 42, OP_EQ = 43, OP_EQ_LOW = 44, OP_EQ_MID = 45, OP_EQ_FREQ = 46, OP_EQ_HIGH = 47, PUT_MAX = 48;
+      OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_EQ = 43, OP_EQ_LOW = 44, OP_EQ_MID = 45, OP_EQ_FREQ = 46, OP_EQ_HIGH = 47,
+      OP_DRV_TYPE = 48, OP_DRV_TONE = 49, OP_DRV_OUT = 50, OP_ROT_HSLOW = 51, OP_ROT_HFAST = 52, OP_ROT_DSLOW = 53, OP_ROT_DFAST = 54,
+      OP_ROT_HRAMP = 55, OP_ROT_DRAMP = 56, PUT_MAX = 48;
 // the equaliser's bytes: zero is flat. A gain byte s is s dB up to 12 and s - 25 above; the frequency byte f is the index (f + 5) % 12 of
 // this list (0 is 900 Hz)
 const EQ_HZ = [160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200];
 const eqDb = (s) => (s <= 12 ? s : s - 25), eqByte = (db) => (db >= 0 ? db : db + 25);
 const eqFidx = (f) => (f + 5) % 12, eqFbyte = (i) => (i + 7) % 12;
+// the nine-step bytes (0.9.2): zero is the default, which sits in the middle. The index the sliders show (0..8, 4 the default) is
+// (byte + 4) % 9, and a byte is (index + 5) % 9. The Leslie's speeds go 12 % a step and its ramps x1.4 a step (the firmware's tables)
+const c9 = (b) => (b + 4) % 9, b9 = (i) => (i + 5) % 9;
+const ROT_SPF = [163, 182, 204, 229, 256, 287, 321, 360, 403], ROT_RTF = [67, 93, 131, 183, 256, 358, 502, 702, 983];
+const SPEEDS = [["rhs", OP_ROT_HSLOW, 672], ["rhf", OP_ROT_HFAST, 7056], ["rds", OP_ROT_DSLOW, 600], ["rdf", OP_ROT_DFAST, 5955]];
+const RAMPS = [["rhr", OP_ROT_HRAMP, 161000, 2], ["rdr", OP_ROT_DRAMP, 4127000, 1]];
+const speedText = (i, base) => Math.floor(((base * ROT_SPF[i]) >> 8) * 3 / 50) + " rpm";
+const rampText = (i, base, dec) => ((((base >> 4) * ROT_RTF[i]) >> 4) / 1e6).toFixed(dec) + " s";
 const FOOT = ["16′", "5⅓′", "8′", "4′", "2⅔′", "2′", "1⅗′", "1⅓′", "1′"];
 const $ = (id) => document.getElementById(id);
 
@@ -305,13 +343,27 @@ function showPatch() {
   $("rbal").value = patch[OP_ROT_BAL] ?? 0; $("rbalo").textContent = balText(patch[OP_ROT_BAL] ?? 0);
   $("drv").checked = !!patch[OP_DRV];
   $("dgain").value = patch[OP_DRV_GAIN] ?? 0; $("dgaino").textContent = gainText(patch[OP_DRV_GAIN] ?? 0);
-  $("dfat").value = patch[OP_DRV_FAT] ?? 0; $("dfato").textContent = String(patch[OP_DRV_FAT] ?? 0);
+  $("dtype").value = String(patch[OP_DRV_TYPE] ?? 0);
+  $("dtone").value = c9(patch[OP_DRV_TONE] ?? 0); $("dout").value = c9(patch[OP_DRV_OUT] ?? 0);
+  for (const [id, op, base] of SPEEDS) $(id).value = c9(patch[op] ?? 0);
+  for (const [id, op] of RAMPS) $(id).value = c9(patch[op] ?? 0);
+  words();
   $("eq").checked = !!patch[OP_EQ];
   for (const [id, op] of [["eqlow", OP_EQ_LOW], ["eqmid", OP_EQ_MID], ["eqhigh", OP_EQ_HIGH]]) {
     const db = eqDb(patch[op] ?? 0);
     $(id).value = db; $(id + "o").textContent = dbText(db);
   }
   $("eqfreq").value = String(eqFidx(patch[OP_EQ_FREQ] ?? 0));
+}
+// the sliders' texts
+function words() {
+  $("rbalo").textContent = balText(Number($("rbal").value));
+  $("dgaino").textContent = gainText(Number($("dgain").value));
+  const t = Number($("dtone").value) - 4;
+  $("dtoneo").textContent = t === 0 ? "flat" : t < 0 ? "dark " + t : "bright +" + t;
+  $("douto").textContent = dbText((Number($("dout").value) - 4) * 2);
+  for (const [id, , base] of SPEEDS) $(id + "o").textContent = speedText(Number($(id).value), base);
+  for (const [id, , base, dec] of RAMPS) $(id + "o").textContent = rampText(Number($(id).value), base, dec);
 }
 function dbText(d) { return (d > 0 ? "+" : "") + d + " dB"; }
 // the sliders' words: the horn level 1.5 dB a step around 4, the drive's gain 2 dB a step around 6 (setBfree's default)
@@ -336,10 +388,11 @@ function fromControls() {
   patch[OP_ROT_BAL] = Number($("rbal").value);
   patch[OP_DRV] = $("drv").checked ? 1 : 0;
   patch[OP_DRV_GAIN] = Number($("dgain").value);
-  patch[OP_DRV_FAT] = Number($("dfat").value);
-  $("rbalo").textContent = balText(patch[OP_ROT_BAL]);
-  $("dgaino").textContent = gainText(patch[OP_DRV_GAIN]);
-  $("dfato").textContent = String(patch[OP_DRV_FAT]);
+  patch[OP_DRV_TYPE] = Number($("dtype").value);
+  patch[OP_DRV_TONE] = b9(Number($("dtone").value));
+  patch[OP_DRV_OUT] = b9(Number($("dout").value));
+  for (const [id, op] of SPEEDS.concat(RAMPS)) patch[op] = b9(Number($(id).value));
+  words();
   patch[OP_EQ] = $("eq").checked ? 1 : 0;
   patch[OP_EQ_LOW] = eqByte(Number($("eqlow").value));
   patch[OP_EQ_MID] = eqByte(Number($("eqmid").value));
@@ -348,15 +401,18 @@ function fromControls() {
   for (const id of ["eqlow", "eqmid", "eqhigh"]) $(id + "o").textContent = dbText(Number($(id).value));
 }
 
-// ORG_PUT: target 0, offset, count, count bytes (count <= 48). One write of the 48 used bytes; reply: target, offset, rc
+// ORG_PUT: target 0, offset, count, count bytes (count <= 48). Two writes for the 57 used bytes; reply: target, offset, rc
 async function sendPatch() {
   if (busy || !dev || !patch) return;
   busy = true; setEnabled(true);
   try {
     fromControls();
-    const used = OP_EQ_HIGH + 1;
-    const r = await request(CMD.ORG_PUT, [0, 0, used, ...patch.slice(0, used)]);
-    if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
+    const used = OP_ROT_DRAMP + 1;                   // 57 bytes: two frames (a frame carries at most 48)
+    for (let off = 0; off < used; off += PUT_MAX) {
+      const n = Math.min(PUT_MAX, used - off);
+      const r = await request(CMD.ORG_PUT, [0, off, n, ...patch.slice(off, off + n)]);
+      if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
+    }
     say("Sent. The instrument plays this patch now; it is not saved to flash.", "ok");
   } catch (err) { say("Send failed: " + err.message, "bad"); }
   finally { busy = false; setEnabled(!!dev); }
@@ -370,8 +426,8 @@ $("send").onclick = sendPatch;
 $("source").onchange = readPatch;
 $("temp").onchange = () => { fromControls(); };
 $("xtalk").onchange = () => { fromControls(); };
-for (const id of ["perc", "psoft", "pfast", "psel", "vib", "rot", "rmodel", "rspeed", "rhorn", "rmic", "drv", "eq", "eqfreq"]) $(id).onchange = () => { fromControls(); };
-for (const id of ["rbal", "dgain", "dfat", "eqlow", "eqmid", "eqhigh"]) $(id).oninput = () => { fromControls(); };
+for (const id of ["perc", "psoft", "pfast", "psel", "vib", "rot", "rmodel", "rspeed", "rhorn", "rmic", "drv", "dtype", "eq", "eqfreq"]) $(id).onchange = () => { fromControls(); };
+for (const id of ["rbal", "dgain", "dtone", "dout", "rhs", "rhf", "rds", "rdf", "rhr", "rdr", "eqlow", "eqmid", "eqhigh"]) $(id).oninput = () => { fromControls(); };
 if (!navigator.requestMIDIAccess) say("This browser has no Web MIDI. Use Chrome or Edge.", "bad");
 </script>
 </body>

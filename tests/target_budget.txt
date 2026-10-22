@@ -6,13 +6,15 @@ horn_tap 10
 lt_samples 385
 lt_targets 144
 dr_run 201
+dr_tube 32
+dr_post 17
 org_render 276
 org_fragment 206
 org_msg 48
 org_wheel_pc 57
 org_vib 59
 eq_block 628
-fm1_alnk0_irq 6435
+fm1_alnk0_irq 4263
 fm1_timer5_irq 25025
 rev_room 507
 rev_spring 15

@@ -151,6 +151,11 @@ static void power_on(void)
 {
     host_tracks_init();
     org_init();                                /* the tone generator at rest (main.c's boot) */
+    rot_load_tables();                         /* the effects at rest, as main.c's felucca_init leaves them */
+    rot_init(&rot_st);
+    lt_init(&lt_st, &rot_st);
+    dr_init(&dr_st);
+    eq_init(&eq_st);
     song.g[G_RTYPE] = 0;                       /* ROOM: the renders' reverb (see the top) */
 }
 

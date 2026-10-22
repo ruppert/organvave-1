@@ -34,6 +34,10 @@ typedef struct {
     int32_t sagz, z, w, g;                          /* sag state Q16, pre-diff state Q16, post-diff w Q28, last output Q16 */
     int32_t hx[8 + DR_MAX];                         /* the input history (Q15): hx[8 + n - k] is x[n - k] */
     int32_t hy[32 + DR_MAX];                        /* the curve's output history (Q15) */
+    /* 0.9.2: the user's part (dr_user, dr_run_ex): the type, the tone and the output level around either curve */
+    int32_t type;                                   /* 0 DISTORTION (the setBfree preamp above), 1 TUBE */
+    int32_t tone_c, out_g;                          /* the tone's tilt (Q12: -4096 = low-pass, 0 flat, + = treble up), the output gain (Q12) */
+    int32_t tlp, tdc;                               /* the tone's low-pass state (Q15), the tube's DC estimate (Q15, x 64) */
 } dr_t;
 
 /* c24 (Q24, 0 < c < 1) -> mantissa (mx / 2 .. mx - 1) and shift: c ~ m / 2^n */
@@ -98,10 +102,14 @@ static void dr_clear(dr_t *d)
         d->hx[i] = 0;
     for (i = 0; i < 32 + DR_MAX; i++)
         d->hy[i] = 0;
+    d->tlp = d->tdc = 0;
 }
 static void dr_init(dr_t *d)
 {
     dr_defaults(d);
+    d->type = 0;
+    d->tone_c = 0;
+    d->out_g = 4096;
     dr_clear(d);
 }
 
@@ -173,5 +181,72 @@ static void dr_run(dr_t *d, const int32_t *in, int32_t *out, uint32_t n)
         d->hx[i] = d->hx[nn + i];
     for (i = 0; i < 32; i++)
         d->hy[i] = d->hy[nn + i];
+}
+
+/* ---------------------------------------------------------------- 0.9.2: TUBE, TONE, OUTPUT ---
+ * TUBE is a valve stage's soft saturation, far gentler than the preamp above: a cubic curve y = v - v^3 / 3 (v in units of
+ * the knee, 8192 in Q13), slope 1 at the origin, flat at the knee (|v| >= 1 gives +-2/3: the curve and its slope are
+ * continuous, no corner), with the asymmetry of a triode: the negative half meets the knee 1.25 times sooner, which adds the
+ * even harmonics (the octave and the fourth: a warm, "musical" distortion); the DC that this asymmetry leaves is followed and
+ * taken out. The input gain is the drive's GAIN halved (dr_user). No memory but the DC estimate and no latency.
+ * TONE is a tilt around 1 kHz: out = x + c (x - lp), lp a one-pole low-pass at 1 kHz; c = -1 leaves only the low-pass (dark),
+ * 0 is flat, + c lifts the treble (up to +1.5: +8 dB at the top). OUTPUT is a gain. Both follow either type. */
+#define DR_TONE_A 4352                              /* the tone low-pass, Q15: 1 - exp(-2 pi 1000 / 44100) */
+static const int16_t DR_TONE_C[9] = {-4096, -3072, -2048, -1024, 0, 1536, 3072, 4608, 6144};
+static const uint16_t DR_OUT_G[9] = {1630, 2053, 2584, 3254, 4096, 5157, 6492, 8173, 10289};   /* -8 .. +8 dB, 2 dB a step */
+
+/* the user's settings: type 0/1, the tone and output indexes 0..8 (4 the default); the state is kept */
+static void dr_user(dr_t *d, uint32_t type, uint32_t tone, uint32_t out)
+{
+    d->type = (int32_t)(type ? 1 : 0);
+    d->tone_c = DR_TONE_C[tone % 9u];
+    d->out_g = DR_OUT_G[out % 9u];
+}
+
+/* the tube stage: in Q13 (1.0 = 8192) times the gain ig (Q12) / 2, out Q15 (the knee is 2/3 of 16384 out) */
+static __attribute__((noinline)) void dr_tube(dr_t *d, const int32_t *in, int32_t *out, uint32_t n)
+{
+    uint32_t i;
+    int32_t ig = d->ig >> 1, dc = d->tdc;
+    for (i = 0; i < n; i++) {
+        int32_t v = (in[i] * ig) >> 12, t2, t3, y;
+        if (v < 0)
+            v = v * 5 >> 2;                         /* (the negative half saturates sooner) */
+        v = v > 8192 ? 8192 : v < -8192 ? -8192 : v;
+        t2 = (v * v) >> 13;
+        t3 = (t2 * v) >> 13;
+        y = v - ((t3 * 21845) >> 16);               /* v - v^3 / 3 */
+        if (y < 0)
+            y = (y * 3277) >> 12;                   /* (back to the same scale: x 0.8) */
+        y *= 2;                                     /* Q13 -> Q15 would be x4; x2: a TUBE at the default gain is as loud as DISTORTION (OUTPUT trims it) */
+        dc += y - (dc >> 6);                        /* the DC (a one-pole at about 7 Hz), x 64 */
+        out[i] = y - (dc >> 6);
+    }
+    d->tdc = dc;
+}
+
+/* the tone and the output level, in place */
+static __attribute__((noinline)) void dr_post(dr_t *d, int32_t *x, uint32_t n)
+{
+    uint32_t i;
+    int32_t lp = d->tlp, c = d->tone_c, g = d->out_g;
+    for (i = 0; i < n; i++) {
+        int32_t v = x[i], y;
+        lp += ((v - lp) >> 3) * DR_TONE_A >> 12;    /* (v - lp) / 8 * 4352 / 4096: a ~ 0.13 */
+        y = v + (((v - lp) >> 2) * c >> 10);        /* v + c (v - lp), c Q12 */
+        x[i] = ((y >> 3) * g) >> 9;                 /* x g / 4096 (y >> 3 first: y may be 2^17) */
+    }
+    d->tlp = lp;
+}
+
+/* what the organ calls: either type, then the tone and the output. in Q13, out Q15 (in and out may be the same buffer) */
+static void dr_run_ex(dr_t *d, const int32_t *in, int32_t *out, uint32_t n)
+{
+    if (d->type)
+        dr_tube(d, in, out, n);
+    else
+        dr_run(d, in, out, n);
+    if (d->tone_c != 0 || d->out_g != 4096)
+        dr_post(d, out, n);
 }
 #endif

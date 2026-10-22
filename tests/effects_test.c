@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Guilherme Ruppert (OrganVave-1) */
-/* The organ's effects section end to end on the host: the patch bytes (OP_ROT .. OP_DRV_FAT) through mix_block, with the
+/* The organ's effects section end to end on the host: the patch bytes (OP_ROT .. OP_DRV_OUT, OP_ROT_DRAMP) through mix_block, with the
  * whole firmware (organ_app.c) and a chord held on the organ.
  * 1. the bytes: clamped by org_pmax; a patch of zeros leaves the mix as it was (no rotary, no drive).
  * 2. the rotary: FAST turns the horn (the left channel's level moves by more than 3 dB over a second, the channels differ);
@@ -134,12 +134,14 @@ int main(void)
     org_set(OP_ROT_SPEED, 9);
     org_set(OP_ROT_MIC, 9);
     org_set(OP_DRV_GAIN, 99);
-    org_set(OP_DRV_FAT, 99);
+    org_set(OP_DRV_TYPE, 99);
+    org_set(OP_DRV_TONE, 99);
+    org_set(OP_ROT_HSLOW, 99);
     org_set(OP_ROT_BAL, 99);
     org_set(OP_ROT, 5);
-    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 12, FAT 8, BAL 8, ROT 1)",
+    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 12, TYPE 1, TONE 8, HSLOW 8, BAL 8, ROT 1)",
           org_patch[OP_ROT_SPEED] == 2 && org_patch[OP_ROT_MIC] == 6 && org_patch[OP_DRV_GAIN] == 12 &&
-              org_patch[OP_DRV_FAT] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
+              org_patch[OP_DRV_TYPE] == 1 && org_patch[OP_DRV_TONE] == 8 && org_patch[OP_ROT_HSLOW] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
     /* a patch of zeros in the effects bytes leaves the mix dry */
     boot();
     chord_on();
@@ -492,6 +494,113 @@ int main(void)
         }
         printf("effects: 14 s after letting go: peak %d\n", pk_end);
         check("  .. and after letting go it falls quiet (peak at most 2 after 14 s)", pk_end <= 2);
+    }
+    /* 11. the drive's two types, its tone and output, and the Leslie's own speeds and ramps (0.9.2) */
+    {
+        double f0 = 130.81, d1, d2, d3, t1, t2, t3, rd, rt, rt0, rt1;
+        boot();
+        memset(P, 0, sizeof P);
+        P[OP_UB + 2] = 8; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 6;
+        patch_set(P);
+        input_on(&trk[0], 48, 100);
+        blocks(44100 * 2);
+        d1 = tone(oL, pos - 44100, 44100, f0); d2 = tone(oL, pos - 44100, 44100, 2 * f0); d3 = tone(oL, pos - 44100, 44100, 3 * f0);
+        rd = rms_win(oL, pos - 44100, 44100);
+        P[OP_DRV_TYPE] = 1;
+        patch_set(P);
+        blocks(44100 * 2);
+        t1 = tone(oL, pos - 44100, 44100, f0); t2 = tone(oL, pos - 44100, 44100, 2 * f0); t3 = tone(oL, pos - 44100, 44100, 3 * f0);
+        rt = rms_win(oL, pos - 44100, 44100);
+        printf("effects: DISTORTION H2 %.1f H3 %.1f dB re H1, rms %.0f; TUBE H2 %.1f H3 %.1f dB re H1, rms %.0f\n",
+               db(d2 / d1), db(d3 / d1), rd, db(t2 / t1), db(t3 / t1), rt);
+        check("TUBE: it saturates (the third harmonic above -50 dB) but is gentler than DISTORTION (at least 8 dB lower)",
+              db(t3 / t1) > -50.0 && db(d3 / d1) - db(t3 / t1) > 8.0);
+        check("TUBE at the default gain is about as loud as DISTORTION (within 3 dB)", db(rt / rd) > -3.0 && db(rt / rd) < 3.0);
+        check("TUBE: the triode's even harmonics (the second above -40 dB re the fundamental)", db(t2 / t1) > -40.0);
+        check("TUBE: it sounds (rms above 500) and is bounded", rt > 500.0 && rt < 20000.0);
+        /* the tone (a tilt around 1 kHz): on C5 (523 Hz) a bright setting lifts the third harmonic (1570 Hz) against the first,
+         * a dark one lowers it, against flat */
+        {
+            double fl, br, dk;
+            input_off(&trk[0], 48);
+            blocks(44100);
+            f0 = 523.25;
+            P[OP_DRV_TONE] = 0;
+            patch_set(P);
+            input_on(&trk[0], 72, 100);
+            blocks(44100 * 2);
+            fl = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
+            P[OP_DRV_TONE] = (uint8_t)org_b9(8);
+            patch_set(P);
+            blocks(44100 * 2);
+            br = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
+            P[OP_DRV_TONE] = (uint8_t)org_b9(0);
+            patch_set(P);
+            blocks(44100 * 2);
+            dk = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
+            printf("effects: C5, TUBE H3 re H1: flat %.1f dB, BRIGHT %.1f dB, DARK %.1f dB\n", db(fl), db(br), db(dk));
+            check("TONE: bright lifts and dark lowers the third harmonic against flat (more than 2.5 dB each way)",
+                  db(br) - db(fl) > 2.5 && db(fl) - db(dk) > 2.5);
+            input_off(&trk[0], 72);
+            blocks(44100);
+            input_on(&trk[0], 48, 100);
+        }
+        /* the output: -4 dB is 0.63 in rms */
+        P[OP_DRV_TONE] = 0;
+        P[OP_DRV_OUT] = (uint8_t)org_b9(2);
+        patch_set(P);
+        blocks(44100 * 2);
+        rt1 = rms_win(oL, pos - 44100, 44100);
+        P[OP_DRV_OUT] = 0;
+        patch_set(P);
+        blocks(44100 * 2);
+        rt0 = rms_win(oL, pos - 44100, 44100);
+        printf("effects: TUBE rms at 0 dB %.0f, at -4 dB %.0f (ratio %.3f, 0.631 expected)\n", rt0, rt1, rt1 / rt0);
+        check("OUTPUT: -4 dB takes the level down to 0.63 (within 3 %)", rt1 / rt0 > 0.61 && rt1 / rt0 < 0.65);
+        input_off(&trk[0], 48);
+        blocks(44100 * 2);
+        /* the Leslie's speeds and ramps: the rotors' targets and the ramp steps follow the bytes */
+        boot();
+        memset(P, 0, sizeof P);
+        P[OP_UB + 2] = 8; P[OP_ROT] = 1; P[OP_ROT_SPEED] = 1;
+        patch_set(P);
+        input_on(&trk[0], 48, 100);
+        blocks(4410);
+        {
+            uint32_t h0 = rot_st.tgt_h, d0 = rot_st.tgt_d;
+            int32_t kh0 = rot_st.k_ha, kd0 = rot_st.k_da;
+            P[OP_ROT_HSLOW] = (uint8_t)org_b9(8);                    /* horn slow, the top index: x 1.574 */
+            P[OP_ROT_DSLOW] = (uint8_t)org_b9(0);                    /* drum slow, the bottom: x 0.637 */
+            P[OP_ROT_HRAMP] = (uint8_t)org_b9(8);                    /* horn ramp: slower, x 3.84 in time */
+            P[OP_ROT_DRAMP] = (uint8_t)org_b9(0);                    /* drum ramp: faster, x 0.26 */
+            patch_set(P);
+            blocks(4410);
+            printf("effects: horn target %u -> %u, drum %u -> %u, horn ramp step %d -> %d, drum %d -> %d\n", h0, rot_st.tgt_h, d0, rot_st.tgt_d, kh0, rot_st.k_ha, kd0, rot_st.k_da);
+            check("the horn's slow speed: the top step is 12 % x 4 faster (x 1.574, within 1 %)",
+                  (double)rot_st.tgt_h / h0 > 1.574 * 0.99 && (double)rot_st.tgt_h / h0 < 1.574 * 1.01);
+            check("the drum's slow speed: the bottom step is x 0.637 (within 1 %)",
+                  (double)rot_st.tgt_d / d0 > 0.637 * 0.99 && (double)rot_st.tgt_d / d0 < 0.637 * 1.01);
+            check("the horn's ramp 3.84 times longer (the step 3.84 times smaller, within 3 %)",
+                  (double)kh0 / rot_st.k_ha > 3.84 * 0.97 && (double)kh0 / rot_st.k_ha < 3.84 * 1.03);
+            check("the drum's ramp 0.26 times as long (the step 3.8 times larger, within 3 %)",
+                  (double)rot_st.k_da / kd0 > 3.82 * 0.97 && (double)rot_st.k_da / kd0 < 3.82 * 1.03);
+            P[OP_ROT_SPEED] = 2;
+            P[OP_ROT_HFAST] = (uint8_t)org_b9(8);
+            patch_set(P);
+            blocks(4410);
+            check("the horn's fast speed follows its own byte (x 1.574 of 7.056 Hz)", (double)rot_st.tgt_h / (double)rot_inc(7056u) > 1.574 * 0.99 &&
+                  (double)rot_st.tgt_h / (double)rot_inc(7056u) < 1.574 * 1.01);
+        }
+        input_off(&trk[0], 48);
+        blocks(44100);
+        {   /* the table of the ramps' steps against rot_k itself */
+            static const uint32_t BASE[4] = {161000u, 321000u, 4127000u, 1371000u};
+            uint32_t b, i, bad_k = 0;
+            for (b = 0; b < 4u; b++)
+                for (i = 0; i < 9u; i++)
+                    bad_k += ROT_KT[b][i] != rot_k((BASE[b] * ROT_RTF[i]) >> 8);
+            check("the ramps' step table is rot_k of each time (36 entries)", bad_k == 0);
+        }
     }
     /* 10. headroom: a loud chord (the mix several times 1.0) goes through the cabinet without clipping at its input. The swell
      * taken down by 12 dB must take the output down by 12 dB (4.0 in rms) through CLASSIC and LIGHT as it does dry; a hard clip

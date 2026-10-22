@@ -32,10 +32,11 @@
 #define C_POP    RGB565(0x1b, 0x19, 0x17)
 #define C_HOT    RGB565(0x2e, 0x28, 0x22)
 
-#define OA_NWIN 6u                                       /* the four marked bars start at 0..5 */
-static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY, 7 EQ (FX walks 2..7) */
-static uint8_t oa_man;                                   /* the manual the DRAWBARS page edits: 0 UPPER, 1 LOWER, 2 PEDAL (the last two play over MIDI) */
-static uint8_t oa_win = 2;                               /* the first of the four bars the knobs pull (8' .. 2') */
+static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY, 7 EQ (FX walks the FX pages) */
+static uint8_t oa_man;                                   /* the manual the DRAWBARS page edits: 0 UPPER, 1 LOWER with the PEDAL's two bars (MIDI channels 2 and 3) */
+static uint8_t oa_sel;                                   /* the bar SELECT has picked on DRAWBARS: UPPER 0..8; LOWER / PEDAL 0..10 (0, 1 the pedal's 16' and 8', then the lower's nine) */
+static uint8_t oa_row[8];                                /* each FX page: the row SELECT has picked */
+static uint8_t oa_top[8];                                /* ... and the first row on the screen */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
 
 /* ------------------------------------------------------------ pixels --- */
@@ -545,109 +546,328 @@ static void meter(int32_t x, int32_t y, int32_t n, int32_t v)
     for (i = 0; i < n; i++)
         rrect(x + i * 8, y, 6, 9, 1, i < v ? C_AMBER : RGB565(0x3a, 0x26, 0x14));
 }
-/* a labelled value row: the label left, the cells, the control that sets it right */
-static void mrow(int32_t y, const char *label, int32_t n, int32_t v, const char *ctl)
-{
-    ltext(22, y, &AF_X, label, C_CREAM, C_PANEL);
-    meter(96, y - 1, n, v);
-    rtext(234, y, &AF_X, ctl, C_DIM, C_PANEL);
-}
-
 static const char *const ROT_SPD[3] = {"STOP", "SLOW", "FAST"};
-static void scr_rotary(void)                            /* ROTARY: on, model, horn, speed (the knobs), width, balance */
-{
-    uint32_t sp = org_patch[OP_ROT_SPEED] <= 2u ? org_patch[OP_ROT_SPEED] : 0u;
-    char b[32];
-    header("ROTARY", org_patch[OP_ROT] ? ROT_SPD[sp] : "OFF");
-    lamp(22, 58, org_patch[OP_ROT] ? "ROTARY ON   (KNOB 1)" : "ROTARY OFF   (KNOB 1)", org_patch[OP_ROT] != 0);
-    lamp(22, 80, org_patch[OP_ROT_MODEL] ? "MODEL LIGHT   (KNOB 2)" : "MODEL CLASSIC   (KNOB 2)", org_patch[OP_ROT] != 0);
-    lamp(22, 102, org_patch[OP_ROT_HORN] ? "HORN SHARP   (KNOB 3)" : "HORN NORMAL   (KNOB 3)", org_patch[OP_ROT_HORN] != 0);
-    str_cpy(b, "SPEED ", 8);
-    str_cpy(b + 6, ROT_SPD[sp], 6);
-    str_cpy(b + str_len(b), "   (KNOB 4)", 12);
-    lamp(22, 124, b, sp != 0u);
-    mrow(152, "WIDTH", 7, 6 - (int32_t)(org_patch[OP_ROT_MIC] <= 6u ? org_patch[OP_ROT_MIC] : 0u), "ALGORITHM");
-    mrow(174, "HORN LEVEL", 9, (int32_t)(org_patch[OP_ROT_BAL] <= 8u ? org_patch[OP_ROT_BAL] : 4u), "SELECT");
-    footer("SCL: SLOW / FAST / STOP");
-}
-
-static void scr_drive(void)                             /* DRIVE: on (knob 1), gain (knob 2), character (knob 3) */
-{
-    header("DRIVE", org_patch[OP_DRV] ? "ON" : "OFF");
-    lamp(22, 58, org_patch[OP_DRV] ? "DRIVE ON   (KNOB 1)" : "DRIVE OFF   (KNOB 1)", org_patch[OP_DRV] != 0);
-    mrow(92, "GAIN", 13, 1 + (int32_t)(org_patch[OP_DRV_GAIN] <= 12u ? org_patch[OP_DRV_GAIN] : 6u), "KNOB 2");
-    mrow(116, "CHARACTER", 9, (int32_t)(org_patch[OP_DRV_FAT] <= 8u ? org_patch[OP_DRV_FAT] : 0u), "KNOB 3");
-    ltext(22, 150, &AF_X, "THE PREAMP OF THE ORGAN, BEFORE THE ROTARY", C_DIM, C_PANEL);
-    footer("KNOBS: ON, GAIN, CHARACTER");
-}
-
-/* REVERB and DELAY: the send is the part's (P_REV / P_DLY, saved with the preset), the rest are the instrument's globals
- * (song.g, saved with a user preset as the reverb's type, size, tone and the delay's type, time, feedback). A detent is 8 on the
- * 0..127 scale; the bar has 10 cells. */
-static void scr_reverb(void)                            /* REVERB: send (knob 1), type (2), size (3), tone (4) */
-{
-    uint32_t ty = (uint32_t)clamp(song.g[G_RTYPE], 0, 4);
-    header("REVERB", TSEL->p[P_REV] ? N_RTYPE[ty] : "OFF");
-    mrow(58, "SEND", 10, (TSEL->p[P_REV] * 10 + 63) / 127, "KNOB 1");
-    lamp(22, 92, N_RTYPE[ty], TSEL->p[P_REV] != 0);
-    rtext(234, 89, &AF_X, "KNOB 2", C_DIM, C_PANEL);
-    mrow(116, "SIZE", 10, (song.g[G_RSIZE] * 10 + 63) / 127, "KNOB 3");
-    mrow(140, "TONE", 10, (song.g[G_RDAMP] * 10 + 63) / 127, "KNOB 4");
-    footer("KNOBS: SEND, TYPE, SIZE, TONE");
-}
-static void scr_delay(void)                             /* DELAY: send (knob 1), type (2), time (3), feedback (4), colour (ALGORITHM), mix (SELECT) */
-{
-    uint32_t ty = (uint32_t)clamp(song.g[G_DTIME], 0, 6);
-    header("DELAY", TSEL->p[P_DLY] ? N_DLYTYPE[ty] : "OFF");
-    mrow(58, "SEND", 10, (TSEL->p[P_DLY] * 10 + 63) / 127, "KNOB 1");
-    lamp(22, 92, N_DLYTYPE[ty], TSEL->p[P_DLY] != 0);
-    rtext(234, 89, &AF_X, "KNOB 2", C_DIM, C_PANEL);
-    mrow(116, "TIME", 10, (song.g[G_DRREV] * 10 + 63) / 127, "KNOB 3");
-    mrow(140, "FEEDBACK", 10, (song.g[G_DFDBK] * 10 + 63) / 127, "KNOB 4");
-    mrow(164, "COLOUR", 10, (song.g[G_DCOLOR] * 10 + 63) / 127, "ALGORITHM");
-    mrow(188, "MIX", 10, (song.g[G_DMIX] * 10 + 63) / 127, "SELECT");
-    footer("KNOBS: SEND, TYPE, TIME, FEEDBACK");
-}
 static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on the 0..mx scale */
 {
     return clamp(v + (s > 0 ? 8 : -8), 0, mx);
 }
+/* ------------------------------------------------------------- the FX pages --- */
+/* Every FX page is a list of rows. SELECT picks a row (it is drawn lit), ALGORITHM changes the picked row's value (clockwise: more),
+ * and the knobs 1 to 4 go straight to the first four rows. A list longer than the screen scrolls with the pick. The rows of a page
+ * are what oa_val shows and oa_adj1 changes (one detent). */
+#define OA_VIS 8u                                       /* rows on the screen */
+static const uint8_t OA_NR[8] = {0, 0, 5, 12, 5, 4, 6, 5};
+static const char *const OA_LB[8][12] = {
+    {0},
+    {0},
+    {"PERCUSSION", "VOLUME", "DECAY", "HARMONIC", "VIBRATO"},
+    {"ROTARY", "MODEL", "HORN", "SPEED", "WIDTH", "HORN LEVEL", "HORN SLOW", "HORN FAST", "DRUM SLOW", "DRUM FAST", "HORN RAMP", "DRUM RAMP"},
+    {"DRIVE", "TYPE", "GAIN", "TONE", "OUTPUT"},
+    {"SEND", "TYPE", "SIZE", "TONE"},
+    {"SEND", "TYPE", "TIME", "FEEDBACK", "COLOUR", "MIX"},
+    {"EQ", "LOW", "MID", "HIGH", "MID FREQ"},
+};
+typedef struct {
+    char t[16];                                         /* the value's text */
+    int8_t mn, mv;                                      /* a meter of mn cells with mv lit (mn 0: none) */
+    uint8_t on;                                         /* the value is "on" (drawn bright) */
+} oa_val_t;
 
-/* EQ: on (knob 1), LOW (knob 2), MID (knob 3), HIGH (knob 4), the MID's frequency (ALGORITHM); a detent is 1 dB, the bars have
- * 13 cells with the flat centre at 6 */
-static void eq_dbstr(char *b, int32_t db)
+static void oa_vt(oa_val_t *v, const char *s) { str_cpy(v->t, s, 16); }
+static void oa_vnum(oa_val_t *v, int32_t x, int32_t dec, const char *unit)   /* x with dec decimals, then the unit */
 {
-    char *p = b;
-    if (db > 0)
+    fmt_fix(v->t, x, (uint32_t)dec);
+    if (unit)
+        str_cpy(v->t + str_len(v->t), unit, 16 - (unsigned)str_len(v->t));
+}
+static void oa_vdb(oa_val_t *v, int32_t tenths)         /* "+1.5 DB" */
+{
+    char *p = v->t;
+    if (tenths > 0)
         *p++ = '+';
-    fmt_int(p, db);
-    str_cpy(b + str_len(b), " DB", 4);
+    if (tenths % 10)
+        fmt_fix(p, tenths, 1u);
+    else
+        fmt_fix(p, tenths / 10, 0u);
+    str_cpy(v->t + str_len(v->t), " DB", 4);
 }
-static void eq_row(int32_t y, const char *label, uint32_t byte)
+static void oa_vpct(oa_val_t *v, int32_t x)             /* a 0..127 value as a percentage; its meter has 10 cells */
 {
-    char b[12];
-    int32_t db = eq_db(byte <= 24u ? byte : 0u);
-    eq_dbstr(b, db);
-    ltext(22, y, &AF_X, label, C_CREAM, C_PANEL);
-    meter(96, y - 1, 13, (db + 13) / 2);
-    rtext(234, y, &AF_X, b, C_DIM, C_PANEL);
+    oa_vnum(v, (x * 100 + 63) / 127, 0, " %");
+    v->mn = 10;
+    v->mv = (int8_t)((x * 10 + 63) / 127);
+    v->on = x != 0;
 }
-static void scr_eq(void)
+static int32_t oa_u(uint32_t op, uint32_t mx) { return (int32_t)(org_patch[op] <= mx ? org_patch[op] : 0u); }
+static void oa_vsw(oa_val_t *v, uint32_t op, const char *off, const char *on)
 {
-    char b[16];
-    uint32_t f = org_patch[OP_EQ_FREQ] <= 11u ? org_patch[OP_EQ_FREQ] : 0u;
-    header("EQ", org_patch[OP_EQ] ? "ON" : "OFF");
-    lamp(22, 58, org_patch[OP_EQ] ? "EQ ON   (KNOB 1)" : "EQ OFF   (KNOB 1)", org_patch[OP_EQ] != 0);
-    eq_row(92, "LOW", org_patch[OP_EQ_LOW]);
-    eq_row(116, "MID", org_patch[OP_EQ_MID]);
-    fmt_int(b, EQ_FREQ_HZ[eq_fidx(f)]);
-    str_cpy(b + str_len(b), " HZ", 4);
-    ltext(22, 140, &AF_X, "MID FREQ", C_CREAM, C_PANEL);
-    ltext(96, 140, &AF_X, b, C_AMBER, C_PANEL);
-    rtext(234, 140, &AF_X, "ALGORITHM", C_DIM, C_PANEL);
-    eq_row(164, "HIGH", org_patch[OP_EQ_HIGH]);
-    footer("KNOBS: ON, LOW, MID, HIGH   ALGO: MID FREQ");
+    oa_vt(v, org_patch[op] ? on : off);
+    v->on = org_patch[op] != 0;
 }
+/* the horn / drum speeds and ramps of the ROTARY page: the base values (fx.c ROT_SPF / ROT_RTF: 1.12^(i-4) and 1.4^(i-4)) */
+static void oa_vspeed(oa_val_t *v, uint32_t op, uint32_t base_mhz)      /* rpm */
+{
+    uint32_t i = org_c9(org_patch[op] <= 8u ? org_patch[op] : 0u);
+    oa_vnum(v, (int32_t)((base_mhz * ROT_SPF[i] >> 8) * 3u / 50u), 0, " RPM");
+    v->mn = 9;
+    v->mv = (int8_t)(i + 1u);
+    v->on = 1;
+}
+static void oa_vramp(oa_val_t *v, uint32_t op, uint32_t base_us, int32_t dec)
+{
+    uint32_t i = org_c9(org_patch[op] <= 8u ? org_patch[op] : 0u), us = (base_us >> 4) * ROT_RTF[i] >> 4;
+    oa_vnum(v, (int32_t)(dec ? (us + 5000u) / 10000u : (us + 50000u) / 100000u), dec ? 2 : 1, " S");
+    v->mn = 9;
+    v->mv = (int8_t)(i + 1u);
+    v->on = 1;
+}
+
+static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
+{
+    int32_t i;
+    v->t[0] = 0;
+    v->mn = v->mv = 0;
+    v->on = 0;
+    if (pg == 2u) {
+        if (r == 0u)
+            oa_vsw(v, OP_PERC, "OFF", "ON");
+        else if (r == 1u)
+            oa_vsw(v, OP_PERC_SOFT, "NORMAL", "SOFT");
+        else if (r == 2u)
+            oa_vsw(v, OP_PERC_FAST, "SLOW, 4 S", "FAST, 1 S");
+        else if (r == 3u)
+            oa_vsw(v, OP_PERC_SEL, "4' SECOND", "2 2/3' THIRD");
+        else {
+            i = oa_u(OP_VIB, 6u);
+            oa_vt(v, i ? VIB_SHORT[i] : "OFF");
+            v->on = i != 0;
+        }
+    } else if (pg == 3u) {
+        if (r == 0u)
+            oa_vsw(v, OP_ROT, "OFF", "ON");
+        else if (r == 1u) {
+            oa_vsw(v, OP_ROT_MODEL, "CLASSIC", "LIGHT");
+            v->on = org_patch[OP_ROT] != 0;
+        } else if (r == 2u)
+            oa_vsw(v, OP_ROT_HORN, "NORMAL", "SHARP");
+        else if (r == 3u) {
+            i = oa_u(OP_ROT_SPEED, 2u);
+            oa_vt(v, ROT_SPD[i]);
+            v->on = i != 0;
+        } else if (r == 4u) {
+            i = oa_u(OP_ROT_MIC, 6u);
+            oa_vnum(v, 180 - 30 * i, 0, " DEG");
+            v->mn = 7;
+            v->mv = (int8_t)(6 - i);
+            v->on = 1;
+        } else if (r == 5u) {
+            i = oa_u(OP_ROT_BAL, 8u);
+            oa_vdb(v, (i - 4) * 15);
+            v->mn = 9;
+            v->mv = (int8_t)i;
+            v->on = 1;
+        } else if (r == 6u)
+            oa_vspeed(v, OP_ROT_HSLOW, 672u);
+        else if (r == 7u)
+            oa_vspeed(v, OP_ROT_HFAST, 7056u);
+        else if (r == 8u)
+            oa_vspeed(v, OP_ROT_DSLOW, 600u);
+        else if (r == 9u)
+            oa_vspeed(v, OP_ROT_DFAST, 5955u);
+        else if (r == 10u)
+            oa_vramp(v, OP_ROT_HRAMP, 161000u, 1);
+        else
+            oa_vramp(v, OP_ROT_DRAMP, 4127000u, 0);
+    } else if (pg == 4u) {
+        if (r == 0u)
+            oa_vsw(v, OP_DRV, "OFF", "ON");
+        else if (r == 1u) {
+            oa_vsw(v, OP_DRV_TYPE, "DISTORTION", "TUBE");
+            v->on = org_patch[OP_DRV] != 0;
+        } else if (r == 2u) {
+            i = oa_u(OP_DRV_GAIN, 12u);
+            oa_vdb(v, (i - 6) * 20);
+            v->mn = 13;
+            v->mv = (int8_t)(i + 1);
+            v->on = 1;
+        } else if (r == 3u) {
+            i = (int32_t)org_c9(org_patch[OP_DRV_TONE] <= 8u ? org_patch[OP_DRV_TONE] : 0u);
+            oa_vt(v, i == 4 ? "FLAT" : i < 4 ? "DARK" : "BRIGHT");
+            if (i != 4)
+                oa_vnum(v, i - 4, 0, i < 4 ? " (DARK)" : " (BRIGHT)");
+            v->mn = 9;
+            v->mv = (int8_t)(i + 1);
+            v->on = 1;
+        } else {
+            i = (int32_t)org_c9(org_patch[OP_DRV_OUT] <= 8u ? org_patch[OP_DRV_OUT] : 0u);
+            oa_vdb(v, (i - 4) * 20);
+            v->mn = 9;
+            v->mv = (int8_t)(i + 1);
+            v->on = 1;
+        }
+    } else if (pg == 5u) {
+        if (r == 0u)
+            oa_vpct(v, TSEL->p[P_REV]);
+        else if (r == 1u) {
+            oa_vt(v, N_RTYPE[clamp(song.g[G_RTYPE], 0, 4)]);
+            v->on = TSEL->p[P_REV] != 0;
+        } else if (r == 2u)
+            oa_vpct(v, song.g[G_RSIZE]);
+        else
+            oa_vpct(v, song.g[G_RDAMP]);
+    } else if (pg == 6u) {
+        if (r == 0u)
+            oa_vpct(v, TSEL->p[P_DLY]);
+        else if (r == 1u) {
+            oa_vt(v, N_DLYTYPE[clamp(song.g[G_DTIME], 0, 6)]);
+            v->on = TSEL->p[P_DLY] != 0;
+        } else if (r == 2u)
+            oa_vpct(v, song.g[G_DRREV]);
+        else if (r == 3u)
+            oa_vpct(v, song.g[G_DFDBK]);
+        else if (r == 4u)
+            oa_vpct(v, song.g[G_DCOLOR]);
+        else
+            oa_vpct(v, song.g[G_DMIX]);
+    } else if (pg == 7u) {
+        if (r == 0u)
+            oa_vsw(v, OP_EQ, "OFF", "ON");
+        else if (r == 4u) {
+            oa_vnum(v, (int32_t)EQ_FREQ_HZ[eq_fidx(org_patch[OP_EQ_FREQ] <= 11u ? org_patch[OP_EQ_FREQ] : 0u)], 0, " HZ");
+            v->on = 1;
+        } else {
+            i = eq_db(org_patch[r == 1u ? OP_EQ_LOW : r == 2u ? OP_EQ_MID : OP_EQ_HIGH] <= 24u ?
+                      org_patch[r == 1u ? OP_EQ_LOW : r == 2u ? OP_EQ_MID : OP_EQ_HIGH] : 0u);
+            oa_vdb(v, i * 10);
+            v->mn = 13;
+            v->mv = (int8_t)((i + 13) / 2);
+            v->on = 1;
+        }
+    }
+}
+
+/* one detent (d = +1 / -1) on row r of page pg. A switch takes the direction (clockwise: on); the others step */
+static void oa_c9(uint32_t op, int32_t d)
+{
+    org_set(op, org_b9((uint32_t)clamp((int32_t)org_c9(org_patch[op] <= 8u ? org_patch[op] : 0u) + d, 0, 8)));
+}
+static void oa_eqs(uint32_t op, int32_t d)
+{
+    org_set(op, eq_byte(clamp(eq_db(org_patch[op] <= 24u ? org_patch[op] : 0u) + d, -12, 12)));
+}
+static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
+{
+    uint32_t on = d > 0 ? 1u : 0u;
+    if (pg == 2u) {
+        if (r == 0u)
+            org_set(OP_PERC, on);
+        else if (r == 1u)
+            org_set(OP_PERC_SOFT, on);
+        else if (r == 2u)
+            org_set(OP_PERC_FAST, on);
+        else if (r == 3u)
+            org_set(OP_PERC_SEL, on);
+        else
+            org_set(OP_VIB, (uint32_t)clamp(oa_u(OP_VIB, 6u) + d, 0, 6));
+    } else if (pg == 3u) {
+        if (r == 0u)
+            org_set(OP_ROT, on);
+        else if (r == 1u)
+            org_set(OP_ROT_MODEL, on);
+        else if (r == 2u)
+            org_set(OP_ROT_HORN, on);
+        else if (r == 3u)
+            org_set(OP_ROT_SPEED, (uint32_t)clamp(oa_u(OP_ROT_SPEED, 2u) + d, 0, 2));
+        else if (r == 4u)
+            org_set(OP_ROT_MIC, (uint32_t)clamp(oa_u(OP_ROT_MIC, 6u) - d, 0, 6));      /* (clockwise: wider) */
+        else if (r == 5u)
+            org_set(OP_ROT_BAL, (uint32_t)clamp(oa_u(OP_ROT_BAL, 8u) + d, 0, 8));
+        else
+            oa_c9(OP_ROT_HSLOW + r - 6u, d);
+    } else if (pg == 4u) {
+        if (r == 0u)
+            org_set(OP_DRV, on);
+        else if (r == 1u)
+            org_set(OP_DRV_TYPE, on);
+        else if (r == 2u)
+            org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 12u) + d, 0, 12));
+        else
+            oa_c9(r == 3u ? OP_DRV_TONE : OP_DRV_OUT, d);
+    } else if (pg == 5u) {
+        if (r == 0u)
+            TSEL->p[P_REV] = (uint8_t)oa_step(TSEL->p[P_REV], d, 127);
+        else if (r == 1u)
+            song.g[G_RTYPE] = (int16_t)((song.g[G_RTYPE] + (d > 0 ? 1 : 4)) % 5);
+        else if (r == 2u)
+            song.g[G_RSIZE] = (int16_t)oa_step(song.g[G_RSIZE], d, 127);
+        else
+            song.g[G_RDAMP] = (int16_t)oa_step(song.g[G_RDAMP], d, 127);
+    } else if (pg == 6u) {
+        if (r == 0u)
+            TSEL->p[P_DLY] = (uint8_t)oa_step(TSEL->p[P_DLY], d, 127);
+        else if (r == 1u)
+            song.g[G_DTIME] = (int16_t)((song.g[G_DTIME] + (d > 0 ? 1 : 6)) % 7);
+        else if (r == 2u)
+            song.g[G_DRREV] = (int16_t)oa_step(song.g[G_DRREV], d, 127);
+        else if (r == 3u)
+            song.g[G_DFDBK] = (int16_t)oa_step(song.g[G_DFDBK], d, 120);
+        else if (r == 4u)
+            song.g[G_DCOLOR] = (int16_t)oa_step(song.g[G_DCOLOR], d, 127);
+        else
+            song.g[G_DMIX] = (int16_t)oa_step(song.g[G_DMIX], d, 127);
+    } else if (pg == 7u) {
+        if (r == 0u)
+            org_set(OP_EQ, on);
+        else if (r == 4u)
+            org_set(OP_EQ_FREQ, eq_fbyte((uint32_t)clamp((int32_t)eq_fidx(org_patch[OP_EQ_FREQ] <= 11u ? org_patch[OP_EQ_FREQ] : 0u) + d, 0, 11)));
+        else
+            oa_eqs(r == 1u ? OP_EQ_LOW : r == 2u ? OP_EQ_MID : OP_EQ_HIGH, d);
+    }
+}
+static void oa_adj(uint32_t pg, uint32_t r, int32_t s)  /* s detents, either way */
+{
+    int32_t n = s < 0 ? -s : s, d = s < 0 ? -1 : 1;
+    if (n > 24)
+        n = 24;
+    while (n--)
+        oa_adj1(pg, r, d);
+}
+
+/* the page: header, the rows, the scroll bar and the hint */
+static void oa_rows(uint32_t pg, const char *state)
+{
+    uint32_t n = OA_NR[pg], sel = oa_row[pg], top = oa_top[pg], i;
+    if (sel >= n)
+        sel = oa_row[pg] = 0;
+    if (sel < top)
+        top = sel;
+    if (sel >= top + OA_VIS)
+        top = sel - OA_VIS + 1u;
+    oa_top[pg] = (uint8_t)top;
+    header(pg == 2u ? "PERC & VIB" : pg == 3u ? "ROTARY" : pg == 4u ? "DRIVE" : pg == 5u ? "REVERB" : pg == 6u ? "DELAY" : "EQ", state);
+    for (i = 0; i < OA_VIS && top + i < n; i++) {
+        oa_val_t v;
+        uint32_t r = top + i;
+        int32_t y = 33 + (int32_t)i * 23;
+        int hot = r == sel;
+        uint16_t bg = hot ? C_HOT : C_PANEL;
+        oa_val(pg, r, &v);
+        if (hot) {
+            rrect(6, y - 5, 226, 21, 3, C_ORANGE);
+            rrect(7, y - 4, 224, 19, 3, C_HOT);
+        }
+        ltext(14, y, &AF_X, OA_LB[pg][r], hot ? C_AMBER : C_CREAM, bg);
+        if (v.mn)
+            meter(86, y - 1, v.mn, v.mv);
+        rtext(228, y, &AF_X, v.t, v.on ? C_AMBER : C_DIM, bg);
+    }
+    if (n > OA_VIS) {                                   /* the scroll bar */
+        cv_rect(235, 30, 3, 184, C_PANEL2);
+        cv_rect(235, 30 + (int32_t)(184u * top / n), 3, (int32_t)(184u * OA_VIS / n), C_ORANGE);
+    }
+    footer("SELECT: ITEM    ALGORITHM: VALUE");
+}
+
 
 static void scr_home(void)
 {
@@ -668,44 +888,57 @@ static void scr_home(void)
     footer("PRESETS: CHOOSE   OCT- / OCT+: OCTAVE");
 }
 
+/* the bars of the DRAWBARS page: UPPER nine; LOWER / PEDAL eleven, the pedal's two (16' and 8') on the left, the lower's nine on the right.
+ * oa_bar_op: the patch byte of bar i; oa_bar_k: its footage (0..8, FOOT) */
+static uint32_t oa_nbar(void) { return oa_man ? 11u : 9u; }
+static uint32_t oa_bar_op(uint32_t i) { return oa_man ? (i < 2u ? OP_PB + (i ? 2u : 0u) : OP_LB + i - 2u) : OP_UB + i; }
+static uint32_t oa_bar_k(uint32_t i) { return oa_man ? (i < 2u ? (i ? 2u : 0u) : i - 2u) : i; }
+
 static void scr_drawbars(void)
 {
     char num[8], nm[16], r[20];
-    int32_t i;
+    uint32_t i, nb = oa_nbar();
+    int32_t sp = oa_man ? 20 : 25, w = oa_man ? 17 : 22;
     oa_preset_label(num, nm);
     str_cpy(r, num, 4);
     str_cpy(r + str_len(r), " ", 2);
     str_cpy(r + str_len(r), nm, 13);
-    header(oa_man == 2u ? "PEDAL" : oa_man ? "LOWER" : "UPPER", r);
-    bar_slot(20 - 25 / 2, 26, 25 * 9);
-    for (i = 0; i < 9; i++) {
-        int32_t cx = 20 + i * 25, hot = (uint32_t)i >= oa_win && (uint32_t)i < oa_win + 4u;
-        drawbar(cx, 26, org_patch[9u * oa_man + (uint32_t)i], 15, 22, i, hot, 0);
-        ctext(cx, 180, &AF_X, FOOT[i], hot ? C_ORANGE : C_DIM, C_PANEL);
-        if (FRAC[i][0])
-            ctext(cx, 189, &AF_X, FRAC[i], hot ? C_ORANGE : C_DIM, C_PANEL);
+    header(oa_man ? "LOWER / PEDAL" : "UPPER", r);
+    bar_slot(oa_man ? 3 : 20 - 25 / 2, 26, oa_man ? 234 : 25 * 9);
+    if (oa_man)
+        cv_rect(52, 32, 1, 168, C_PANEL2);               /* between the pedal's bars and the lower's */
+    for (i = 0; i < nb; i++) {
+        int32_t cx = oa_man ? (i < 2u ? 14 + (int32_t)i * sp : 70 + (int32_t)(i - 2u) * sp) : 20 + (int32_t)i * sp;
+        uint32_t k = oa_bar_k(i), hot = i == oa_sel, near = i > oa_sel && i < oa_sel + 4u;
+        const char *fo = oa_man && i < 2u ? (i ? "8'" : "16'") : FOOT[k];
+        if (hot)
+            rrect(cx - w / 2 - 2, 25, w + 4, 170, 3, C_HOT);       /* the picked bar's column, lit */
+        drawbar(cx, 26, org_patch[oa_bar_op(i)], 15, w, (int32_t)k, (int)hot, 0);
+        ctext(cx, 180, &AF_X, fo, hot ? C_ORANGE : near ? C_AMBER : C_DIM, hot ? C_HOT : C_PANEL);
+        if (!(oa_man && i < 2u) && FRAC[k][0])
+            ctext(cx, 189, &AF_X, FRAC[k], hot ? C_ORANGE : near ? C_AMBER : C_DIM, hot ? C_HOT : C_PANEL);
     }
-    oa_reg(r, &org_patch[9u * oa_man]);
-    ctext(120, 203, &AF_N, r, C_CREAM, C_PANEL);
-    footer(oa_man ? (oa_man == 2u ? "MIDI PEDALS   EDIT: NEXT MANUAL" : "MIDI LOWER   EDIT: NEXT MANUAL") : "KNOBS: THE FOUR MARKED   SELECT: MOVE   EDIT: LOWER");
+    if (oa_man) {
+        ctext(24, 203, &AF_X, "PEDAL", C_DIM, C_PANEL);
+        oa_reg(r, &org_patch[OP_LB]);
+        ctext(150, 203, &AF_N, r, C_CREAM, C_PANEL);
+    } else {
+        oa_reg(r, &org_patch[OP_UB]);
+        ctext(120, 203, &AF_N, r, C_CREAM, C_PANEL);
+    }
+    footer(oa_man ? "SELECT: BAR   ALGORITHM: PULL   EDIT: UPPER" : "SELECT: BAR   ALGORITHM: PULL   EDIT: LOWER");
 }
 
 static void oa_scene(void)
 {
     if (oa_page == 1u)
         scr_drawbars();
-    else if (oa_page == 2u)
-        scr_perc();
-    else if (oa_page == 3u)
-        scr_rotary();
-    else if (oa_page == 4u)
-        scr_drive();
-    else if (oa_page == 5u)
-        scr_reverb();
-    else if (oa_page == 6u)
-        scr_delay();
-    else if (oa_page == 7u)
-        scr_eq();
+    else if (oa_page >= 2u && oa_page <= 7u)
+        oa_rows(oa_page, oa_page == 2u ? "" : oa_page == 3u ? (org_patch[OP_ROT] ? ROT_SPD[oa_u(OP_ROT_SPEED, 2u)] : "OFF") :
+                         oa_page == 4u ? (org_patch[OP_DRV] ? (org_patch[OP_DRV_TYPE] ? "TUBE" : "DIST") : "OFF") :
+                         oa_page == 5u ? (TSEL->p[P_REV] ? N_RTYPE[clamp(song.g[G_RTYPE], 0, 4)] : "OFF") :
+                         oa_page == 6u ? (TSEL->p[P_DLY] ? N_DLYTYPE[clamp(song.g[G_DTIME], 0, 6)] : "OFF") :
+                         (org_patch[OP_EQ] ? "ON" : "OFF"));
     else
         scr_home();
     if (oa_gl == 1u)
@@ -726,7 +959,7 @@ static uint32_t oa_signature(void)
     uint32_t h = 2166136261u, i;
     for (i = 0; i < ORG_PSIZE; i++)
         h = (h ^ org_patch[i]) * 16777619u;
-    h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_win << 2 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
+    h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_sel << 2 ^ (uint32_t)oa_row[oa_page & 7u] << 18 ^ (uint32_t)oa_top[oa_page & 7u] << 22 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
     h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_midi_ch << 6) * 16777619u;
     h = (h ^ oa_sv ^ (uint32_t)oa_sv_slot << 1 ^ (uint32_t)oa_sv_pos << 8 ^ (uint32_t)oa_msg_on() << 12 ^
          (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16) * 16777619u;
@@ -783,10 +1016,13 @@ static void oa_close_all(void)
     oa_sv = 0;
     oa_gl_close();
 }
-static void oa_bar(uint32_t i, int32_t s)                 /* drawbar i (upper) pulled s steps */
+static void oa_bar(uint32_t i, int32_t s)                 /* bar i (of the page's list) pulled s steps */
 {
-    int32_t v = (int32_t)org_patch[9u * oa_man + i] + (s > 0 ? 1 : -1) * (s > 0 ? s : -s);
-    org_set(9u * oa_man + i, (uint32_t)clamp(v, 0, 8));
+    uint32_t op;
+    if (i >= oa_nbar())
+        return;
+    op = oa_bar_op(i);
+    org_set(op, (uint32_t)clamp((int32_t)org_patch[op] + s, 0, 8));
 }
 
 static void oa_buttons(uint32_t pressed)
@@ -796,9 +1032,10 @@ static void oa_buttons(uint32_t pressed)
         oa_page = 0;
         return;
     }
-    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars; again: the lower manual's, then the pedals', then the upper's */
+    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars; again: the lower manual's with the pedal's two, then the upper's */
         oa_close_all();
-        oa_man = oa_page == 1u ? (uint8_t)((oa_man + 1u) % 3u) : 0u;
+        oa_man = oa_page == 1u ? (uint8_t)(oa_man ^ 1u) : 0u;
+        oa_sel = (uint8_t)(oa_man && oa_page == 1u ? (oa_sel < 2u ? oa_sel : 2u) : 0u);
         oa_page = 1;
         return;
     }
@@ -919,100 +1156,29 @@ static void oa_input(void)
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         oa_preset(s);
-    if (oa_page == 3u) {                                  /* ROTARY: switches, speed, width (ALGORITHM), horn level (SELECT) */
-        if (panel_enc(EN_K1) != 0)
-            org_set(OP_ROT, !org_patch[OP_ROT]);
-        if (panel_enc(EN_K2) != 0)
-            org_set(OP_ROT_MODEL, !org_patch[OP_ROT_MODEL]);
-        if (panel_enc(EN_K3) != 0)
-            org_set(OP_ROT_HORN, !org_patch[OP_ROT_HORN]);
-        if ((s = panel_enc(EN_K4)) != 0)
-            org_set(OP_ROT_SPEED, (uint32_t)clamp((int32_t)org_patch[OP_ROT_SPEED] + (s > 0 ? 1 : -1), 0, 2));
-        if ((s = panel_enc(EN_ALGO)) != 0)
-            org_set(OP_ROT_MIC, (uint32_t)clamp((int32_t)org_patch[OP_ROT_MIC] - (s > 0 ? 1 : -1), 0, 6));
+    if (oa_page >= 2u && oa_page <= 7u) {                 /* the FX pages: SELECT picks a row, ALGORITHM changes it, the knobs 1-4 go to rows 1-4 */
+        uint32_t pg = oa_page, n = OA_NR[pg];
         if ((s = panel_enc(EN_SELECT)) != 0)
-            org_set(OP_ROT_BAL, (uint32_t)clamp((int32_t)org_patch[OP_ROT_BAL] + (s > 0 ? 1 : -1), 0, 8));
-        return;
-    }
-    if (oa_page == 7u) {                                  /* EQ: on, LOW, MID, HIGH, the MID's frequency */
-        (void)panel_enc(EN_SELECT);
-        if (panel_enc(EN_K1) != 0)
-            org_set(OP_EQ, !org_patch[OP_EQ]);
-        if ((s = panel_enc(EN_K2)) != 0)
-            org_set(OP_EQ_LOW, eq_byte(clamp(eq_db(org_patch[OP_EQ_LOW]) + (s > 0 ? 1 : -1), -12, 12)));
-        if ((s = panel_enc(EN_K3)) != 0)
-            org_set(OP_EQ_MID, eq_byte(clamp(eq_db(org_patch[OP_EQ_MID]) + (s > 0 ? 1 : -1), -12, 12)));
-        if ((s = panel_enc(EN_K4)) != 0)
-            org_set(OP_EQ_HIGH, eq_byte(clamp(eq_db(org_patch[OP_EQ_HIGH]) + (s > 0 ? 1 : -1), -12, 12)));
+            oa_row[pg] = (uint8_t)((oa_row[pg] + n + (s > 0 ? 1u : n - 1u)) % n);
         if ((s = panel_enc(EN_ALGO)) != 0)
-            org_set(OP_EQ_FREQ, eq_fbyte((uint32_t)clamp((int32_t)eq_fidx(org_patch[OP_EQ_FREQ]) + (s > 0 ? 1 : -1), 0, 11)));
+            oa_adj(pg, oa_row[pg], s);
+        for (k = 0; k < 4u && k < n; k++)
+            if ((s = panel_enc(EN_K1 + k)) != 0)
+                oa_adj(pg, k, s);
         return;
     }
-    if (oa_page == 5u) {                                  /* REVERB: send, type, size, tone */
-        (void)panel_enc(EN_SELECT);
-        (void)panel_enc(EN_ALGO);
-        if ((s = panel_enc(EN_K1)) != 0)
-            TSEL->p[P_REV] = (uint8_t)oa_step(TSEL->p[P_REV], s, 127);
-        if ((s = panel_enc(EN_K2)) != 0)
-            song.g[G_RTYPE] = (int16_t)((song.g[G_RTYPE] + (s > 0 ? 1 : 4)) % 5);
-        if ((s = panel_enc(EN_K3)) != 0)
-            song.g[G_RSIZE] = (int16_t)oa_step(song.g[G_RSIZE], s, 127);
-        if ((s = panel_enc(EN_K4)) != 0)
-            song.g[G_RDAMP] = (int16_t)oa_step(song.g[G_RDAMP], s, 127);
-        return;
-    }
-    if (oa_page == 6u) {                                  /* DELAY: send, type, time, feedback, colour, mix */
-        if ((s = panel_enc(EN_K1)) != 0)
-            TSEL->p[P_DLY] = (uint8_t)oa_step(TSEL->p[P_DLY], s, 127);
-        if ((s = panel_enc(EN_K2)) != 0)
-            song.g[G_DTIME] = (int16_t)((song.g[G_DTIME] + (s > 0 ? 1 : 6)) % 7);
-        if ((s = panel_enc(EN_K3)) != 0)
-            song.g[G_DRREV] = (int16_t)oa_step(song.g[G_DRREV], s, 127);
-        if ((s = panel_enc(EN_K4)) != 0)
-            song.g[G_DFDBK] = (int16_t)oa_step(song.g[G_DFDBK], s, 120);
-        if ((s = panel_enc(EN_ALGO)) != 0)
-            song.g[G_DCOLOR] = (int16_t)oa_step(song.g[G_DCOLOR], s, 127);
-        if ((s = panel_enc(EN_SELECT)) != 0)
-            song.g[G_DMIX] = (int16_t)oa_step(song.g[G_DMIX], s, 127);
-        return;
-    }
-    if (oa_page == 4u) {                                  /* DRIVE: on, gain, character */
-        (void)panel_enc(EN_SELECT);
-        (void)panel_enc(EN_ALGO);
-        if (panel_enc(EN_K1) != 0)
-            org_set(OP_DRV, !org_patch[OP_DRV]);
-        if ((s = panel_enc(EN_K2)) != 0)
-            org_set(OP_DRV_GAIN, (uint32_t)clamp((int32_t)org_patch[OP_DRV_GAIN] + (s > 0 ? 1 : -1), 0, 12));
-        if ((s = panel_enc(EN_K3)) != 0)
-            org_set(OP_DRV_FAT, (uint32_t)clamp((int32_t)org_patch[OP_DRV_FAT] + (s > 0 ? 1 : -1), 0, 8));
-        (void)panel_enc(EN_K4);
-        return;
-    }
-    if (oa_page == 2u) {                                  /* PERC & VIB: the knobs switch the percussion, ALGORITHM the vibrato */
-        (void)panel_enc(EN_SELECT);
-        if (panel_enc(EN_K1) != 0)
-            org_set(OP_PERC, !org_patch[OP_PERC]);
-        if (panel_enc(EN_K2) != 0)
-            org_set(OP_PERC_SOFT, !org_patch[OP_PERC_SOFT]);
-        if (panel_enc(EN_K3) != 0)
-            org_set(OP_PERC_FAST, !org_patch[OP_PERC_FAST]);
-        if (panel_enc(EN_K4) != 0)
-            org_set(OP_PERC_SEL, !org_patch[OP_PERC_SEL]);
-        if ((s = panel_enc(EN_ALGO)) != 0)
-            org_set(OP_VIB, (uint32_t)clamp((int32_t)org_patch[OP_VIB] + s, 0, 6));
-        return;
-    }
-    if ((s = panel_enc(EN_SELECT)) != 0) {                /* the four marked bars move along */
+    if ((s = panel_enc(EN_SELECT)) != 0) {                /* SELECT picks a bar (on HOME: opens the upper manual's) */
         oa_man = oa_page == 1u ? oa_man : 0u;
         oa_page = 1;
-        oa_win = (uint8_t)clamp((int32_t)oa_win + (s > 0 ? 1 : -1), 0, (int32_t)OA_NWIN - 1);
+        oa_sel = (uint8_t)clamp((int32_t)oa_sel + (s > 0 ? 1 : -1), 0, (int32_t)oa_nbar() - 1);
     }
-    (void)panel_enc(EN_ALGO);
+    if ((s = panel_enc(EN_ALGO)) != 0 && oa_page == 1u)   /* ALGORITHM pulls the picked bar */
+        oa_bar(oa_sel, s);
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0) {
             oa_man = oa_page == 1u ? oa_man : 0u;
             oa_page = 1;                                  /* (on HOME: the knob opens DRAWBARS and moves its bar) */
-            oa_bar(oa_win + k, s);
+            oa_bar(oa_sel + k, s);
         }
 }
 
