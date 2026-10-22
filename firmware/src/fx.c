@@ -937,7 +937,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
             sr |= (uint32_t)(trk[k].p[P_REV] > 0);
         }
         cho_act = sc || fx_any(cho_in, n);
-        dly_act = sd || fx_any(dly_in, n);
+        dly_act = !cpu_high && (sd || fx_any(dly_in, n));
         rev_act = sr || fx_any(rev_in, n);
     }
     /* FMini-1: RATE only changes the rate. The depth is a fixed, typical pitch swing (about +-16 cents, 25% above the first pick): the delay swing
@@ -1079,29 +1079,22 @@ static const int32_t DRV_FB[9] = {9766017, 9766017, 9766017, 13150415, 15099494,
 static const int32_t DRV_FB2[9] = {16760439, 13376041, 9766017, 9766017, 9766017, 11431356, 13207717, 14984078, 16760439};
 static const uint16_t ROT_BAL_HL[9] = {5734, 6820, 8110, 9644, 11469, 13639, 16220, 19288, 22938};
 static uint8_t fxo_seen = 0xFF;
-/* CPU overload (audio.c shed_voice finds no voice to take in the organ): first CLASSIC plays as LIGHT, then the drive goes off,
- * each until the next patch load (org_set_patch clears it). The patch bytes are not touched: the panel and the editor still
- * show what was chosen, and ROTARY says so */
-static uint32_t fx_degrade(void)                         /* 1: something was lowered */
+/* CPU overload (audio.c shed_voice): CPU_HIGH_BLOCKS blocks (2 s) of "CPU HIGH" per request, during which the delay is off and
+ * the oldest key is let go (eng_organ.c org_fragment). The rotary and the drive are left as they are */
+#define CPU_HIGH_BLOCKS 2756u
+static void fx_cpu_high(void)
 {
-    if (cpu_degrade < 1u && org_patch[OP_ROT] && !org_patch[OP_ROT_MODEL])
-        cpu_degrade = 1;
-    else if (cpu_degrade < 2u && org_patch[OP_DRV])
-        cpu_degrade = 2;
-    else
-        return 0;
-    fx_force = 1;
-    return 1;
+    cpu_high = CPU_HIGH_BLOCKS;
+    org_shed_req = 1;
 }
 static void fx_organ_apply(void)
 {
     uint32_t sp, g, f;
-    if (org_pgen == fxo_seen && !fx_force)
+    if (org_pgen == fxo_seen)
         return;
-    fx_force = 0;
     fxo_seen = org_pgen;
     rot_on = org_patch[OP_ROT];
-    rot_model_req = org_patch[OP_ROT_MODEL] || cpu_degrade >= 1u;
+    rot_model_req = org_patch[OP_ROT_MODEL];
     sp = org_patch[OP_ROT_SPEED];       /* setBfree's speeds: horn 0.672 / 7.056 Hz, drum 0.600 / 5.955 Hz */
     rot_target(&rot_st, sp ? rot_inc(sp == 1u ? 672u : 7056u) : 0u, sp ? rot_inc(sp == 1u ? 600u : 5955u) : 0u);
     rot_st.hset = org_patch[OP_ROT_HORN];
@@ -1110,7 +1103,7 @@ static void fx_organ_apply(void)
     g = org_patch[OP_DRV_GAIN] % 13u;
     f = org_patch[OP_DRV_FAT] % 9u;
     dr_set(&dr_st, DRV_IG[g], DRV_OG, DRV_FB[f], DRV_FB2[f], 10425000, 35043, 157700, 16626000);
-    dr_on = org_patch[OP_DRV] && cpu_degrade < 2u;
+    dr_on = org_patch[OP_DRV];
     eq_set(&eq_st, org_patch[OP_EQ_LOW], org_patch[OP_EQ_MID], org_patch[OP_EQ_FREQ], org_patch[OP_EQ_HIGH]);
     eq_on = org_patch[OP_EQ];
 }
@@ -1165,6 +1158,8 @@ static void mix_block(int32_t *out, uint32_t n)
     int32_t mg = fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12;   /* (USB LEVEL FIXED: MASTER after) */
     int32_t ol[CTL], orr[CTL], eq_a[CTL], eq_b[CTL];
     fx_organ_apply();
+    if (cpu_high)
+        cpu_high--;
     for (i = 0; i < n; i++)
         send_c[i] = send_d[i] = send_r[i] = mix_l[i] = mix_r[i] = 0;
     events_block(n);

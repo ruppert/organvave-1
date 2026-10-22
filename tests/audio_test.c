@@ -54,28 +54,25 @@ static void fresh(void)
     host_pending = FM1_AUDIO_HALF;
     transport_req = panic_req = 0;
 }
-/* the organ is no voice engine: an overload's shedding lightens the effects (fx_degrade), the organ goes on */
+/* the organ is no voice engine: an overload's shedding raises CPU HIGH (fx_cpu_high), the organ goes on */
 static void overload(void)
 {
     int32_t out[2 * CTL];
     uint32_t b;
     fresh();
-    trk_note_on(&trk[0], 48, 100);
-    trk_note_on(&trk[0], 60, 100);
+    for (b = 0; b < 40u; b++)
+        mix_block(out, CTL);
+    org_key(12, 1);
+    org_key(24, 1);
     for (b = 0; b < 8u; b++)
         mix_block(out, CTL);
-    org_patch[OP_ROT] = 0; org_patch[OP_DRV] = 0; org_pgen++;
-    mix_block(out, CTL);
-    shed_voice();
-    mix_block(out, CTL);
-    acheck("overload: with no effect to lighten the organ has nothing to shed, it goes on sounding", shed_count == 0u && org.nacl > 0u);
-    /* with the classic rotary on, the shedding lightens the effect (fx_degrade) instead */
-    org_patch[OP_ROT] = 1; org_patch[OP_ROT_MODEL] = 0; org_pgen++;
-    for (b = 0; b < 4u; b++)
+    for (b = 0; b < 8u; b++)
         mix_block(out, CTL);
     shed_voice();
-    mix_block(out, CTL);
-    acheck("overload: shedding lightens the rotary and the organ goes on", shed_count == 1u && cpu_degrade == 1u && org.nacl > 0u);
+    for (b = 0; b < 8u; b++)
+        mix_block(out, CTL);
+    acheck("overload: shedding raises CPU HIGH and lets the oldest key go, the organ goes on",
+           shed_count == 1u && cpu_high > 0u && org.keys[12] == 0u && org.keys[24] && org.nacl > 0u);
 }
 static void dma(void)
 {

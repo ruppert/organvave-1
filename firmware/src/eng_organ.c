@@ -75,6 +75,7 @@ typedef struct {
     uint8_t nins;
     uint8_t sub;                        /* the block within the fragment, 0..3 */
     uint8_t keys[ORG_NKEY];             /* 0 up; 1 down with crosstalk, 2 down without (the table it was added with) */
+    uint32_t kage[ORG_NKEY], kseq;      /* when each key went down (a counter): the overload releases the oldest */
     uint8_t ndown;                      /* keys down (keyDownCount; at most 61 + 61 + 32) */
     uint8_t adown;                      /* keys down on the audio side (the fragment's messages applied) */
     uint8_t bars_cur[ORG_NBUS], temp_cur;
@@ -91,6 +92,8 @@ typedef struct {
 } org_t;
 
 static org_t org;
+static volatile uint16_t cpu_high;      /* overload: blocks left of "CPU HIGH" (the delay is off meanwhile; audio.c shed_voice arms it) */
+static volatile uint8_t org_shed_req;   /* overload: release the oldest key at the next fragment (org_fragment) */
 
 static void org_init(void)
 {
@@ -120,6 +123,7 @@ static void org_key(uint32_t k, uint32_t on)
     if (on) {
         org.keys[k] = (uint8_t)(org.xtalk ? 1 : 2);
         org.ndown++;
+        org.kage[k] = ++org.kseq;
         org.q[org.nq] = (uint8_t)(1u | (org.xtalk ? 2u : 0u));
     } else {
         org.q[org.nq] = (uint8_t)(org.keys[k] == 1u ? 2u : 0u);     /* up with the table it went down with */
@@ -178,6 +182,17 @@ static __attribute__((noinline)) void org_fragment(void)
     uint8_t pc = org.perc ? 1u : 0u, psel = org.psel ? 1u : 0u, vm = org.vibm <= 6u ? org.vibm : 0u;
     if (org.adown == 0u)                                             /* setBfree: no key down, the envelope starts over */
         org.pe = org.psoft ? ORG_PERC_SOFT : ORG_PERC_NORM;
+    if (org_shed_req) {                                              /* CPU overload: the oldest key held lets go (never the last one) */
+        uint32_t k, old = ORG_NKEY;
+        org_shed_req = 0;
+        if (org.ndown > 1u) {
+            for (k = 0; k < ORG_NKEY; k++)
+                if (org.keys[k] && (old == ORG_NKEY || org.kage[k] < org.kage[old]))
+                    old = k;
+            if (old < ORG_NKEY)
+                org_key(old, 0);
+        }
+    }
     for (i = 0; i < org.nq; i++) {
         uint32_t on = org.q[i] & 1u;
         org_msg(org.qk[i], on, org.q[i] >> 1);
@@ -425,7 +440,6 @@ enum {
 static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
 static volatile uint8_t org_pgen;
 static uint8_t org_pgen_seen = 0xFF;
-static volatile uint8_t cpu_degrade, fx_force;   /* overload: 1 CLASSIC plays as LIGHT, 2 the drive is off too (fx.c fx_degrade) */
 
 static uint32_t org_pmax(uint32_t i)
 {
@@ -467,7 +481,6 @@ static void org_set_patch(const uint8_t *v)
     memcpy(s, v, ORG_PSIZE);
     org_sanitize(s);
     memcpy(org_patch, s, ORG_PSIZE);
-    cpu_degrade = 0;                        /* (a new patch: the effects try their full cost again, fx.c) */
     RING_PUBLISH();
     org_pgen++;
 }

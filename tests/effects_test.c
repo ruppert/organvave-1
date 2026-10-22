@@ -416,34 +416,39 @@ int main(void)
         }
         song.master_q12 = 4096;
     }
-    /* 8. CPU overload: the CLASSIC rotary gives way to LIGHT, then the drive goes off (fx_degrade, which audio.c's shed_voice calls
-     * when it has no voice to take; tests/audio_test.c checks that call) */
+    /* 8. CPU overload (fx_cpu_high, which audio.c's shed_voice calls when it has no voice to take; tests/audio_test.c checks that
+     * call): "CPU HIGH" for 2 s, the delay off, the oldest key let go (never the last); the rotary and the drive stay as chosen */
     {
         boot();
         memset(P, 0, sizeof P);
         P[OP_UB + 2] = 8; P[OP_ROT] = 1; P[OP_ROT_MODEL] = 0; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 6;
         patch_set(P);
-        chord_on();
+        trk[0].p[P_DLY] = 60;
+        org_key(10, 1); org_key(20, 1); org_key(30, 1);
         blocks(8820);
-        check("overload: before, CLASSIC and the drive run", rot_mix.model == 0 && rot_on && dr_on);
-        check("  .. the first call lowers something", fx_degrade() == 1);
-        blocks(8820);
-        check("  .. the first shed: LIGHT plays, the patch still says CLASSIC", rot_mix.model == 1 && org_patch[OP_ROT_MODEL] == 0 && dr_on == 1 && cpu_degrade == 1);
-        check("  .. the second lowers something", fx_degrade() == 1);
-        blocks(8820);
-        check("  .. the second: the drive is off", dr_on == 0 && org_patch[OP_DRV] == 1 && cpu_degrade == 2);
-        check("  .. a third finds nothing more to lower", fx_degrade() == 0 && cpu_degrade == 2);
+        check("overload: before, the delay runs, no warning", fx.dly_on == 1 && cpu_high == 0 && org.ndown == 3);
+        fx_cpu_high();
+        blocks(256);
+        check("  .. the warning is up, the delay is off", cpu_high > 0 && fx.dly_on == 0);
+        check("  .. the oldest key let go, the others held", org.keys[10] == 0 && org.keys[20] && org.keys[30] && org.ndown == 2);
+        check("  .. the rotary and the drive are as chosen", rot_mix.model == 0 && rot_on && dr_on == 1);
+        fx_cpu_high(); blocks(256);
+        check("  .. the next oldest goes", org.keys[20] == 0 && org.keys[30] && org.ndown == 1);
+        fx_cpu_high(); blocks(256);
+        check("  .. the last key is never let go", org.keys[30] && org.ndown == 1);
         {
             int32_t pk = 0;
             uint32_t i;
+            blocks(4410);
             for (i = pos - 4410; i < pos; i++)
                 pk = oL[i] > pk ? oL[i] : -oL[i] > pk ? -oL[i] : pk;
             check("  .. and the organ still sounds", pk > 500);
         }
-        patch_set(P);
-        blocks(8820);
-        check("  .. a new patch load brings the full effects back", cpu_degrade == 0 && rot_mix.model == 0 && dr_on == 1);
-        chord_off();
+        blocks(90000);
+        check("  .. 2 s later the warning is gone and the delay is back", cpu_high == 0 && fx.dly_on == 1);
+        org_key(30, 0);
+        trk[0].p[P_DLY] = 0;
+        blocks(2000);
     }
     /* 9. every key of the three manuals at once, everything on: bounded and alive for ten seconds, then quiet */
     {

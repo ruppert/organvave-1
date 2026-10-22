@@ -233,7 +233,7 @@ designed one; the static budget of the new functions.
 | 0.3.1 | REVERB and DELAY pages: send, type, size and tone; delay send, type, time, feedback, colour, mix (UI over the existing engine; the sends are saved with the preset, the rest with a user preset; not yet on an FM-1). The EQ came in 0.5.0 |
 | 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). |
 | 0.5.0 | the equaliser: LOW (120 Hz shelf), MID (a peak, Q 0.8, twelve frequencies 160 Hz .. 7.2 kHz) and HIGH (4 kHz shelf), each -12 .. +12 dB in 1 dB steps, after MASTER and before the limiter; EQ page (FX button), editor controls, patch bytes 43..47 (zero is flat) (not yet on an FM-1). The editor, site, installer, emulator and GitHub Pages came early, with 0.1.0, at the owner's request |
-| 0.9.0 | beta: overload fallback (`fx_degrade`, called by the shedding: CLASSIC rotary becomes LIGHT, then the drive is off; `org_set_patch` restores), a CPU note on the ROTARY and DRIVE pages, stress test with all 96 keys of three manuals and every effect on (bounded, falls silent) (not yet on an FM-1) |
+| 0.9.0 | beta: overload fallback (`fx_cpu_high`, called by the shedding: "CPU HIGH" in the footer of every page, the delay off for 2 s, the oldest held key released at the next fragment; the rotary and the drive are left alone), stress test with all 96 keys of three manuals and every effect on (bounded, falls silent) (not yet on an FM-1) |
 | 0.9.x | further betas |
 | 1.0.0 | after the owner tests it on the hardware |
 

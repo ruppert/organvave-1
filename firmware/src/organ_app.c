@@ -181,7 +181,10 @@ static void header(const char *page, const char *right)
 static void footer(const char *s)
 {
     cv_rect(0, 226, 240, 1, C_PANEL2);
-    ctext(120, 230, &AF_X, s, C_DIM, C_PANEL);
+    if (cpu_high)                                       /* overload (audio.c): the warning replaces the hint, on every page */
+        ctext(120, 230, &AF_X, "CPU HIGH", RGB565(0xff, 0x50, 0x38), C_PANEL);
+    else
+        ctext(120, 230, &AF_X, s, C_DIM, C_PANEL);
 }
 
 /* the drawbars' colours by footage, as on the console: brown 16' 5 1/3', white the octaves, black the mutations */
@@ -565,7 +568,7 @@ static void scr_rotary(void)                            /* ROTARY: on, model, ho
     lamp(22, 124, b, sp != 0u);
     mrow(152, "WIDTH", 7, 6 - (int32_t)(org_patch[OP_ROT_MIC] <= 6u ? org_patch[OP_ROT_MIC] : 0u), "ALGORITHM");
     mrow(174, "HORN LEVEL", 9, (int32_t)(org_patch[OP_ROT_BAL] <= 8u ? org_patch[OP_ROT_BAL] : 4u), "SELECT");
-    footer(cpu_degrade ? "CPU HIGH: LIGHT MODEL PLAYS   SCL: SPEED" : "SCL: SLOW / FAST / STOP");
+    footer("SCL: SLOW / FAST / STOP");
 }
 
 static void scr_drive(void)                             /* DRIVE: on (knob 1), gain (knob 2), character (knob 3) */
@@ -575,7 +578,7 @@ static void scr_drive(void)                             /* DRIVE: on (knob 1), g
     mrow(92, "GAIN", 13, 1 + (int32_t)(org_patch[OP_DRV_GAIN] <= 12u ? org_patch[OP_DRV_GAIN] : 6u), "KNOB 2");
     mrow(116, "CHARACTER", 9, (int32_t)(org_patch[OP_DRV_FAT] <= 8u ? org_patch[OP_DRV_FAT] : 0u), "KNOB 3");
     ltext(22, 150, &AF_X, "THE PREAMP OF THE ORGAN, BEFORE THE ROTARY", C_DIM, C_PANEL);
-    footer(cpu_degrade >= 2u ? "CPU HIGH: THE DRIVE IS OFF" : "KNOBS: ON, GAIN, CHARACTER");
+    footer("KNOBS: ON, GAIN, CHARACTER");
 }
 
 /* REVERB and DELAY: the send is the part's (P_REV / P_DLY, saved with the preset), the rest are the instrument's globals
@@ -732,7 +735,7 @@ static uint32_t oa_signature(void)
     h = (h ^ t->p[P_REV] ^ (uint32_t)t->p[P_DLY] << 8 ^ (uint32_t)song.g[G_RTYPE] << 16 ^ (uint32_t)song.g[G_DTIME] << 20) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_RDAMP] << 7 ^ (uint32_t)song.g[G_DRREV] << 14 ^
          (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
-    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)cpu_degrade << 14) * 16777619u;
+    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_high != 0u) << 14) * 16777619u;
     return h;
 }
 

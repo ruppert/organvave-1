@@ -87,8 +87,10 @@ static void shed_voice(void)
     if (best) {
         voice_kill(best);
         shed_count++;
-    } else if (fx_degrade())                    /* the organ has no voices: its CLASSIC rotary, then its drive, give way */
+    } else {                                    /* the organ has no voices to take: "CPU HIGH", the delay off, the oldest key let go */
+        fx_cpu_high();
         shed_count++;
+    }
 }
 
 void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) */
