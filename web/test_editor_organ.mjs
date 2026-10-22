@@ -68,7 +68,7 @@ vm.runInContext(script + `
 ;globalThis.__page = {
   connect, readPatch, sendPatch, get patch() { return patch; }, set patch(v) { patch = v; }, OP_TEMP, OP_XTALK,
   OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL, OP_VIB, OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC,
-  OP_ROT_BAL, OP_DRV, OP_DRV_GAIN, OP_DRV_FAT
+  OP_ROT_BAL, OP_DRV, OP_DRV_GAIN, OP_DRV_FAT, OP_EQ, OP_EQ_LOW, OP_EQ_MID, OP_EQ_FREQ, OP_EQ_HIGH
 };`, ctx);
 const P = ctx.__page;
 const status = () => byId("status").textContent;

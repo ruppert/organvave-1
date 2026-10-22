@@ -415,7 +415,12 @@ enum {
     OP_DRV = 40,                /* drive (the preamp): 0 off, 1 on */
     OP_DRV_GAIN = 41,           /* its input gain: 0..12, 2 dB a step, 6 setBfree's default (3.5675) */
     OP_DRV_FAT = 42,            /* its character: 0..8, 0 setBfree's default; higher: more bass into, then out of, the curve */
-    OP_NUM                      /* (43..63: reserved: 0 until then) */
+    OP_EQ = 43,                 /* the equaliser (version 0.5.0; 0 in older patches): 0 off, 1 on */
+    OP_EQ_LOW = 44,             /* LOW (120 Hz shelf), -12 .. +12 dB: 0 flat, 1..12 dB up, 13..24 dB down (s - 25) */
+    OP_EQ_MID = 45,             /* MID (the peak), the same coding */
+    OP_EQ_FREQ = 46,            /* the peak's frequency, 0..11: 0 900 Hz, then 1280 Hz .. 7.2 kHz, 7 is 160 Hz .. 11 is 640 Hz */
+    OP_EQ_HIGH = 47,            /* HIGH (4 kHz shelf), the same coding as LOW */
+    OP_NUM                      /* (48..63: reserved: 0 until then) */
 };
 static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
 static volatile uint8_t org_pgen;
@@ -439,6 +444,12 @@ static uint32_t org_pmax(uint32_t i)
         return 8u;
     if (i == OP_DRV_GAIN)
         return 12u;
+    if (i == OP_EQ)
+        return 1u;
+    if (i == OP_EQ_LOW || i == OP_EQ_MID || i == OP_EQ_HIGH)
+        return 24u;
+    if (i == OP_EQ_FREQ)
+        return 11u;
     return 0u;
 }
 static void org_sanitize(uint8_t *v)

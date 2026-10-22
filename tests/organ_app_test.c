@@ -156,6 +156,8 @@ int main(int argc, char **argv)
         press(B_FX);
         bad += check("FX again: the DELAY page", oa_page == 6);
         press(B_FX);
+        bad += check("FX again: the EQ page", oa_page == 7);
+        press(B_FX);
         bad += check("FX again: HOME", oa_page == 0);
         press(B_ENV);
         bad += check("ENV on HOME: the percussion on", org_patch[OP_PERC] == 1);
@@ -288,16 +290,54 @@ int main(int argc, char **argv)
             bad += check("  .. a different picture", frame_hash() != h_dl);
             oa_page = 4;
         }
+        /* EQ (0.5.0): on, LOW, MID, HIGH in 1 dB steps (0 is flat), the MID's frequency on ALGORITHM */
+        {
+            uint32_t h_eq, i;
+            org_set(OP_EQ, 0); org_set(OP_EQ_LOW, 0); org_set(OP_EQ_MID, 0); org_set(OP_EQ_HIGH, 0); org_set(OP_EQ_FREQ, 0);
+            oa_page = 6;
+            press(B_FX);
+            bad += check("DELAY: FX goes on to the EQ page", oa_page == 7);
+            h_eq = frame_hash();
+            turn(EN_K1, 1);
+            bad += check("EQ: KNOB 1 switches it on", org_patch[OP_EQ] == 1);
+            turn(EN_K2, 1);
+            bad += check("  .. KNOB 2: LOW up 1 dB (byte 1)", eq_db(org_patch[OP_EQ_LOW]) == 1 && org_patch[OP_EQ_LOW] == 1);
+            turn(EN_K2, -1); turn(EN_K2, -1);
+            bad += check("  .. and below flat: -1 dB is byte 24", eq_db(org_patch[OP_EQ_LOW]) == -1 && org_patch[OP_EQ_LOW] == 24);
+            for (i = 0; i < 20u; i++)
+                turn(EN_K2, -1);
+            bad += check("  .. stops at -12 dB", eq_db(org_patch[OP_EQ_LOW]) == -12);
+            for (i = 0; i < 30u; i++)
+                turn(EN_K3, 1);
+            bad += check("  .. KNOB 3: MID stops at +12 dB", eq_db(org_patch[OP_EQ_MID]) == 12);
+            turn(EN_K4, 1);
+            bad += check("  .. KNOB 4: HIGH up 1 dB", eq_db(org_patch[OP_EQ_HIGH]) == 1);
+            turn(EN_ALGO, 1);
+            bad += check("  .. ALGORITHM: the MID's frequency 900 -> 1280 Hz", EQ_FREQ_HZ[eq_fidx(org_patch[OP_EQ_FREQ])] == 1280);
+            for (i = 0; i < 20u; i++)
+                turn(EN_ALGO, 1);
+            bad += check("  .. up to 7.2 kHz and stops", EQ_FREQ_HZ[eq_fidx(org_patch[OP_EQ_FREQ])] == 7200);
+            for (i = 0; i < 20u; i++)
+                turn(EN_ALGO, -1);
+            bad += check("  .. down to 160 Hz and stops", EQ_FREQ_HZ[eq_fidx(org_patch[OP_EQ_FREQ])] == 160);
+            bad += check("  .. a different picture", frame_hash() != h_eq);
+            org_set(OP_EQ, 0); org_set(OP_EQ_LOW, 0); org_set(OP_EQ_MID, 0); org_set(OP_EQ_HIGH, 0); org_set(OP_EQ_FREQ, 0);
+            oa_page = 4;
+        }
         if (shot_dir) {
-            static const char *const N[7] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay"};
+            static const char *const N[8] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq"};
             uint32_t pg;
             org_set(OP_ROT, 1);
             org_set(OP_DRV, 1);
             oa_msg_until = 0;
             oa_pp_until = 0;
-            for (pg = 0; pg < 7u; pg++) {
+            for (pg = 0; pg < 8u; pg++) {
                 char path[200];
                 FILE *f;
+                if (pg == 7u) {                               /* (the EQ's shot shows something set) */
+                    org_set(OP_EQ, 1); org_set(OP_EQ_LOW, eq_byte(5)); org_set(OP_EQ_MID, eq_byte(-3)); org_set(OP_EQ_FREQ, eq_fbyte(7));
+                    org_set(OP_EQ_HIGH, eq_byte(2));
+                }
                 oa_page = (uint8_t)pg;
                 (void)frame_hash();
                 snprintf(path, sizeof path, "%s/%s.ppm", shot_dir, N[pg]);

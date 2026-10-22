@@ -230,9 +230,9 @@ designed one; the static budget of the new functions.
 | 0.1.0 (now) | tone generator, upper manual, click, the drawbar page, 8 factory patches; FMUG removed |
 | 0.2.0 | percussion, vibrato / chorus (done in the firmware; PERC & VIB page, editor controls; not yet on an FM-1) |
 | 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive (done in the firmware; ROTARY and DRIVE pages, editor controls; not yet on an FM-1) |
-| 0.3.1 | REVERB and DELAY pages: send, type, size and tone; delay send, type, time, feedback, colour, mix (UI over the existing engine; the sends are saved with the preset, the rest with a user preset; not yet on an FM-1). The EQ moves to 0.4.0 |
-| 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). The EQ is not in the plan before 1.0.0 unless the owner asks |
-| 0.5.0 | editor, site, installer, emulator, GitHub Pages on (the site, the installer and the patch editor came early, with 0.1.0's firmware, at the owner's request) |
+| 0.3.1 | REVERB and DELAY pages: send, type, size and tone; delay send, type, time, feedback, colour, mix (UI over the existing engine; the sends are saved with the preset, the rest with a user preset; not yet on an FM-1). The EQ came in 0.5.0 |
+| 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). |
+| 0.5.0 | the equaliser: LOW (120 Hz shelf), MID (a peak, Q 0.8, twelve frequencies 160 Hz .. 7.2 kHz) and HIGH (4 kHz shelf), each -12 .. +12 dB in 1 dB steps, after MASTER and before the limiter; EQ page (FX button), editor controls, patch bytes 43..47 (zero is flat) (not yet on an FM-1). The editor, site, installer, emulator and GitHub Pages came early, with 0.1.0, at the owner's request |
 | 0.9.x | beta |
 | 1.0.0 | after the owner tests it on the hardware |
 

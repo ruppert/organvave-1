@@ -1057,8 +1057,11 @@ static void events_block(uint32_t n);                 /* (seq.c) */
 #include "eng_rotary.c"             /* the rotary speaker, CLASSIC */
 #include "eng_rotary_light.c"       /* ... and LIGHT, and the switch between the two */
 #include "eng_drive.c"              /* the drive: the organ's preamp, before the master and the rotary */
+#include "eng_eq.c"                 /* the equaliser: after MASTER, before the limiter */
 _Static_assert(CTL <= DR_MAX, "the drive's longest block");
 static dr_t dr_st;
+static eq_t eq_st;
+static volatile uint8_t eq_on;                          /* the equaliser, on or off (the patch) */
 static volatile uint8_t dr_on;                          /* 0 off, 1 on (the effects section sets it) */
 /* the rotary speaker (eng_rotary.c) between the mix and the master: off (rot_on 0) the mix is as it was; on, the mono
  * sum of the mix and the reverb's return goes through the cabinet and comes out in stereo */
@@ -1093,23 +1096,59 @@ static void fx_organ_apply(void)
     f = org_patch[OP_DRV_FAT] % 9u;
     dr_set(&dr_st, DRV_IG[g], DRV_OG, DRV_FB[f], DRV_FB2[f], 10425000, 35043, 157700, 16626000);
     dr_on = org_patch[OP_DRV];
+    eq_set(&eq_st, org_patch[OP_EQ_LOW], org_patch[OP_EQ_MID], org_patch[OP_EQ_FREQ], org_patch[OP_EQ_HIGH]);
+    eq_on = org_patch[OP_EQ];
 }
 
 /* the effects come in and out over about 20 ms (FX_FADE a block, Q15) */
 #define FX_FADE 1170
-static int32_t dr_w, rot_w;                             /* Q15: how much of the drive / the rotary is in the mix */
+static int32_t dr_w, rot_w, eq_w;                             /* Q15: how much of the drive / the rotary is in the mix */
 #define ROT_IDLE_BLOCKS 1500u                           /* quiet blocks (32 samples) before the cabinet is emptied */
-static uint32_t rot_idle;
+static uint32_t rot_idle, eq_idle;
 static inline int32_t fx_lerp(int32_t a, int32_t b, int32_t w)      /* a + (b - a) w, w Q15; |b - a| < 2^20 */
 {
     return a + ((((b - a) >> 2) * (w >> 3)) >> 10);
+}
+
+/* the equaliser on a block of the stereo output (after MASTER, before the limiter), in place: its share eq_w fades in and out
+ * like the other effects' (a block's step, Q15); the filters' states are emptied at turn-on and after 1500 quiet blocks (1.1 s:
+ * the rounding of a filter this low leaves a faint tone running after the last sound) */
+static void fx_eq_apply(int32_t *l, int32_t *r, uint32_t n)
+{
+    int32_t el[CTL], er[CTL], pk = 0;
+    uint32_t i;
+    if (eq_on && !eq_w)
+        eq_clear(&eq_st);
+    eq_w += eq_on ? FX_FADE : -FX_FADE;
+    eq_w = eq_w < 0 ? 0 : eq_w > 32768 ? 32768 : eq_w;
+    for (i = 0; i < n; i++) {
+        int32_t m = (l[i] < 0 ? -l[i] : l[i]) + (r[i] < 0 ? -r[i] : r[i]);
+        pk = m > pk ? m : pk;
+        el[i] = l[i];
+        er[i] = r[i];
+    }
+    eq_block(&eq_st, el, er, n);
+    if (eq_w == 32768)
+        for (i = 0; i < n; i++) {
+            l[i] = el[i];
+            r[i] = er[i];
+        }
+    else
+        for (i = 0; i < n; i++) {
+            l[i] = fx_lerp(l[i], el[i], eq_w);
+            r[i] = fx_lerp(r[i], er[i], eq_w);
+        }
+    if (pk >= 8)
+        eq_idle = 0;
+    else if (eq_idle < ROT_IDLE_BLOCKS + 1u && ++eq_idle == ROT_IDLE_BLOCKS)
+        eq_clear(&eq_st);
 }
 
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
     int32_t mg = fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12;   /* (USB LEVEL FIXED: MASTER after) */
-    int32_t ol[CTL], orr[CTL];
+    int32_t ol[CTL], orr[CTL], eq_a[CTL], eq_b[CTL];
     fx_organ_apply();
     for (i = 0; i < n; i++)
         send_c[i] = send_d[i] = send_r[i] = mix_l[i] = mix_r[i] = 0;
@@ -1167,8 +1206,12 @@ static void mix_block(int32_t *out, uint32_t n)
             orr[i] = (orr[i] * mg) >> 12;
         }
         if (rot_w == 32768) {
+            for (i = 0; i < n; i++)
+                eq_a[i] = ol[i], eq_b[i] = orr[i];
+            if (eq_on || eq_w)
+                fx_eq_apply(eq_a, eq_b, n);
             for (i = 0; i < n; i++) {
-                int32_t l = ol[i], r = orr[i];
+                int32_t l = eq_a[i], r = eq_b[i];
                 master_out(&l, &r);
                 out[2u * i] = l;
                 out[2u * i + 1u] = r;
@@ -1185,6 +1228,13 @@ static void mix_block(int32_t *out, uint32_t n)
             l = fx_lerp(l, ol[i], rot_w);
             r = fx_lerp(r, orr[i], rot_w);
         }
+        eq_a[i] = l;
+        eq_b[i] = r;
+    }
+    if (eq_on || eq_w)
+        fx_eq_apply(eq_a, eq_b, n);
+    for (i = 0; i < n; i++) {
+        int32_t l = eq_a[i], r = eq_b[i];
         master_out(&l, &r);
         out[2u * i] = l;
         out[2u * i + 1u] = r;

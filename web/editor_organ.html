@@ -132,6 +132,23 @@
         <input type="range" id="dfat" min="0" max="8" step="1"> <output id="dfato"></output>
       </label>
     </div>
+
+    <div class="set"><h3>Equaliser (0.5.0)</h3></div>
+    <div class="set row">
+      <label class="chk"><input type="checkbox" id="eq"> EQ on</label>
+      <label>Low (120 Hz shelf)
+        <input type="range" id="eqlow" min="-12" max="12" step="1"> <output id="eqlowo"></output>
+      </label>
+      <label>Mid
+        <input type="range" id="eqmid" min="-12" max="12" step="1"> <output id="eqmido"></output>
+      </label>
+      <label>Mid frequency
+        <select id="eqfreq"></select>
+      </label>
+      <label>High (4 kHz shelf)
+        <input type="range" id="eqhigh" min="-12" max="12" step="1"> <output id="eqhigho"></output>
+      </label>
+    </div>
   </div>
 </main>
 
@@ -140,7 +157,12 @@
 const CMD = { INFO: 1, ORG_GET: 85, ORG_PUT: 86 };
 const ORG_PSIZE = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, OP_PERC = 29, OP_PERC_SOFT = 30,
       OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, OP_ROT = 34, OP_ROT_MODEL = 35, OP_ROT_SPEED = 36,
-      OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_DRV_FAT = 42, PUT_MAX = 48;
+      OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_DRV_FAT = 42, OP_EQ = 43, OP_EQ_LOW = 44, OP_EQ_MID = 45, OP_EQ_FREQ = 46, OP_EQ_HIGH = 47, PUT_MAX = 48;
+// the equaliser's bytes: zero is flat. A gain byte s is s dB up to 12 and s - 25 above; the frequency byte f is the index (f + 5) % 12 of
+// this list (0 is 900 Hz)
+const EQ_HZ = [160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200];
+const eqDb = (s) => (s <= 12 ? s : s - 25), eqByte = (db) => (db >= 0 ? db : db + 25);
+const eqFidx = (f) => (f + 5) % 12, eqFbyte = (i) => (i + 7) % 12;
 const FOOT = ["16′", "5⅓′", "8′", "4′", "2⅔′", "2′", "1⅗′", "1⅓′", "1′"];
 const $ = (id) => document.getElementById(id);
 
@@ -284,7 +306,14 @@ function showPatch() {
   $("drv").checked = !!patch[OP_DRV];
   $("dgain").value = patch[OP_DRV_GAIN] ?? 0; $("dgaino").textContent = gainText(patch[OP_DRV_GAIN] ?? 0);
   $("dfat").value = patch[OP_DRV_FAT] ?? 0; $("dfato").textContent = String(patch[OP_DRV_FAT] ?? 0);
+  $("eq").checked = !!patch[OP_EQ];
+  for (const [id, op] of [["eqlow", OP_EQ_LOW], ["eqmid", OP_EQ_MID], ["eqhigh", OP_EQ_HIGH]]) {
+    const db = eqDb(patch[op] ?? 0);
+    $(id).value = db; $(id + "o").textContent = dbText(db);
+  }
+  $("eqfreq").value = String(eqFidx(patch[OP_EQ_FREQ] ?? 0));
 }
+function dbText(d) { return (d > 0 ? "+" : "") + d + " dB"; }
 // the sliders' words: the horn level 1.5 dB a step around 4, the drive's gain 2 dB a step around 6 (setBfree's default)
 function balText(v) { const d = (v - 4) * 1.5; return (d > 0 ? "+" : "") + d.toFixed(1) + " dB"; }
 function gainText(v) { const d = (v - 6) * 2; return (d > 0 ? "+" : "") + d + " dB"; }
@@ -311,15 +340,21 @@ function fromControls() {
   $("rbalo").textContent = balText(patch[OP_ROT_BAL]);
   $("dgaino").textContent = gainText(patch[OP_DRV_GAIN]);
   $("dfato").textContent = String(patch[OP_DRV_FAT]);
+  patch[OP_EQ] = $("eq").checked ? 1 : 0;
+  patch[OP_EQ_LOW] = eqByte(Number($("eqlow").value));
+  patch[OP_EQ_MID] = eqByte(Number($("eqmid").value));
+  patch[OP_EQ_HIGH] = eqByte(Number($("eqhigh").value));
+  patch[OP_EQ_FREQ] = eqFbyte(Number($("eqfreq").value));
+  for (const id of ["eqlow", "eqmid", "eqhigh"]) $(id + "o").textContent = dbText(Number($(id).value));
 }
 
-// ORG_PUT: target 0, offset, count, count bytes (count <= 48). One write of the 43 used bytes; reply: target, offset, rc
+// ORG_PUT: target 0, offset, count, count bytes (count <= 48). One write of the 48 used bytes; reply: target, offset, rc
 async function sendPatch() {
   if (busy || !dev || !patch) return;
   busy = true; setEnabled(true);
   try {
     fromControls();
-    const used = OP_DRV_FAT + 1;
+    const used = OP_EQ_HIGH + 1;
     const r = await request(CMD.ORG_PUT, [0, 0, used, ...patch.slice(0, used)]);
     if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
     say("Sent. The instrument plays this patch now; it is not saved to flash.", "ok");
@@ -328,14 +363,15 @@ async function sendPatch() {
 }
 
 buildBars();
+EQ_HZ.forEach((hz, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = hz >= 1000 ? (hz / 1000) + " kHz" : hz + " Hz"; $("eqfreq").appendChild(o); });
 $("connect").onclick = connect;
 $("read").onclick = readPatch;
 $("send").onclick = sendPatch;
 $("source").onchange = readPatch;
 $("temp").onchange = () => { fromControls(); };
 $("xtalk").onchange = () => { fromControls(); };
-for (const id of ["perc", "psoft", "pfast", "psel", "vib", "rot", "rmodel", "rspeed", "rhorn", "rmic", "drv"]) $(id).onchange = () => { fromControls(); };
-for (const id of ["rbal", "dgain", "dfat"]) $(id).oninput = () => { fromControls(); };
+for (const id of ["perc", "psoft", "pfast", "psel", "vib", "rot", "rmodel", "rspeed", "rhorn", "rmic", "drv", "eq", "eqfreq"]) $(id).onchange = () => { fromControls(); };
+for (const id of ["rbal", "dgain", "dfat", "eqlow", "eqmid", "eqhigh"]) $(id).oninput = () => { fromControls(); };
 if (!navigator.requestMIDIAccess) say("This browser has no Web MIDI. Use Chrome or Edge.", "bad");
 </script>
 </body>

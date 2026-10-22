@@ -13,6 +13,8 @@ second core taken out; the credits for those parts stay below, marked "(Felucca:
   Speaker", AES 127th Convention, 2009 (speeds and time constants); J. Smith, S. Serafin, J. Abel, D. Berners, "Doppler
   simulation and the Leslie", DAFx-02, 2002 (the horn's angle-dependent impulse responses, read off a figure by setBfree's
   author)
+- The equaliser's filters (0.5.0) use the formulas of Robert Bristow-Johnson's "Cookbook formulae for audio EQ biquad filter
+  coefficients" (a published recipe, no code taken), evaluated by `tools/gen_eq_tables.py`
 - The splash picture is the owner's
 
 - **[Hügelton Instruments](https://hugelton.com)** (Leo Kuroshita, [@kurogedelic](https://github.com/kurogedelic)):

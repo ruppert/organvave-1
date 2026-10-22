@@ -109,6 +109,7 @@ static void felucca_init(void)
     rot_init(&rot_st);
     lt_init(&lt_st, &rot_st);
     dr_init(&dr_st);
+    eq_init(&eq_st);
     track_defaults(t);
     set_engine_of(t, ENGI_ORGAN);             /* the organ, its first factory preset */
     t->engine = t->eng_req;

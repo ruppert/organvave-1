@@ -33,7 +33,7 @@
 #define C_HOT    RGB565(0x2e, 0x28, 0x22)
 
 #define OA_NWIN 6u                                       /* the four marked bars start at 0..5 */
-static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY (FX walks 2..6) */
+static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY, 7 EQ (FX walks 2..7) */
 static uint8_t oa_man;                                   /* the manual the DRAWBARS page edits: 0 UPPER, 1 LOWER, 2 PEDAL (the last two play over MIDI) */
 static uint8_t oa_win = 2;                               /* the first of the four bars the knobs pull (8' .. 2') */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
@@ -610,6 +610,42 @@ static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on t
     return clamp(v + (s > 0 ? 8 : -8), 0, mx);
 }
 
+/* EQ: on (knob 1), LOW (knob 2), MID (knob 3), HIGH (knob 4), the MID's frequency (ALGORITHM); a detent is 1 dB, the bars have
+ * 13 cells with the flat centre at 6 */
+static void eq_dbstr(char *b, int32_t db)
+{
+    char *p = b;
+    if (db > 0)
+        *p++ = '+';
+    fmt_int(p, db);
+    str_cpy(b + str_len(b), " DB", 4);
+}
+static void eq_row(int32_t y, const char *label, uint32_t byte)
+{
+    char b[12];
+    int32_t db = eq_db(byte <= 24u ? byte : 0u);
+    eq_dbstr(b, db);
+    ltext(22, y, &AF_X, label, C_CREAM, C_PANEL);
+    meter(96, y - 1, 13, (db + 13) / 2);
+    rtext(234, y, &AF_X, b, C_DIM, C_PANEL);
+}
+static void scr_eq(void)
+{
+    char b[16];
+    uint32_t f = org_patch[OP_EQ_FREQ] <= 11u ? org_patch[OP_EQ_FREQ] : 0u;
+    header("EQ", org_patch[OP_EQ] ? "ON" : "OFF");
+    lamp(22, 58, org_patch[OP_EQ] ? "EQ ON   (KNOB 1)" : "EQ OFF   (KNOB 1)", org_patch[OP_EQ] != 0);
+    eq_row(92, "LOW", org_patch[OP_EQ_LOW]);
+    eq_row(116, "MID", org_patch[OP_EQ_MID]);
+    fmt_int(b, EQ_FREQ_HZ[eq_fidx(f)]);
+    str_cpy(b + str_len(b), " HZ", 4);
+    ltext(22, 140, &AF_X, "MID FREQ", C_CREAM, C_PANEL);
+    ltext(96, 140, &AF_X, b, C_AMBER, C_PANEL);
+    rtext(234, 140, &AF_X, "ALGORITHM", C_DIM, C_PANEL);
+    eq_row(164, "HIGH", org_patch[OP_EQ_HIGH]);
+    footer("KNOBS: ON, LOW, MID, HIGH   ALGO: MID FREQ");
+}
+
 static void scr_home(void)
 {
     char num[8], nm[16];
@@ -665,6 +701,8 @@ static void oa_scene(void)
         scr_reverb();
     else if (oa_page == 6u)
         scr_delay();
+    else if (oa_page == 7u)
+        scr_eq();
     else
         scr_home();
     if (oa_gl == 1u)
@@ -779,9 +817,9 @@ static void oa_buttons(uint32_t pressed)
             oa_sv_open();
         return;
     }
-    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, then HOME */
+    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, EQ, then HOME */
         oa_close_all();
-        oa_page = oa_page >= 2u && oa_page < 6u ? (uint8_t)(oa_page + 1u) : oa_page == 6u ? 0u : 2u;
+        oa_page = oa_page >= 2u && oa_page < 7u ? (uint8_t)(oa_page + 1u) : oa_page == 7u ? 0u : 2u;
         return;
     }
     if ((pressed >> panel.btn[B_SCL]) & 1u) {             /* SCL: the rotor's speed: off -> SLOW -> FAST -> STOP -> SLOW */
@@ -891,6 +929,20 @@ static void oa_input(void)
             org_set(OP_ROT_MIC, (uint32_t)clamp((int32_t)org_patch[OP_ROT_MIC] - (s > 0 ? 1 : -1), 0, 6));
         if ((s = panel_enc(EN_SELECT)) != 0)
             org_set(OP_ROT_BAL, (uint32_t)clamp((int32_t)org_patch[OP_ROT_BAL] + (s > 0 ? 1 : -1), 0, 8));
+        return;
+    }
+    if (oa_page == 7u) {                                  /* EQ: on, LOW, MID, HIGH, the MID's frequency */
+        (void)panel_enc(EN_SELECT);
+        if (panel_enc(EN_K1) != 0)
+            org_set(OP_EQ, !org_patch[OP_EQ]);
+        if ((s = panel_enc(EN_K2)) != 0)
+            org_set(OP_EQ_LOW, eq_byte(clamp(eq_db(org_patch[OP_EQ_LOW]) + (s > 0 ? 1 : -1), -12, 12)));
+        if ((s = panel_enc(EN_K3)) != 0)
+            org_set(OP_EQ_MID, eq_byte(clamp(eq_db(org_patch[OP_EQ_MID]) + (s > 0 ? 1 : -1), -12, 12)));
+        if ((s = panel_enc(EN_K4)) != 0)
+            org_set(OP_EQ_HIGH, eq_byte(clamp(eq_db(org_patch[OP_EQ_HIGH]) + (s > 0 ? 1 : -1), -12, 12)));
+        if ((s = panel_enc(EN_ALGO)) != 0)
+            org_set(OP_EQ_FREQ, eq_fbyte((uint32_t)clamp((int32_t)eq_fidx(org_patch[OP_EQ_FREQ]) + (s > 0 ? 1 : -1), 0, 11)));
         return;
     }
     if (oa_page == 5u) {                                  /* REVERB: send, type, size, tone */

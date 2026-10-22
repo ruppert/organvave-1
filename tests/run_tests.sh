@@ -77,6 +77,8 @@ run "the rotary LIGHT against CLASSIC: sidebands and levels (nine tones), bounds
 $HC -O2 -o "$OUT/effects_test" tests/effects_test.c -lm
 $HC -O1 -o "$OUT/midi_organ_test" tests/midi_organ_test.c -lm
 run "the effects section end to end: the patch bytes through mix_block (the rotary: speeds, STOP, LIGHT; the drive; the fades; silence)" "$OUT/effects_test"
+$HC -O1 -o "$OUT/eq_test" tests/eq_test.c -lm
+run "the equaliser: the codings, flat, LOW / MID / HIGH against their design at the ends, the steps, bounds and the settle" "$OUT/eq_test"
 run "the organ over MIDI: the manuals by channel (GLO's MIDI channel), the swell, the drawbar CCs, the rotor speed" "$OUT/midi_organ_test"
 $HC -O2 -o "$OUT/fx_test" tests/fx_test.c -lm
 run "FX: five stereo reverbs (decay, level, corners, type changes), seven delays, three choruses, TUBE and OUTPUT, bypass at 0" "$OUT/fx_test"

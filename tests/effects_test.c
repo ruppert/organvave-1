@@ -52,6 +52,8 @@ static void boot(void)
     rot_init(&rot_st);
     lt_init(&lt_st, &rot_st);
     dr_init(&dr_st);
+    eq_init(&eq_st);
+    eq_w = 0; eq_idle = 0; eq_on = 0;
     memset(&rot_mix, 0, sizeof rot_mix);
     rot_w = dr_w = 0;
     rot_idle = 0;
@@ -294,6 +296,123 @@ int main(void)
                 if (b > pk) pk = b;
             }
             check("MASTER 0 with the rotary and the drive on, a chord held: silent", pk == 0);
+        }
+        song.master_q12 = 4096;
+    }
+    /* 7. the equaliser (0.5.0): after MASTER, before the limiter */
+    {
+        uint32_t i, a;
+        double lo0, lo1, hi0, hi1;
+        boot();
+        memset(P, 0, sizeof P);
+        P[OP_EQ] = 5; P[OP_EQ_LOW] = 30; P[OP_EQ_MID] = 99; P[OP_EQ_FREQ] = 99; P[OP_EQ_HIGH] = 25;
+        org_set_patch(P);
+        check("the EQ bytes are clamped (ON 1, gains 24, FREQ 11)", org_patch[OP_EQ] == 1 && org_patch[OP_EQ_LOW] == 24 &&
+              org_patch[OP_EQ_MID] == 24 && org_patch[OP_EQ_FREQ] == 11 && org_patch[OP_EQ_HIGH] == 24);
+        /* flat: on with every byte at 0 is the dry mix within 3 */
+        boot();
+        P[OP_UB + 2] = 8; P[OP_UB + 3] = 6;
+        patch_set(P);
+        chord_on();
+        blocks(44100);
+        a = pos;
+        blocks(22050);
+        {
+            int32_t ref[22050];
+            int32_t worst = 0;
+            memcpy(ref, oL + a, sizeof ref);
+            boot();
+            P[OP_EQ] = 1;
+            patch_set(P);
+            chord_on();
+            blocks(44100);
+            a = pos;
+            blocks(22050);
+            for (i = 0; i < 22050u; i++) {
+                int32_t d = oL[a + i] - ref[i];
+                d = d < 0 ? -d : d;
+                worst = d > worst ? d : worst;
+            }
+            printf("effects: EQ on and flat against off: the largest difference %d\n", worst);
+            check("the EQ on and flat: the output is the dry mix within 3", worst <= 3);
+        }
+        chord_off();
+        /* LOW +12: a key at C2 (65.4 Hz, the 8' drawbar) gets louder by more than 6 dB */
+        boot();
+        P[OP_UB + 2] = 8;
+        patch_set(P);
+        input_on(&trk[0], 36, 100);
+        blocks(44100);
+        lo0 = tone(oL, 22050, 22050, 65.41);
+        P[OP_EQ] = 1; P[OP_EQ_LOW] = 12;
+        patch_set(P);
+        blocks(44100 * 2);
+        lo1 = tone(oL, pos - 22050, 22050, 65.41);
+        input_off(&trk[0], 36);
+        printf("effects: the EQ's LOW +12: the 65 Hz tone %.1f dB\n", db(lo1 / lo0));
+        check("LOW +12 dB: the 65 Hz tone rises by 6 .. 14 dB", db(lo1 / lo0) > 6.0 && db(lo1 / lo0) < 14.0);
+        /* HIGH -12: a key at C6 with the 1' drawbar (4186 Hz) goes down by more than 6 dB */
+        boot();
+        P[OP_UB + 8] = 8;
+        patch_set(P);
+        input_on(&trk[0], 84, 100);
+        blocks(44100);
+        hi0 = tone(oL, 22050, 22050, 4186.0);
+        P[OP_EQ] = 1; P[OP_EQ_HIGH] = 13;
+        patch_set(P);
+        blocks(44100 * 2);
+        hi1 = tone(oL, pos - 22050, 22050, 4186.0);
+        input_off(&trk[0], 84);
+        printf("effects: the EQ's HIGH -12: the 4.2 kHz tone %.1f dB\n", db(hi1 / hi0));
+        check("HIGH -12 dB: the 4.2 kHz tone falls by 6 .. 14 dB", db(hi1 / hi0) < -6.0 && db(hi1 / hi0) > -14.0);
+        /* the fade: the EQ coming in with a chord held makes no step */
+        boot();
+        P[OP_UB + 2] = 8; P[OP_UB + 3] = 6;
+        patch_set(P);
+        chord_on();
+        blocks(44100);
+        {
+            int32_t d0 = maxjump(oL, 22050, pos), dj;
+            a = pos;
+            P[OP_EQ] = 1; P[OP_EQ_LOW] = 12; P[OP_EQ_MID] = 12; P[OP_EQ_HIGH] = 12;
+            patch_set(P);
+            blocks(22050);
+            dj = maxjump(oL, a, pos);
+            printf("effects: the EQ coming in: the largest jump %d against %d dry\n", dj, d0);
+            check("the EQ coming in with a chord held: no step (within 4 times the dry mix's)", dj < 4 * d0 + 50);
+        }
+        chord_off();
+        /* silence, and MASTER 0 */
+        boot();
+        P[OP_EQ] = 1; P[OP_EQ_LOW] = 12; P[OP_EQ_MID] = 12; P[OP_EQ_HIGH] = 12; P[OP_ROT] = 1; P[OP_DRV] = 1;
+        patch_set(P);
+        chord_on();
+        blocks(22050);
+        chord_off();
+        blocks(44100 * 8);
+        {
+            int32_t pk = 0;
+            for (i = pos - 44100; i < pos; i++) {
+                int32_t x = oL[i] < 0 ? -oL[i] : oL[i], y = oR[i] < 0 ? -oR[i] : oR[i];
+                pk = x > pk ? x : pk;
+                pk = y > pk ? y : pk;
+            }
+            printf("effects: everything on, eight seconds after the keys: peak %d\n", pk);
+            check("the EQ on with the rotary and the drive, long after the keys: silent (peak at most 1)", pk <= 1);
+        }
+        boot();
+        P[OP_EQ] = 1; P[OP_EQ_LOW] = 12; P[OP_EQ_MID] = 12; P[OP_EQ_HIGH] = 12;
+        patch_set(P);
+        song.master_q12 = 0;
+        chord_on();
+        blocks(44100);
+        {
+            int32_t pk = 0;
+            for (i = 0; i < pos; i++) {
+                int32_t x = oL[i] < 0 ? -oL[i] : oL[i];
+                pk = x > pk ? x : pk;
+            }
+            check("MASTER 0 with the EQ on, a chord held: silent", pk == 0);
         }
         song.master_q12 = 4096;
     }

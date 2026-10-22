@@ -1045,11 +1045,16 @@ setBfree's whirl, 1 LIGHT, the cheaper model; `OP_ROT_SPEED` 36: 0 stop, 1 slow,
 narrowest; `OP_ROT_BAL` 39: 0..8, the horn's level against the drum, 1.5 dB a step around 4, which is even) and the drive
 (`OP_DRV` 40: 0 off, 1 on; `OP_DRV_GAIN` 41: 0..12, the input gain, 2 dB a step around 6, setBfree's default of 3.5675;
 `OP_DRV_FAT` 42: 0..8, the character: 0 is setBfree's default, higher values put more bass into the curve and then more
-out of it). The rest are reserved, 0. The lower and pedal bars are stored and kept; the sound of those manuals arrives with 0.4.0.
+out of it) and, from 0.5.0, the equaliser (`OP_EQ` 43: 0 off, 1 on; `OP_EQ_LOW` 44, `OP_EQ_MID` 45, `OP_EQ_HIGH` 47: 0..24, the
+gain of the 120 Hz low shelf, the peak and the 4 kHz high shelf, coded so that **0 is flat**: a byte s is s dB for 0..12 and
+s - 25 dB for 13..24, so 13 is -12 dB and 24 is -1 dB; `OP_EQ_FREQ` 46: 0..11, the peak's frequency, the index (f + 5) mod 12 of
+160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200 Hz, so 0 is 900 Hz). The rest are reserved, 0. The lower and pedal
+bars are played over MIDI since 0.4.0 (channel 2 and 3, or the GLO channel + 1 and + 2).
 
 Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 0.1.0 (a user preset, the autosave, a
 factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Version 0.3.0 gave meaning to
 bytes 34..42 the same way: a patch from 0.1.0 or 0.2.0 reads them as 0, the rotary and the drive off, and sounds as it did.
+Version 0.5.0 did it for 43..47: an older patch reads the equaliser as off, and flat if it is switched on.
 (A patch that turns the rotary on sets `OP_ROT_BAL` to 4 itself; a 0 there is the horn 6 dB down.) Nothing is migrated. The patch is the instrument's own: it travels
 with user presets and the autosave, not with the track's parameters.
 
