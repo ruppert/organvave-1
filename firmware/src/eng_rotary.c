@@ -43,6 +43,7 @@ typedef struct {
     uint32_t inc_h, inc_d;             /* their speeds, phase per sample */
     uint32_t tgt_h, tgt_d;             /* their targets */
     int32_t k_ha, k_hd, k_da, k_dd;    /* the ramp's step per block, 1 - exp(-CTL / (FS * T)), Q30: acc / dec */
+    int32_t rem_h, rem_d;              /* the ramps' carried fractions (Q30) */
     int8_t acdc_h, acdc_d;             /* +1 accelerating, -1 decelerating, 0 holding (setBfree's hornAcDc) */
     uint32_t mic_fw, mic_bw;           /* the mic angles' offsets (setBfree's micAngle * 0.25, and 1 - that), phase */
     int32_t hl, leak;                  /* the horn level and the leakage, Q14 (0.7 and 0.15 * 0.7) */
@@ -88,17 +89,21 @@ static inline int32_t rot_refl(int32_t *prev, int32_t x)
     return y;
 }
 
-/* the angle table's values at a position h (16384ths of a turn), interpolated between the sampled angles */
-static inline int32_t tab_disp(const int32_t *d, uint32_t h)
+/* the angle tables' values. h is the position in 16384ths of a turn, one table step is 16 of them. The displacement is
+ * interpolated at the exact angle, as setBfree's is (its h1 is a float with the angle's fraction): f8 is the position
+ * between two table entries in 256ths, h's low 4 bits and the 4 bits of the angle below them. The FIR is read at the
+ * nearest 16384th (setBfree's x_iroundf) and interpolated between the table entries at that integer position. */
+static inline int32_t tab_disp(const int32_t *d, uint32_t h, uint32_t f8)
 {
-    uint32_t k = h >> 4, f = h & 15u;
-    int32_t a = d[k], b = d[(k + 1u) & 1023u];
-    return a + (((b - a) * (int32_t)f) >> 4);
+    uint32_t k = h >> 4;
+    int32_t a = d[k & (ROT_NA - 1u)], b = d[(k + 1u) & (ROT_NA - 1u)];
+    return a + (((b - a) * (int32_t)f8) >> 8);
 }
 static inline void tab_fir(const int16_t f[ROT_NA][5], uint32_t h, int32_t c[5])
 {
     uint32_t k = h >> 4, fr = h & 15u, j;
-    uint32_t k1 = (k + 1u) & 1023u;
+    uint32_t k1 = (k + 1u) & (ROT_NA - 1u);
+    k &= ROT_NA - 1u;
     for (j = 0; j < 5; j++) {
         int32_t a = f[k][j], b = f[k1][j];
         c[j] = a + (((b - a) * (int32_t)fr) >> 4);
@@ -113,9 +118,9 @@ static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[P]) & 16383u;
     int32_t c[5], xa, t, q, f;
     uint32_t n;
-    tab_fir(fir, h, c);
+    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c);
     xa = mul14(x, c[0]) + mul14(hist[0], c[1]) + mul14(hist[1], c[2]) + mul14(hist[2], c[3]) + mul14(hist[3], c[4]);
-    t = ROT_SPACE[P] + tab_disp(disp, h) + (int32_t)(r->outpos << 8);
+    t = ROT_SPACE[P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << 8);
     n = ((uint32_t)(t >> 8)) & ROT_MASK;
     f = t & 255;
     q = (xa * f + 128) >> 8;
@@ -129,7 +134,7 @@ static inline void drum_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[6u + P]) & 16383u;
     int32_t t, q, f;
     uint32_t n;
-    t = ROT_SPACE[6u + P] + tab_disp(disp, h) + (int32_t)(r->outpos << 8);
+    t = ROT_SPACE[6u + P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << 8);
     n = ((uint32_t)(t >> 8)) & ROT_MASK;
     f = t & 255;
     q = (x * f + 128) >> 8;
@@ -138,14 +143,20 @@ static inline void drum_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
 }
 
 /* the speed's ramp for one rotor, once per block: setBfree's `inc += (1 - l) (target - inc)`, and the dead zone that
- * ends it (0.05 rpm, 81 phase units) */
-static void rot_ramp(uint32_t *inc, uint32_t tgt, int8_t *acdc, int32_t k)
+ * ends it (0.05 rpm, 81 phase units). The step's fraction is carried in *rem (Q30): a rounded or floored step stalls
+ * where d * k < 0.5 (111 units below the horn's target, outside the dead zone: the angle drifted 10 table units in
+ * 2 s), a carried one never stalls and has no bias. */
+static void rot_ramp(uint32_t *inc, uint32_t tgt, int8_t *acdc, int32_t k, int32_t *rem)
 {
-    int32_t d, dd;
+    int32_t d, dd, step;
+    int64_t acc;
     if (!*acdc)
         return;
     d = (int32_t)(tgt - *inc);
-    *inc += (uint32_t)(int32_t)(((int64_t)d * k + ((int64_t)1 << 29)) >> 30);   /* rounded: a floor leaves 0.5 / k behind */
+    acc = (int64_t)d * k + *rem;
+    step = (int32_t)(acc >> 30);
+    *rem = (int32_t)(acc - ((int64_t)step << 30));
+    *inc += (uint32_t)step;
     dd = (int32_t)(tgt - *inc);
     if (dd < 81 && dd > -81) {
         *inc = tgt;
@@ -187,6 +198,8 @@ static void rot_target(rot_t *r, uint32_t horn_tgt, uint32_t drum_tgt)
 {
     r->tgt_h = horn_tgt;
     r->tgt_d = drum_tgt;
+    r->rem_h = 0;
+    r->rem_d = 0;
     r->acdc_h = (int8_t)((int32_t)(horn_tgt - r->inc_h) > 0 ? 1 : (horn_tgt == r->inc_h ? 0 : -1));
     r->acdc_d = (int8_t)((int32_t)(drum_tgt - r->inc_d) > 0 ? 1 : (drum_tgt == r->inc_d ? 0 : -1));
 }
@@ -197,8 +210,8 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
     uint32_t i;
 
     /* the speeds for this block (setBfree: once per call of whirlProc2, before its sample loop) */
-    rot_ramp(&r->inc_h, r->tgt_h, &r->acdc_h, r->acdc_h > 0 ? r->k_ha : r->k_hd);
-    rot_ramp(&r->inc_d, r->tgt_d, &r->acdc_d, r->acdc_d > 0 ? r->k_da : r->k_dd);
+    rot_ramp(&r->inc_h, r->tgt_h, &r->acdc_h, r->acdc_h > 0 ? r->k_ha : r->k_hd, &r->rem_h);
+    rot_ramp(&r->inc_d, r->tgt_d, &r->acdc_d, r->acdc_d > 0 ? r->k_da : r->k_dd, &r->rem_d);
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
