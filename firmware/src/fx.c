@@ -1054,6 +1054,12 @@ static void mix_part(track_t *t, uint32_t n)
 }
 
 static void events_block(uint32_t n);                 /* (seq.c) */
+#include "eng_rotary.c"             /* the rotary speaker, CLASSIC */
+/* the rotary speaker (eng_rotary.c) between the mix and the master: off (rot_on 0) the mix is as it was; on, the mono
+ * sum of the mix and the reverb's return goes through the cabinet and comes out in stereo */
+static rot_t rot_st __attribute__((section(".pool")));
+static volatile uint8_t rot_on;
+
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
@@ -1066,6 +1072,19 @@ static void mix_block(int32_t *out, uint32_t n)
     for (i = 0; i < NPART; i++)                         /* the LFOs' blocks (voice.c) */
         track_lfo_end(&trk[i]);
     fx_buses(send_c, send_d, send_r, wet, n);
+    if (rot_on) {
+        int32_t xin[CTL], ol[CTL], orr[CTL];
+        for (i = 0; i < n; i++)
+            xin[i] = (((((mix_l[i] + mix_r[i]) >> 1) + wet[i]) >> 2) * mg) >> 10;
+        rot_block(&rot_st, xin, ol, orr, n);
+        for (i = 0; i < n; i++) {
+            int32_t l = ol[i], r = orr[i];
+            master_out(&l, &r);
+            out[2u * i] = l;
+            out[2u * i + 1u] = r;
+        }
+        return;
+    }
     if (hl.side || fx.ds_on)
         rev_side_mix(mix_l, mix_r, n);                  /* the reverb's, the delay's / chorus's stereo */
     for (i = 0; i < n; i++) {

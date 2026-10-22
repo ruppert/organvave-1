@@ -31,11 +31,27 @@
  * (2^32 = one turn); the table index is the phase in 16384ths (phase >> 18), its fraction the bits below. The line is
  * 1024 samples (setBfree: 2048; the default geometry needs at most about 335). The speed ramp carries its fraction.
  *
+ * The input is clamped to +-1.0 (Q15) in rot_block.
+ *
  * Only the rotor speeds and their ramps are computed per block (CTL samples), with int64 once per block. The per-sample
  * loop is int32 only. Not yet in: the brake (STOP) of setBfree's hnBrakePos / drBrakePos, the mic angle (default 0), the
  * horn comb filter (disabled in setBfree's own build), the LIGHT model, the table copy to SRAM. */
+#ifndef ENG_ROTARY_C
+#define ENG_ROTARY_C
 #include <stdint.h>
 #include "eng_rotary_tables.h"
+
+/* ROT_RAM (the firmware): the angle tables (37 KB) are copied to SRAM at boot (rot_load_tables), the XIP flash is slower
+ * and shared with the code; the host test reads the constants */
+#ifdef ROT_RAM
+static int32_t rot_disp_ram[4][ROT_NA] __attribute__((section(".pool")));
+static int16_t rot_fir_ram[2][ROT_NA][5] __attribute__((section(".pool")));
+#define RT_DISP rot_disp_ram
+#define RT_FIR rot_fir_ram
+#else
+#define RT_DISP ROT_DISP
+#define RT_FIR ROT_FIR
+#endif
 
 #define ROT_LINE 1024u                 /* the delay lines: 1024 samples */
 #define ROT_MASK (ROT_LINE - 1u)
@@ -242,6 +258,22 @@ static void rot_target(rot_t *r, uint32_t horn_tgt, uint32_t drum_tgt)
 }
 
 /* one block of CTL samples (n <= ROT_CTL): in (Q15 mono) to outL and outR (Q15) */
+#ifdef ROT_RAM
+static void rot_load_tables(void)
+{
+    uint32_t i, j;
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < ROT_NA; j++)
+            rot_disp_ram[i][j] = ROT_DISP[i][j];
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < ROT_NA; j++) {
+            uint32_t c;
+            for (c = 0; c < 5; c++)
+                rot_fir_ram[i][j][c] = ROT_FIR[i][j][c];
+        }
+}
+__attribute__((noinline))
+#endif
 static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
 {
     uint32_t i;
@@ -252,6 +284,7 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
+        xx = xx > 32767 ? 32767 : xx < -32768 ? -32768 : xx;   /* the filters hold an input up to 1.0 */
         uint32_t op = r->outpos;
         uint32_t ang_hf = r->ph_h + r->mic_fw, ang_hb = r->ph_h + r->mic_bw;
         uint32_t ang_d = r->ph_d;
@@ -262,29 +295,29 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         leak = mul14(x * (1 << ROT_G), r->leak);
 
         /* 2) the horn: taps 0 and 1 (history 0), reflection 1, taps 2 and 3 (history 1), reflection 2, taps 4 and 5 */
-        horn_tap(r, ang_hf, 0, ROT_DISP[0], ROT_FIR[1], x, r->hh[0], r->HL);
-        horn_tap(r, ang_hb, 1, ROT_DISP[1], ROT_FIR[0], x, r->hh[0], r->HR);
+        horn_tap(r, ang_hf, 0, RT_DISP[0], RT_FIR[1], x, r->hh[0], r->HL);
+        horn_tap(r, ang_hb, 1, RT_DISP[1], RT_FIR[0], x, r->hh[0], r->HR);
         r->hh[0][3] = r->hh[0][2]; r->hh[0][2] = r->hh[0][1]; r->hh[0][1] = r->hh[0][0]; r->hh[0][0] = x;
         x = rot_refl(&r->rf[0], x);
 
-        horn_tap(r, ang_hf, 2, ROT_DISP[1], ROT_FIR[0], x, r->hh[1], r->HL);
-        horn_tap(r, ang_hb, 3, ROT_DISP[0], ROT_FIR[1], x, r->hh[1], r->HR);
+        horn_tap(r, ang_hf, 2, RT_DISP[1], RT_FIR[0], x, r->hh[1], r->HL);
+        horn_tap(r, ang_hb, 3, RT_DISP[0], RT_FIR[1], x, r->hh[1], r->HR);
         r->hh[1][3] = r->hh[1][2]; r->hh[1][2] = r->hh[1][1]; r->hh[1][1] = r->hh[1][0]; r->hh[1][0] = x;
         x = rot_refl(&r->rf[1], x);
 
-        horn_tap(r, ang_hf, 4, ROT_DISP[0], ROT_FIR[1], x, r->hh[2], r->HL);
-        horn_tap(r, ang_hb, 5, ROT_DISP[1], ROT_FIR[0], x, r->hh[2], r->HR);
+        horn_tap(r, ang_hf, 4, RT_DISP[0], RT_FIR[1], x, r->hh[2], r->HL);
+        horn_tap(r, ang_hb, 5, RT_DISP[1], RT_FIR[0], x, r->hh[2], r->HR);
         r->hh[2][3] = r->hh[2][2]; r->hh[2][2] = r->hh[2][1]; r->hh[2][1] = r->hh[2][0]; r->hh[2][0] = x;
 
         /* 3) the drum: the unfiltered input, the same two reflections, then its high-shelf per mic */
-        drum_tap(r, ang_d, 0, ROT_DISP[2], xx, r->DL);
-        drum_tap(r, ang_d, 1, ROT_DISP[3], xx, r->DR);
+        drum_tap(r, ang_d, 0, RT_DISP[2], xx, r->DL);
+        drum_tap(r, ang_d, 1, RT_DISP[3], xx, r->DR);
         x = rot_refl(&r->rf[2], xx);
-        drum_tap(r, ang_d, 2, ROT_DISP[3], x, r->DL);
-        drum_tap(r, ang_d, 3, ROT_DISP[2], x, r->DR);
+        drum_tap(r, ang_d, 2, RT_DISP[3], x, r->DL);
+        drum_tap(r, ang_d, 3, RT_DISP[2], x, r->DR);
         x = rot_refl(&r->rf[3], x);
-        drum_tap(r, ang_d, 4, ROT_DISP[2], x, r->DL);
-        drum_tap(r, ang_d, 5, ROT_DISP[3], x, r->DR);
+        drum_tap(r, ang_d, 4, RT_DISP[2], x, r->DL);
+        drum_tap(r, ang_d, 5, RT_DISP[3], x, r->DR);
 
         /* 4) the outputs: the drum's shelf and the horn, and the leakage on both */
         y = rot_cplw(r->dL, ROT_CPL[2], (r->DL[op] + (1 << (ROT_G - 1))) >> ROT_G);
@@ -301,3 +334,7 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         r->ph_d += r->inc_d;
     }
 }
+#ifndef ROT_RAM
+static void rot_load_tables(void) {}   /* (host builds read the constants) */
+#endif
+#endif /* ENG_ROTARY_C */
