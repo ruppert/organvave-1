@@ -27,6 +27,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). |
 | 0.5.0 | the equaliser: LOW and HIGH shelves, a MID peak with twelve frequencies, -12 .. +12 dB (EQ page on the FX button, editor controls; not yet on an FM-1) |
 | 0.9.0 | beta: overload fallback (when the CPU runs late: "CPU HIGH" on screen, the delay off for 2 s, the oldest held key let go; the rotary and the drive are never changed), all-keys stress tests, user manual (not yet on an FM-1) |
+| 0.9.1 | fix: distortion with the rotary on (CLASSIC and LIGHT): the cabinet clipped its input at 1.0; a chord is several times that. Now it takes the mix down by 4 and brings it back after (not yet on an FM-1) |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing

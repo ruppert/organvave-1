@@ -493,6 +493,38 @@ int main(void)
         printf("effects: 14 s after letting go: peak %d\n", pk_end);
         check("  .. and after letting go it falls quiet (peak at most 2 after 14 s)", pk_end <= 2);
     }
+    /* 10. headroom: a loud chord (the mix several times 1.0) goes through the cabinet without clipping at its input. The swell
+     * taken down by 12 dB must take the output down by 12 dB (4.0 in rms) through CLASSIC and LIGHT as it does dry; a hard clip
+     * at the cabinet's input (the distortion with the rotary on) leaves the loud case well under 4 times the quiet one */
+    {
+        uint32_t m;
+        for (m = 0; m < 3; m++) {                       /* 0 dry, 1 CLASSIC, 2 LIGHT */
+            double r_hi, r_lo;
+            boot();
+            memset(P, 0, sizeof P);
+            for (i = 0; i < 9; i++)
+                P[OP_UB + i] = 8;
+            P[OP_ROT] = m ? 1 : 0; P[OP_ROT_MODEL] = m == 2; P[OP_ROT_SPEED] = 0; P[OP_ROT_BAL] = 4;
+            patch_set(P);
+            song.master_q12 = 300;                      /* (the limiter stays out of it) */
+            org.swell = 32768;
+            chord_on();
+            blocks(44100);
+            pos = 0;
+            blocks(22050);
+            r_hi = rms_win(oL, 0, 22050);
+            org.swell = 8192;
+            blocks(44100);
+            pos = 0;
+            blocks(22050);
+            r_lo = rms_win(oL, 0, 22050);
+            printf("effects: headroom, %s: loud %.0f, quiet %.0f (ratio %.2f, 4.00 is linear)\n", m == 0 ? "dry" : m == 1 ? "CLASSIC" : "LIGHT", r_hi, r_lo, r_hi / r_lo);
+            check("  .. the output follows the swell linearly (12 dB = 4.0 within 5 %)", r_lo > 20.0 && r_hi / r_lo > 3.8 && r_hi / r_lo < 4.2);
+            chord_off();
+        }
+        song.master_q12 = 4096;
+        org.swell = 32768;
+    }
     chord_off();
     printf(bad ? "effects: FAILED\n" : "effects: all ok\n");
     return bad;

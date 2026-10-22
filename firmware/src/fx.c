@@ -1194,10 +1194,11 @@ static void mix_block(int32_t *out, uint32_t n)
         int32_t pk = 0;
         for (i = 0; i < n; i++) {
             int32_t a;
-            xin[i] = ((mix_l[i] + mix_r[i]) >> 1) + wet[i];     /* (MASTER after the cabinet: at 0 it is silent, whatever the cabinet's states hold) */
-            a = xin[i] < 0 ? -xin[i] : xin[i];
+            int32_t v = ((mix_l[i] + mix_r[i]) >> 1) + wet[i];  /* (MASTER after the cabinet: at 0 it is silent, whatever the cabinet's states hold) */
+            a = v < 0 ? -v : v;
             pk = a > pk ? a : pk;
-        }
+            xin[i] = v >> 2;                            /* the cabinet takes at most 1.0 (32767): a chord is several times that, and the dry */
+        }                                               /* path leaves it to the limiter; a hard clip here was the distortion. Back x4 below */
         /* the rounding of the cabinet's filters leaves a faint tone (up to 20 / 32768) running after the last sound: once the
          * input has been below 8 for 1.1 s (the cabinet's tail is long gone) its states are emptied: silence is silence */
         if (pk >= 8)
@@ -1212,8 +1213,8 @@ static void mix_block(int32_t *out, uint32_t n)
         rot_w += rot_on ? FX_FADE : -FX_FADE;
         rot_w = rot_w < 0 ? 0 : rot_w > 32768 ? 32768 : rot_w;
         for (i = 0; i < n; i++) {
-            ol[i] = (ol[i] * mg) >> 12;
-            orr[i] = (orr[i] * mg) >> 12;
+            ol[i] = (ol[i] * mg) >> 10;                 /* (x4: the input was taken down by 4) */
+            orr[i] = (orr[i] * mg) >> 10;
         }
         if (rot_w == 32768) {
             for (i = 0; i < n; i++)

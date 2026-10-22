@@ -1,17 +1,17 @@
 # Golden renders (tests/regress.c): name, FNV-1a 64 of the output samples.
 # Rewritten by GOLDEN_UPDATE=1 -- only for an intended change of the sound.
-preset/ORGAN/00_FULL_ORGAN 1d1d1d6c77db6cc2
-preset/ORGAN/01_GOSPEL 382aef2eed458745
-preset/ORGAN/02_JAZZ 39dbb9fa6f9599b1
-preset/ORGAN/03_BALLAD 3e2e931e1c6c445a
+preset/ORGAN/00_FULL_ORGAN 013e7e80a07da262
+preset/ORGAN/01_GOSPEL ad08714bad1c7e4c
+preset/ORGAN/02_JAZZ 89576502d78d63d0
+preset/ORGAN/03_BALLAD 73972e4ab3ca360e
 preset/ORGAN/04_WHISTLE ec97a06236769480
 preset/ORGAN/05_CLARINET af56b1dc85eac72a
-preset/ORGAN/06_REED a898f521846459e3
-preset/ORGAN/07_SWEET d4f2d683e8c2fc50
-sends/ORGAN/dry 737aa7e6f7f5783d
-sends/ORGAN/chorus eb8ab24e1b673511
-sends/ORGAN/delay 1b943fc76e34a01a
-sends/ORGAN/reverb 2f05c60ac2d7cfc4
-sends/ORGAN/all b14c724b0b0c043a
-sends/ORGAN/dist d54525f02ed152f2
-seq/ORGAN/16_steps e89e3c7013f7ac77
+preset/ORGAN/06_REED d7c51189ad522246
+preset/ORGAN/07_SWEET ce97997dfc521c15
+sends/ORGAN/dry 0641d4173f9c1cef
+sends/ORGAN/chorus 2059d6135bca3b40
+sends/ORGAN/delay d4903f15738c0009
+sends/ORGAN/reverb 8c1119ce2e6c9371
+sends/ORGAN/all 7ad0a9dd6da998c2
+sends/ORGAN/dist 3229fb27ece6e1cb
+seq/ORGAN/16_steps 4aa7424f7a247154
