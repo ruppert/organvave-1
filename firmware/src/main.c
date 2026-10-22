@@ -107,6 +107,7 @@ static void felucca_init(void)
     org_init();                               /* the tone generator at rest */
     rot_load_tables();                        /* the rotary's angle tables to SRAM, the cabinet at rest */
     rot_init(&rot_st);
+    lt_init(&lt_st, &rot_st);
     track_defaults(t);
     set_engine_of(t, ENGI_ORGAN);             /* the organ, its first factory preset */
     t->engine = t->eng_req;

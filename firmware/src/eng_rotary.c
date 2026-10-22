@@ -284,15 +284,32 @@ static void rot_load_tables(void)
                 rot_fir_ram[i][j][c] = ROT_FIR[i][j][c];
         }
 }
-__attribute__((noinline))
 #endif
-static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
+/* the cabinet emptied (the lines, the filters, the reflections), the rotors untouched: a model that has not run for a
+ * while starts from silence */
+static void rot_flush(rot_t *r)
 {
     uint32_t i;
+    for (i = 0; i < 2; i++) { r->hA[i] = 0; r->hB[i] = 0; r->dL[i] = 0; r->dR[i] = 0; }
+    for (i = 0; i < 4; i++) r->rf[i] = 0;
+    for (i = 0; i < 12; i++) ((int32_t *)r->hh)[i] = 0;
+    for (i = 0; i < ROT_LINE; i++) { r->HL[i] = 0; r->HR[i] = 0; r->DL[i] = 0; r->DR[i] = 0; }
+    r->outpos = 0;
+}
 
-    /* the speeds for this block (setBfree: once per call of whirlProc2, before its sample loop) */
+/* the speeds for this block (setBfree: once per call of whirlProc2, before its sample loop) */
+static void rot_speeds(rot_t *r)
+{
     rot_ramp(&r->inc_h, r->tgt_h, &r->acdc_h, r->acdc_h > 0 ? r->k_ha : r->k_hd, &r->rem_h);
     rot_ramp(&r->inc_d, r->tgt_d, &r->acdc_d, r->acdc_d > 0 ? r->k_da : r->k_dd, &r->rem_d);
+}
+
+#ifdef ROT_RAM
+__attribute__((noinline))
+#endif
+static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
+{
+    uint32_t i;
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
@@ -346,6 +363,13 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         r->ph_d += r->inc_d;
     }
 }
+/* one block of CTL samples (n <= ROT_CTL), the CLASSIC model alone: in (Q15 mono) to outL and outR (Q15) */
+static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
+{
+    rot_speeds(r);
+    rot_samples(r, in, outL, outR, n);
+}
+
 #ifndef ROT_RAM
 static void rot_load_tables(void) {}   /* (host builds read the constants) */
 #endif

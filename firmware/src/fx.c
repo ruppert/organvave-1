@@ -1055,10 +1055,14 @@ static void mix_part(track_t *t, uint32_t n)
 
 static void events_block(uint32_t n);                 /* (seq.c) */
 #include "eng_rotary.c"             /* the rotary speaker, CLASSIC */
+#include "eng_rotary_light.c"       /* ... and LIGHT, and the switch between the two */
 /* the rotary speaker (eng_rotary.c) between the mix and the master: off (rot_on 0) the mix is as it was; on, the mono
  * sum of the mix and the reverb's return goes through the cabinet and comes out in stereo */
 static rot_t rot_st __attribute__((section(".pool")));
+static lt_t lt_st __attribute__((section(".pool")));
+static rotmix_t rot_mix;
 static volatile uint8_t rot_on;
+static volatile uint8_t rot_model_req;                  /* 0 CLASSIC, 1 LIGHT (the effects section sets it) */
 
 static void mix_block(int32_t *out, uint32_t n)
 {
@@ -1076,7 +1080,9 @@ static void mix_block(int32_t *out, uint32_t n)
         int32_t xin[CTL], ol[CTL], orr[CTL];
         for (i = 0; i < n; i++)
             xin[i] = (((((mix_l[i] + mix_r[i]) >> 1) + wet[i]) >> 2) * mg) >> 10;
-        rot_block(&rot_st, xin, ol, orr, n);
+        if (rot_model_req != rot_mix.model)
+            rotary_model(&rot_mix, &rot_st, &lt_st, rot_model_req);
+        rotary_run(&rot_mix, &rot_st, &lt_st, xin, ol, orr, n);
         for (i = 0; i < n; i++) {
             int32_t l = ol[i], r = orr[i];
             master_out(&l, &r);

@@ -97,10 +97,14 @@ against the full 16384-angle `whirl.c`):
   one. With nearest coefficients instead (the economy variant): 52 dB at 1024 angles, 58 dB at 2048, sidebands within
   0.03 dB.
 - **Chosen (owner, 2026-10-21): 1024 angles with interpolated coefficients.** Tables: forward and backward displacement for horn and drum
-  (int32 Q8) and the forward and backward angle FIRs (int16 Q14): 37 KB, generated in `tools/` from the full model and
+  (int32 Q12 samples: a delay is a phase, Q8 cost 8 dB) and the forward and backward angle FIRs (int16 Q15): 37 KB, generated in `tools/` from the full model and
   copied to SRAM at boot (no flash reads in the audio interrupt). Lines of 1024 samples (the default geometry needs
-  about 360; the headroom allows other mic distances and radii), int32: 16 KB. Cost 951 instructions a sample (static,
-  chip compiler), against 767 for the first plan.
+  about 360; the headroom allows other mic distances and radii), int32: 16 KB. Cost (static, chip compiler, measured on the built
+  firmware) 843 loop instructions plus six calls of the 122 of a horn tap: about 1,575 a sample, against the plan's 951 (the
+  guard bits, the Q15 FIR summed before one rounding, the drum shelf's three-part multiply). Measured against setBfree's own
+  `whirl.c` (waveform SNR, left / right): horn 400 rpm 79 / 69 dB, both rotors 77 / 73, slow 79 / 69, drum alone 74 / 73, a
+  chord 83 / 83; the sidebands within 0.05 dB. What counted: the displacement at the angle's fraction (setBfree's is a float),
+  the delays in Q12, the speed ramp carrying its fraction, the drum shelf's headroom (its state is 45 times the input).
 - **The horn character**: setBfree's three horn filter sets (default, mellow, sharp: `cfg/whirl-*.cfg`) as a HORN field
   in the pop-up; their biquad coefficients are generated in `tools/`, so the switch costs nothing per sample.
 - Not taken: the full 16384-angle tables (about 330 KB even as int16, for no measurable gain over 1024 interpolated);
@@ -117,11 +121,15 @@ horn's angle coefficients in setBfree were read off a figure, not measured.
 
 A crossover (one low-pass biquad near 800 Hz, high = input - low), the horn with a direct and a reflected read tap per
 mic (linear interpolation, delays ramped per block from the rotor angle), angle-dependent gains ramped per block; the
-drum with one read tap and a gain per mic; one shared input line per rotor (256 samples). 210 instructions a sample,
-about 3 KB. It has no reference of its own, so it is tuned against CLASSIC with the same measurements (rotation rates and
+drum with one read tap and a gain per mic; one shared input line per rotor (512 samples). Built: 337 loop instructions
+a sample plus 144 a block, 4 KB, against the plan's 210 (its tone biquad, a Q14 direct form I crossover and the model's six
+ramps are in it). It has no reference of its own, so it is tuned against CLASSIC with the same measurements (rotation rates and
 their time constants, horn and drum AM, FM in cents, the first sideband pairs, the left / right difference): the two
 models then share speeds, acceleration and balance, and LIGHT is the cheaper approximation of CLASSIC, not a different
-speaker.
+speaker. **Measured** (`tests/rotary_light_test.c`, `tools/rotary_light/`): the sidebands of nine tones within 5 to 10 dB rms of
+CLASSIC's (mean 6.4), the levels within 1.4 to 4.1 dB (6.7 for a 500 Hz tone on the drum: the crossover's region), the same
+at slow and fast speeds; a character match (rates, depth of the modulation, left / right difference), not a sideband-by-sideband
+one. The horn's tone is one biquad fitted to CLASSIC's horn filters above 500 Hz: 1.0 dB rms (default), 4 dB (sharp).
 
 ### Alternatives studied (first plan)
 
