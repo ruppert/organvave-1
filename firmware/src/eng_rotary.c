@@ -7,23 +7,29 @@
  * per sample and their speeds ramp per block (setBfree's exponential law, hornAcDc).
  * The angle tables are generated from setBfree's own code (eng_rotary_tables.h): 1024 angles, interpolated.
  *
- * Measured against tools/setbfree_ref/whirl_render (2 s, 440 Hz at 0.5, horn 400 rpm, drum stopped; the
- * reference's speed ramp is followed exactly):
- *   sidebands at 440 -/+ 6.67 Hz and -13.3 Hz: -16.2 / -27.0 / -30.5 dB, the same as setBfree (0.05 dB);
- *   RMS within 0.1%; with the rotor stopped there are no sidebands (below -240 dB);
- *   waveform SNR, rotating: 61 dB (L), 52 dB (R); stopped: 72 dB (L), 60 dB (R).
- *   The R channel is limited by the angle table, not by the arithmetic: the FIR of the horn's taps is sampled
- *   every 16 of 16384 angles (1024 entries). Float model of the same taps: 62 dB (R) with linear interpolation,
- *   63 with cubic, 64 with 2048 entries (about 74 KB more). Not taken; the owner's call.
+ * Measured against tools/setbfree_ref/whirl_render (2 s, the reference's speed ramp followed, waveform SNR L / R):
+ *   440 Hz at 0.5, horn 400 rpm, drum stopped: 79 / 69 dB; rotors stopped: 76 / 65 dB;
+ *   horn 400 + drum 340 rpm: 77 / 73 dB; slow (48 / 40 rpm): 79 / 69 dB; drum alone 340 rpm: 74 / 73 dB;
+ *   a 55 + 110 + 1760 Hz chord at 0.89 peak: 83 / 83 dB; full-scale sines at the filters' resonances (263, 668,
+ *   1182, 4486 Hz): 66 to 87 dB (the error grows with frequency: it is a timing error). Sidebands at 440 -/+ 6.67 Hz
+ *   and -13.3 Hz: -16.2 / -27.0 / -30.5 dB, the same as setBfree (0.05 dB); stopped there are none.
+ *   What counted, in dB on the R channel (the weakest, 13 dB under L): the speed ramp (it stalled 111 phase units
+ *   short of the target: +2), the displacement at the angle's fraction (setBfree's h1 is a float: +5), the FIR at
+ *   the nearest 16384th (x_iroundf), the delays in Q12 instead of Q8 (+8: a delay is a phase, 1/256 sample is
+ *   -70 dB at 440 Hz and worse above), the FIR in Q15, the lines with 2 guard bits and one rounding for the FIR sum.
+ *   The angle tables (1024 entries, linear) are not the limit any more: with the full 16384 entries the same
+ *   engine reaches 87 / 74 dB.
  *   The five filters are in coupled form (rot_cpl): setBfree's direct form I rounds at 2^-14, and its poles near
  *   radius 0.99 with a DC gain up to 700 amplify that (the drum alone: 32 dB). Coupled: 73 to 79 dB per filter.
  *
- * Formats. Samples are Q15 (1.0 = 32768: the organ's output). Products never exceed 32 bits: a Q14 coefficient
- * multiplies a sample in two parts (mul14), a Q24 coupled-form coefficient in two parts (mul24), each part rounded.
- * The state of a coupled-form filter peaks near 2^18.3 for a full-scale input; mul24 holds |state| below 2^19, so
- * the input must stay at or below 1.0 (Q15). Angles are 32-bit phases (2^32 = one turn); the table index is the
- * phase in 16384ths (phase >> 18). The line is 1024 samples (setBfree: 2048; the default geometry needs at most
- * about 335). The speed ramp rounds (a floor left 0.5 / k below the target: 111 phase units at 400 rpm).
+ * Formats. Samples are Q15 (1.0 = 32768: the organ's output); the delay lines hold Q15 + ROT_G bits. Products never
+ * exceed 32 bits: a Q14 coefficient multiplies a sample in two parts (mul14), a Q24 coupled-form coefficient in two
+ * (mul24), each part rounded; the FIR (Q15) sums its products before one rounding. The state of a coupled-form filter
+ * is up to 5 (horn A), 12 (horn B) and 45 (the drum shelf, poles at 263 Hz) times the input: the horn's filters use
+ * mul24 (|state| < 2^19, so the input must stay at or below 1.0 in Q15: clamp it where the engine is wired in) and the
+ * drum shelf mul24w (three parts, |state| < 2^22: the drum line sums up to 2.4 inputs). Angles are 32-bit phases
+ * (2^32 = one turn); the table index is the phase in 16384ths (phase >> 18), its fraction the bits below. The line is
+ * 1024 samples (setBfree: 2048; the default geometry needs at most about 335). The speed ramp carries its fraction.
  *
  * Only the rotor speeds and their ramps are computed per block (CTL samples), with int64 once per block. The per-sample
  * loop is int32 only. Not yet in: the brake (STOP) of setBfree's hnBrakePos / drBrakePos, the mic angle (default 0), the
@@ -33,6 +39,8 @@
 
 #define ROT_LINE 1024u                 /* the delay lines: 1024 samples */
 #define ROT_MASK (ROT_LINE - 1u)
+#define ROT_G 2                        /* the lines hold Q15 + ROT_G bits: the taps' rounding is 2^-ROT_G smaller */
+#define ROT_D 12                       /* the taps' delays (ROT_DISP, ROT_SPACE) are Q12 samples */
 #define ROT_CTL 32u                    /* the speed ramp's block (setBfree's bufferLengthSamples) */
 #define ROT_FS 44100u
 
@@ -60,6 +68,13 @@ static inline int32_t mul24(int32_t a, int32_t c)
 {
     return (((a * (c >> 12)) + 2048) >> 12) + (((a * (c & 4095)) + (1 << 23)) >> 24);
 }
+/* the same product with c split in three parts, for a state of up to 2^22 (the drum shelf: its poles near 263 Hz carry a
+ * state 45 times the input, and the drum line sums up to 2.4 inputs) */
+static inline int32_t mul24w(int32_t a, int32_t c)
+{
+    int32_t t2 = a * (c >> 16), t1 = a * ((c >> 8) & 255), t0 = a * (c & 255);
+    return (t2 + ((t1 + ((t0 + 128) >> 8) + 128) >> 8) + 128) >> 8;
+}
 /* a * c for a Q14 coefficient (|a| < 2^17, |c| < 2^15): split into c's high and low parts */
 static inline int32_t mul14(int32_t a, int32_t c)
 {
@@ -81,12 +96,29 @@ static inline int32_t rot_cpl(int32_t *z, const int32_t *c, int32_t x)
     return y;
 }
 
+/* rot_cpl with mul24w: the drum's shelf */
+static inline int32_t rot_cplw(int32_t *z, const int32_t *c, int32_t x)
+{
+    int32_t y = mul24w(z[0], c[2]) + mul24w(z[1], c[3]) + mul24w(x, c[4]);
+    int32_t u = mul24w(z[0], c[0]) + mul24w(z[1], c[1]) + x;
+    int32_t v = mul24w(z[1], c[0]) - mul24w(z[0], c[1]);
+    z[0] = u;
+    z[1] = v;
+    return y;
+}
+
 /* the two-sample reflection (setBfree's FILTER_C with 0.4, 0.4): y = 0.4 (x + previous x) */
 static inline int32_t rot_refl(int32_t *prev, int32_t x)
 {
     int32_t y = mul14(x, 6554) + mul14(*prev, 6554);
     *prev = x;
     return y;
+}
+
+/* a * f / 2^ROT_D, rounded, for a 0 <= f < 2^ROT_D, in two parts so that a up to 2^28 does not overflow */
+static inline int32_t rot_frac(int32_t a, int32_t f)
+{
+    return (a >> ROT_D) * f + (((a & ((1 << ROT_D) - 1)) * f + (1 << (ROT_D - 1))) >> ROT_D);
 }
 
 /* the angle tables' values. h is the position in 16384ths of a turn, one table step is 16 of them. The displacement is
@@ -119,11 +151,15 @@ static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
     int32_t c[5], xa, t, q, f;
     uint32_t n;
     tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c);
-    xa = mul14(x, c[0]) + mul14(hist[0], c[1]) + mul14(hist[1], c[2]) + mul14(hist[2], c[3]) + mul14(hist[3], c[4]);
-    t = ROT_SPACE[P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << 8);
-    n = ((uint32_t)(t >> 8)) & ROT_MASK;
-    f = t & 255;
-    q = (xa * f + 128) >> 8;
+    {   /* the FIR's five products (Q15 coefficients) summed before one rounding, in the lines' format */
+        int32_t hi = x * (c[0] >> 8) + hist[0] * (c[1] >> 8) + hist[1] * (c[2] >> 8) + hist[2] * (c[3] >> 8) + hist[3] * (c[4] >> 8);
+        int32_t lo = x * (c[0] & 255) + hist[0] * (c[1] & 255) + hist[1] * (c[2] & 255) + hist[2] * (c[3] & 255) + hist[3] * (c[4] & 255);
+        xa = (hi + ((lo + 128) >> 8) + (1 << (6 - ROT_G))) >> (7 - ROT_G);
+    }
+    t = ROT_SPACE[P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << ROT_D);
+    n = ((uint32_t)(t >> ROT_D)) & ROT_MASK;
+    f = t & ((1 << ROT_D) - 1);
+    q = rot_frac(xa, f);
     buf[n] += xa - q;
     buf[(n + 1u) & ROT_MASK] += q;
 }
@@ -134,10 +170,11 @@ static inline void drum_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[6u + P]) & 16383u;
     int32_t t, q, f;
     uint32_t n;
-    t = ROT_SPACE[6u + P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << 8);
-    n = ((uint32_t)(t >> 8)) & ROT_MASK;
-    f = t & 255;
-    q = (x * f + 128) >> 8;
+    x = x * (1 << ROT_G);
+    t = ROT_SPACE[6u + P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << ROT_D);
+    n = ((uint32_t)(t >> ROT_D)) & ROT_MASK;
+    f = t & ((1 << ROT_D) - 1);
+    q = rot_frac(x, f);
     buf[n] += x - q;
     buf[(n + 1u) & ROT_MASK] += q;
 }
@@ -222,7 +259,7 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         /* 1) the horn's filters A and B */
         x = rot_cpl(r->hA, ROT_CPL[0], xx);
         x = rot_cpl(r->hB, ROT_CPL[1], x);
-        leak = mul14(x, r->leak);
+        leak = mul14(x * (1 << ROT_G), r->leak);
 
         /* 2) the horn: taps 0 and 1 (history 0), reflection 1, taps 2 and 3 (history 1), reflection 2, taps 4 and 5 */
         horn_tap(r, ang_hf, 0, ROT_DISP[0], ROT_FIR[1], x, r->hh[0], r->HL);
@@ -250,10 +287,10 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
         drum_tap(r, ang_d, 5, ROT_DISP[3], x, r->DR);
 
         /* 4) the outputs: the drum's shelf and the horn, and the leakage on both */
-        y = rot_cpl(r->dL, ROT_CPL[2], r->DL[op]);
-        lo = y + mul14(r->HL[op], r->hl) + leak;
-        y = rot_cpl(r->dR, ROT_CPL[2], r->DR[op]);
-        ro = y + mul14(r->HR[op], r->hl) + leak;
+        y = rot_cplw(r->dL, ROT_CPL[2], (r->DL[op] + (1 << (ROT_G - 1))) >> ROT_G);
+        lo = y + ((mul14(r->HL[op], r->hl) + leak + (1 << (ROT_G - 1))) >> ROT_G);
+        y = rot_cplw(r->dR, ROT_CPL[2], (r->DR[op] + (1 << (ROT_G - 1))) >> ROT_G);
+        ro = y + ((mul14(r->HR[op], r->hl) + leak + (1 << (ROT_G - 1))) >> ROT_G);
         outL[i] = lo;
         outR[i] = ro;
         r->HL[op] = 0; r->HR[op] = 0; r->DL[op] = 0; r->DR[op] = 0;

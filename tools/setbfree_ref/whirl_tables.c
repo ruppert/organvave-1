@@ -10,8 +10,8 @@
  * The tables have WHIRL_DISPLC_SIZE (16384) angles in setBfree. The firmware keeps every 16th (1024 angles, the
  * step is 16 / 16384 of a turn); the tap phases are not on that grid, so the firmware interpolates both the
  * displacement and the FIR coefficients between the sampled angles. The file:
- *   magic "WHL1", then 1024 records of: int32 horn forward, horn backward, drum forward, drum backward (Q8 samples),
- *   and 5 + 5 int16 (the horn's forward and backward angle FIR, Q14); then the 12 tap phases (int32: horn 0..5, drum
+ *   magic "WHL1", then 1024 records of: int32 horn forward, horn backward, drum forward, drum backward (Q12 samples),
+ *   and 5 + 5 int16 (the horn's forward and backward angle FIR, Q15); then the 12 tap phases (int32: horn 0..5, drum
  * 6..11) and the 12 spacings (float32: the same order, samples); then 25 float32 biquads (a1 a2 b0 b1 b2 each):
  * default horn A, default horn B, drum (high-shelf), sharp horn A, sharp horn B. Little endian. */
 #include <stdio.h>
@@ -34,10 +34,10 @@ void notifyControlChangeByName (void *mcfg, const char *cfname, unsigned char va
 #define SAMPLED 1024
 #define STEP (WHIRL_DISPLC_SIZE / SAMPLED)
 
-static int32_t q8(double v) { return (int32_t)lround(v * 256.0); }
-static int16_t q14(double v)
+static int32_t q12(double v) { return (int32_t)lround(v * 4096.0); }
+static int16_t q15(double v)
 {
-    double r = lround(v * 16384.0);
+    double r = lround(v * 32768.0);
     if (r > 32767) r = 32767;
     if (r < -32768) r = -32768;
     return (int16_t)r;
@@ -69,14 +69,14 @@ int main(int argc, char **argv)
         unsigned int a = i * STEP;
         int32_t v[4];
         int16_t c[10];
-        v[0] = q8(w->hnFwdDispl[a]);
-        v[1] = q8(w->hnBwdDispl[a]);
-        v[2] = q8(w->drFwdDispl[a]);
-        v[3] = q8(w->drBwdDispl[a]);
+        v[0] = q12(w->hnFwdDispl[a]);
+        v[1] = q12(w->hnBwdDispl[a]);
+        v[2] = q12(w->drFwdDispl[a]);
+        v[3] = q12(w->drBwdDispl[a]);
         fwrite(v, sizeof v[0], 4, f);
         for (j = 0; j < 5; j++) {
-            c[j] = q14(w->bfw[a].b[j]);
-            c[5 + j] = q14(w->bbw[a].b[j]);
+            c[j] = q15(w->bfw[a].b[j]);
+            c[5 + j] = q15(w->bbw[a].b[j]);
         }
         fwrite(c, sizeof c[0], 10, f);
     }
