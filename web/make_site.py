@@ -3,7 +3,7 @@
 # OrganVave-1's site with the installer: one self-contained page (site_organ.html, with the package embedded) and the
 # package itself for the download. The installer's JS is fm1pkg.js and fm1ota.js (the FMini-1 site's, GPL-3.0-only).
 #   python3 web/make_site.py build/felucca.fwsc OUTDIR VERSION
-# writes OUTDIR/index.html and OUTDIR/organvave-1-VERSION.fwsc. VERSION must be ORGANVAVE_VERSION in firmware/src/core.h.
+# writes OUTDIR/index.html and OUTDIR/organvave-1-vVERSION.fwsc. VERSION must be ORGANVAVE_VERSION in firmware/src/core.h.
 # Serve it over https or http://localhost: Web MIDI with SysEx needs a secure context (Chrome or Edge).
 import base64
 import json
@@ -38,7 +38,7 @@ def main(pkg, outdir, version):
     html = (HERE / "site_organ.html").read_text(encoding="utf-8")
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8")) for f in ("fm1pkg.js", "fm1ota.js"))
     url = "data:application/octet-stream;base64," + base64.b64encode(raw).decode()
-    file = f"organvave-1-{version}.fwsc"
+    file = f"organvave-1-v{version}.fwsc"
     meta = json.dumps({"version": version, "product": product, "pkg": url, "file": file})
     for mark in ("/*LIB*/", "/*META*/{}"):
         if html.count(mark) != 1:

@@ -6,8 +6,9 @@
   tools/build.py [--release X.Y[-suffix]]
 
 Outputs in build/: felucca.bin (app), loader/ota.bin (update loader),
-felucca.fwsc (package). A release build (--release X.Y) writes felucca-X.Y.fwsc and a folder
-release-X.Y/ with the package, the app, SHA256SUMS and the licence files.
+felucca.fwsc (package), and the same package under its release name organvave-1-vX.Y.Z.fwsc (the version of
+firmware/src/core.h, or --release's). A release build (--release X.Y) writes a folder release-X.Y/ with the package,
+the app, SHA256SUMS and the licence files.
 See BUILDING.md for the toolchain and the SDK.
 
 The JieLi toolchain is Linux x86-64 only. JIELI_TOOLCHAIN points at it; on
@@ -343,6 +344,14 @@ def mmio_check():
     return errors
 
 
+def core_version():
+    """ORGANVAVE_VERSION of firmware/src/core.h, with its v (v0.1.0)"""
+    m = re.search(r'#define ORGANVAVE_VERSION "(v[^"]+)"', (FW / "src" / "core.h").read_text(encoding="utf-8"))
+    if not m:
+        raise SystemExit("firmware/src/core.h: no ORGANVAVE_VERSION")
+    return m[1]
+
+
 def main():
     global PRODUCT, VERSION
     ap = argparse.ArgumentParser()
@@ -356,7 +365,6 @@ def main():
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z, X.Y.Z.W or X.Y-suffix, one digit each")
         PRODUCT = "FM-1_8" + m[1] + m[2]
         VERSION = "v" + a.release.lower()      # e.g. v0.1, v0.1-rc1 (ORGANVAVE_VERSION)
-        name = f"organvave-1-{a.release}.fwsc"
     if not (FW / "engines" / "src" / "felucca_engine.h").exists():
         raise SystemExit("firmware/engines is empty: the Felucca-Engines submodule "
                          "(git submodule update --init, or clone with --recurse-submodules)")
@@ -382,19 +390,21 @@ def main():
     if errors:
         raise SystemExit("build: checks failed")
     pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY), ota, PRODUCT)
+    named = "organvave-1-" + (VERSION or core_version()) + ".fwsc"      # e.g. organvave-1-v0.1.0.fwsc
     (OUT / name).write_bytes(pkg)
+    (OUT / named).write_bytes(pkg)
     print(f"app      {OUT / 'felucca.bin'}  {len(img)} B")
     print(f"loader   {LDR / 'ota.bin'}  {len(ota)} B")
-    print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
+    print(f"package  {OUT / named}  {len(pkg)} B, identity {PRODUCT} (also {OUT / name})")
     if a.release:                   # what a release carries: the package, the app and every licence they need
         rel = OUT / f"release-{a.release}"
         shutil.rmtree(rel, ignore_errors=True)
         (rel / "LICENSES").mkdir(parents=True)
         app = f"organvave-1-{a.release}-app.bin"
-        (rel / name).write_bytes(pkg)
+        (rel / named).write_bytes(pkg)
         (rel / app).write_bytes(img)
         (rel / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n"
-                                                for n, b in ((name, pkg), (app, bytes(img)))))
+                                                for n, b in ((named, pkg), (app, bytes(img)))))
         for f in sorted((SRC / "LICENSES").glob("*.txt")):
             shutil.copy(f, rel / "LICENSES" / f.name)
         if not (rel / "LICENSES" / "MIT-Felucca-Engines.txt").exists():     # ANALOG LOFI TRIO WHEEL NOISE (engines/)

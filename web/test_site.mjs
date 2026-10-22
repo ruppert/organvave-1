@@ -22,7 +22,7 @@ for (const [i, s] of scripts.entries()) {
 // the page's meta: the package it carries, its identity and the file name of the download
 const m = scripts[1].match(/const meta = (\{.*\});/);
 const meta = m ? JSON.parse(m[1]) : null;
-ok(meta && /^FM-1_8\d\d$/.test(meta.product) && /^organvave-1-\d+\.\d+\.\d+\.fwsc$/.test(meta.file), `meta: ${meta && meta.product}, ${meta && meta.file}`);
+ok(meta && /^FM-1_8\d\d$/.test(meta.product) && /^organvave-1-v\d+\.\d+\.\d+\.fwsc$/.test(meta.file), `meta: ${meta && meta.product}, ${meta && meta.file}`);
 const b64 = meta ? meta.pkg.split(",")[1] : "";
 const pkg = Buffer.from(b64, "base64");
 ok(pkg.includes(Buffer.from("FELUCCA-LOADER-1")), `the embedded package (${pkg.length} B) is a Felucca loader package`);
