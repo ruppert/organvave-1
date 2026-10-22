@@ -26,6 +26,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.3.1 | REVERB and DELAY pages (the engine's reverbs and delays, on the FX button) |
 | 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). |
 | 0.5.0 | the equaliser: LOW and HIGH shelves, a MID peak with twelve frequencies, -12 .. +12 dB (EQ page on the FX button, editor controls; not yet on an FM-1) |
+| 0.9.0 | beta: overload fallback (the rotary goes LIGHT, then the drive turns off, when the CPU runs late; a new patch restores them), all-keys stress tests, user manual (not yet on an FM-1) |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing
@@ -42,3 +43,10 @@ Leo Kuroshita (Hügelton Instruments). It is free software under the GNU General
 
 "M-VAVE" and "FM-1" are trademarks of their owners. OrganVave-1 is independent firmware, not affiliated with or endorsed by
 them, and uses no other trademarks in its names.
+
+## User manual (0.9.0)
+
+- **Keys and MIDI**: channel 1 plays the upper manual, 2 the lower, 3 the pedals (with GLO on channel N: N, N + 1, N + 2). CC 7 / 11 is the swell, CC 70..78 the nine drawbars of the channel's manual, CC 1 the rotor speed (0..42 SLOW, 43..85 STOP, 86..127 FAST), CC 64 toggles SLOW / FAST, CC 123 / 120 release the notes.
+- **Pages**: EDIT walks the drawbar pages (UPPER, LOWER, PEDAL). The FX button walks PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, EQ and back home.
+- **Overload**: if the CPU runs late the firmware lightens itself instead of dropping notes: the CLASSIC rotary becomes LIGHT, then the drive turns off. The page shows "CPU HIGH". Loading a patch restores everything.
+- Nothing here has been tested on a real FM-1.

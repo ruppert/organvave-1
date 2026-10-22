@@ -425,6 +425,7 @@ enum {
 static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
 static volatile uint8_t org_pgen;
 static uint8_t org_pgen_seen = 0xFF;
+static volatile uint8_t cpu_degrade, fx_force;   /* overload: 1 CLASSIC plays as LIGHT, 2 the drive is off too (fx.c fx_degrade) */
 
 static uint32_t org_pmax(uint32_t i)
 {
@@ -466,6 +467,7 @@ static void org_set_patch(const uint8_t *v)
     memcpy(s, v, ORG_PSIZE);
     org_sanitize(s);
     memcpy(org_patch, s, ORG_PSIZE);
+    cpu_degrade = 0;                        /* (a new patch: the effects try their full cost again, fx.c) */
     RING_PUBLISH();
     org_pgen++;
 }

@@ -416,6 +416,78 @@ int main(void)
         }
         song.master_q12 = 4096;
     }
+    /* 8. CPU overload: the CLASSIC rotary gives way to LIGHT, then the drive goes off (fx_degrade, which audio.c's shed_voice calls
+     * when it has no voice to take; tests/audio_test.c checks that call) */
+    {
+        boot();
+        memset(P, 0, sizeof P);
+        P[OP_UB + 2] = 8; P[OP_ROT] = 1; P[OP_ROT_MODEL] = 0; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 6;
+        patch_set(P);
+        chord_on();
+        blocks(8820);
+        check("overload: before, CLASSIC and the drive run", rot_mix.model == 0 && rot_on && dr_on);
+        check("  .. the first call lowers something", fx_degrade() == 1);
+        blocks(8820);
+        check("  .. the first shed: LIGHT plays, the patch still says CLASSIC", rot_mix.model == 1 && org_patch[OP_ROT_MODEL] == 0 && dr_on == 1 && cpu_degrade == 1);
+        check("  .. the second lowers something", fx_degrade() == 1);
+        blocks(8820);
+        check("  .. the second: the drive is off", dr_on == 0 && org_patch[OP_DRV] == 1 && cpu_degrade == 2);
+        check("  .. a third finds nothing more to lower", fx_degrade() == 0 && cpu_degrade == 2);
+        {
+            int32_t pk = 0;
+            uint32_t i;
+            for (i = pos - 4410; i < pos; i++)
+                pk = oL[i] > pk ? oL[i] : -oL[i] > pk ? -oL[i] : pk;
+            check("  .. and the organ still sounds", pk > 500);
+        }
+        patch_set(P);
+        blocks(8820);
+        check("  .. a new patch load brings the full effects back", cpu_degrade == 0 && rot_mix.model == 0 && dr_on == 1);
+        chord_off();
+    }
+    /* 9. every key of the three manuals at once, everything on: bounded and alive for ten seconds, then quiet */
+    {
+        uint32_t k, i, n = 0;
+        int32_t pk = 0, pk_end = 0;
+        double e = 0;
+        boot();
+        memset(P, 0, sizeof P);
+        for (i = 0; i < 27u; i++)
+            P[i] = 8;                                    /* every drawbar of every manual at 8 */
+        P[OP_PERC] = 1; P[OP_VIB] = 5; P[OP_ROT] = 1; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 12;
+        P[OP_EQ] = 1; P[OP_EQ_LOW] = 12; P[OP_EQ_MID] = 12; P[OP_EQ_HIGH] = 12;
+        patch_set(P);
+        trk[0].p[P_REV] = 127; trk[0].p[P_DLY] = 127;
+        for (k = 0; k < ORG_NKEY; k++) {                 /* (the key queue holds 64 messages a fragment: a block between each 32) */
+            org_key(k, 1);
+            if (k % 32u == 31u)
+                blocks(CTL);
+        }
+        blocks(44100 * 10);
+        for (i = 44100; i < pos; i++) {
+            int32_t a = oL[i] < 0 ? -oL[i] : oL[i], b = oR[i] < 0 ? -oR[i] : oR[i];
+            pk = a > pk ? a : pk;
+            pk = b > pk ? b : pk;
+            e += (double)oL[i] * oL[i];
+            n++;
+        }
+        printf("effects: all %u keys down, everything on, 10 s: peak %d, rms %.0f\n", (unsigned)org.ndown, pk, sqrt(e / n));
+        check("all keys of the three manuals with everything on: bounded (peak under 2^17) and alive (rms above 1000)", pk < 131072 && sqrt(e / n) > 1000.0);
+        for (k = 0; k < ORG_NKEY; k++) {
+            org_key(k, 0);
+            if (k % 32u == 31u)
+                blocks(CTL);
+        }
+        trk[0].p[P_REV] = 0; trk[0].p[P_DLY] = 0;
+        blocks(44100 * 14);
+        for (i = pos - 44100; i < pos; i++) {
+            int32_t a = oL[i] < 0 ? -oL[i] : oL[i], b = oR[i] < 0 ? -oR[i] : oR[i];
+            pk_end = a > pk_end ? a : pk_end;
+            pk_end = b > pk_end ? b : pk_end;
+        }
+        printf("effects: 14 s after letting go: peak %d\n", pk_end);
+        check("  .. and after letting go it falls quiet (peak at most 2 after 14 s)", pk_end <= 2);
+    }
     chord_off();
     printf(bad ? "effects: FAILED\n" : "effects: all ok\n");
     return bad;

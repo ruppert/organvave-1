@@ -1079,14 +1079,29 @@ static const int32_t DRV_FB[9] = {9766017, 9766017, 9766017, 13150415, 15099494,
 static const int32_t DRV_FB2[9] = {16760439, 13376041, 9766017, 9766017, 9766017, 11431356, 13207717, 14984078, 16760439};
 static const uint16_t ROT_BAL_HL[9] = {5734, 6820, 8110, 9644, 11469, 13639, 16220, 19288, 22938};
 static uint8_t fxo_seen = 0xFF;
+/* CPU overload (audio.c shed_voice finds no voice to take in the organ): first CLASSIC plays as LIGHT, then the drive goes off,
+ * each until the next patch load (org_set_patch clears it). The patch bytes are not touched: the panel and the editor still
+ * show what was chosen, and ROTARY says so */
+static uint32_t fx_degrade(void)                         /* 1: something was lowered */
+{
+    if (cpu_degrade < 1u && org_patch[OP_ROT] && !org_patch[OP_ROT_MODEL])
+        cpu_degrade = 1;
+    else if (cpu_degrade < 2u && org_patch[OP_DRV])
+        cpu_degrade = 2;
+    else
+        return 0;
+    fx_force = 1;
+    return 1;
+}
 static void fx_organ_apply(void)
 {
     uint32_t sp, g, f;
-    if (org_pgen == fxo_seen)
+    if (org_pgen == fxo_seen && !fx_force)
         return;
+    fx_force = 0;
     fxo_seen = org_pgen;
     rot_on = org_patch[OP_ROT];
-    rot_model_req = org_patch[OP_ROT_MODEL];
+    rot_model_req = org_patch[OP_ROT_MODEL] || cpu_degrade >= 1u;
     sp = org_patch[OP_ROT_SPEED];       /* setBfree's speeds: horn 0.672 / 7.056 Hz, drum 0.600 / 5.955 Hz */
     rot_target(&rot_st, sp ? rot_inc(sp == 1u ? 672u : 7056u) : 0u, sp ? rot_inc(sp == 1u ? 600u : 5955u) : 0u);
     rot_st.hset = org_patch[OP_ROT_HORN];
@@ -1095,7 +1110,7 @@ static void fx_organ_apply(void)
     g = org_patch[OP_DRV_GAIN] % 13u;
     f = org_patch[OP_DRV_FAT] % 9u;
     dr_set(&dr_st, DRV_IG[g], DRV_OG, DRV_FB[f], DRV_FB2[f], 10425000, 35043, 157700, 16626000);
-    dr_on = org_patch[OP_DRV];
+    dr_on = org_patch[OP_DRV] && cpu_degrade < 2u;
     eq_set(&eq_st, org_patch[OP_EQ_LOW], org_patch[OP_EQ_MID], org_patch[OP_EQ_FREQ], org_patch[OP_EQ_HIGH]);
     eq_on = org_patch[OP_EQ];
 }

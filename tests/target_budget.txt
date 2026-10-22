@@ -12,7 +12,7 @@ org_msg 48
 org_wheel_pc 57
 org_vib 59
 eq_block 628
-fm1_alnk0_irq 6431
+fm1_alnk0_irq 4042
 fm1_timer5_irq 25025
 rev_room 507
 rev_spring 15

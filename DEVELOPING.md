@@ -160,3 +160,7 @@ from setBfree, the fixed-point port, host tests against the reference, then the 
 - The sandbox for Claude sessions is reclaimed after a while: files in `/tmp` and the toolchain directories disappear. Keep
   scratch work in the session's scratchpad directory and commit what matters.
 - The GitHub token of a session cannot create Releases (403). The owner does it.
+
+## 9. Overload fallback (0.9.0)
+
+The organ has no voices to shed. `shed_voice()` (audio.c) therefore calls `fx_degrade()` (fx.c): `cpu_degrade` goes 0 to 1 (a CLASSIC rotary plays as LIGHT) and then to 2 (the drive is off); `fx_force` makes `fx_organ_apply` re-read the patch. `org_set_patch` clears it. `tests/effects_test.c` sections 8 and 9 cover the steps and an all-keys stress run; `tests/audio_test.c` checks the hook. Modules added since 0.3: eng_eq.c (noinline `eq_block`), the REVERB / DELAY / EQ pages in organ_app.c, the organ MIDI in midi_control.c.
