@@ -163,6 +163,8 @@ static void boot_fresh(void)
     memset(kb_note, 0, sizeof kb_note); kb_prev = 0;
     trk[0].p[P_VOICE] = V_POLY;
     trk[0].p[P_DIST] = trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = 0;
+    org_set(OP_ROT, 0); org_set(OP_DRV, 0);            /* (the rms comparisons depend on the rotor's phase: no effects; */
+    rot_w = dr_w = 0; rot_idle = 0;                    /* and the fades start from nothing, as at power-on) */
 }
 static double boot_run(int32_t pot, int boot, uint32_t *splash_peak, uint32_t *first_master, uint32_t *busy)
 {

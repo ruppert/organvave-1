@@ -72,6 +72,7 @@ typedef struct {
     int32_t rem_h, rem_d;              /* the ramps' carried fractions (Q30) */
     int8_t acdc_h, acdc_d;             /* +1 accelerating, -1 decelerating, 0 holding (setBfree's hornAcDc) */
     uint32_t mic_fw, mic_bw;           /* the mic angles' offsets (setBfree's micAngle * 0.25, and 1 - that), phase */
+    uint32_t hset;                     /* the horn character: 0 default, 1 sharp (whirl-sharp.cfg: ROT_CPL sets 3 and 4 for 0 and 1) */
     int32_t hl, leak;                  /* the horn level and the leakage, Q14 (0.7 and 0.15 * 0.7) */
     int32_t hA[2], hB[2];              /* the horn filters' states (coupled form: u, v) */
     int32_t dL[2], dR[2];              /* the drum output filters' states (coupled form: u, v) */
@@ -310,6 +311,7 @@ __attribute__((noinline))
 static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
 {
     uint32_t i;
+    const int32_t *ca = ROT_CPL[r->hset ? 3 : 0], *cb = ROT_CPL[r->hset ? 4 : 1];     /* the horn character's two filters */
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
@@ -319,8 +321,8 @@ static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *out
         uint32_t ang_d = r->ph_d;
 
         /* 1) the horn's filters A and B */
-        x = rot_cpl(r->hA, ROT_CPL[0], xx);
-        x = rot_cpl(r->hB, ROT_CPL[1], x);
+        x = rot_cpl(r->hA, ca, xx);
+        x = rot_cpl(r->hB, cb, x);
         leak = mul14(x * (1 << ROT_G), r->leak);
 
         /* 2) the horn: taps 0 and 1 (history 0), reflection 1, taps 2 and 3 (history 1), reflection 2, taps 4 and 5 */

@@ -67,7 +67,8 @@ vm.createContext(ctx);
 vm.runInContext(script + `
 ;globalThis.__page = {
   connect, readPatch, sendPatch, get patch() { return patch; }, set patch(v) { patch = v; }, OP_TEMP, OP_XTALK,
-  OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL, OP_VIB
+  OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL, OP_VIB, OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC,
+  OP_ROT_BAL, OP_DRV, OP_DRV_GAIN, OP_DRV_FAT
 };`, ctx);
 const P = ctx.__page;
 const status = () => byId("status").textContent;
@@ -114,6 +115,30 @@ const got2 = after2.slice(3, 3 + 64);
 ok(got2[P.OP_PERC] === 1 && got2[P.OP_PERC_SOFT] === 0 && got2[P.OP_PERC_FAST] === 0 && got2[P.OP_PERC_SEL] === 1 && got2[P.OP_VIB] === 5,
    "send: the percussion (on, 2 2/3') and the vibrato (CHO 2) reach the instrument");
 ok(bytesEq(got.slice(1, 27), P.patch.slice(1, 27)), "send: the other drawbars are the same as sent");
+
+// ---- 3c: the rotary and the drive (0.3.0): the bytes 34..42 go to the instrument, and the page shows what it reads back
+byId("rot").checked = true;
+byId("rmodel").value = "1";
+byId("rspeed").value = "2";
+byId("rhorn").value = "1";
+byId("rmic").value = "3";
+byId("rbal").value = "6";
+byId("drv").checked = true;
+byId("dgain").value = "9";
+byId("dfat").value = "5";
+await P.sendPatch();
+await wait(120);
+const got3 = (await direct(85, [0, 0])).slice(3, 3 + 64);
+ok(got3[P.OP_ROT] === 1 && got3[P.OP_ROT_MODEL] === 1 && got3[P.OP_ROT_SPEED] === 2 && got3[P.OP_ROT_HORN] === 1 &&
+   got3[P.OP_ROT_MIC] === 3 && got3[P.OP_ROT_BAL] === 6, "send: the rotary (on, LIGHT, FAST, sharp horn, 90 degrees, horn level 6) reaches the instrument");
+ok(got3[P.OP_DRV] === 1 && got3[P.OP_DRV_GAIN] === 9 && got3[P.OP_DRV_FAT] === 5, "send: the drive (on, gain 9, character 5) reaches the instrument");
+ok(got3[P.OP_PERC] === 1 && got3[P.OP_VIB] === 5, "send: the earlier bytes are kept");
+byId("rot").checked = false; byId("drv").checked = false; byId("rmic").value = "0"; byId("dgain").value = "0";
+byId("source").value = "0";
+await P.readPatch();
+await wait(120);
+ok(byId("rot").checked === true && byId("rmodel").value === "1" && byId("rmic").value === "3" && byId("drv").checked === true &&
+   Number(byId("dgain").value) === 9, "read: the page shows the rotary and the drive the instrument holds");
 
 // ---- 4: a refusal shows the device's reason: factory 9 does not exist
 byId("source").value = "2:9";

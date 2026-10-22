@@ -74,6 +74,8 @@ $HC -O2 -o "$OUT/drive_test" tests/drive_test.c -lm
 run "the drive against setBfree's: the odd harmonics of sines at 110 Hz and 1 kHz, no even ones, block-size independence, bounds at the largest gains, silence, a DC step blocked" "$OUT/drive_test"
 $HC -O2 -o "$OUT/rotary_light_test" tests/rotary_light_test.c -lm
 run "the rotary LIGHT against CLASSIC: sidebands and levels (nine tones), bounds, silence, the model switch (a 20 ms fade, no jump, each model alone afterwards)" "$OUT/rotary_light_test"
+$HC -O2 -o "$OUT/effects_test" tests/effects_test.c -lm
+run "the effects section end to end: the patch bytes through mix_block (the rotary: speeds, STOP, LIGHT; the drive; the fades; silence)" "$OUT/effects_test"
 $HC -O2 -o "$OUT/fx_test" tests/fx_test.c -lm
 run "FX: five stereo reverbs (decay, level, corners, type changes), seven delays, three choruses, TUBE and OUTPUT, bypass at 0" "$OUT/fx_test"
 $HC -O2 -o "$OUT/speaker_test" tests/speaker_test.c -lm

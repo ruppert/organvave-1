@@ -406,7 +406,16 @@ enum {
     OP_PERC_FAST = 31,          /* percussion decay: 0 slow (4 s to -60 dB), 1 fast (1 s) */
     OP_PERC_SEL = 32,           /* the harmonic: 0 the 4' (second), 1 the 2 2/3' (third) */
     OP_VIB = 33,                /* scanner: 0 off, 1..3 VIB1..3, 4..6 CHO1..3 */
-    OP_NUM                      /* (34..63: reserved for the rotary, drive, ...: 0 until then) */
+    OP_ROT = 34,                /* rotary speaker (version 0.3.0; 0 in older patches): 0 off, 1 on */
+    OP_ROT_MODEL = 35,          /* 0 CLASSIC (setBfree's whirl.c), 1 LIGHT (the cheaper model) */
+    OP_ROT_SPEED = 36,          /* 0 STOP, 1 SLOW (chorale), 2 FAST (tremolo) */
+    OP_ROT_HORN = 37,           /* the horn's character: 0 normal, 1 sharp */
+    OP_ROT_MIC = 38,            /* the mics' angle (the stereo width): 0 wide (180 degrees) .. 6 mono (0), 30 degrees a step */
+    OP_ROT_BAL = 39,            /* horn level against the drum: 0..8, 4 even (1.5 dB a step, -6 .. +6 dB) */
+    OP_DRV = 40,                /* drive (the preamp): 0 off, 1 on */
+    OP_DRV_GAIN = 41,           /* its input gain: 0..12, 2 dB a step, 6 setBfree's default (3.5675) */
+    OP_DRV_FAT = 42,            /* its character: 0..8, 0 setBfree's default; higher: more bass into, then out of, the curve */
+    OP_NUM                      /* (43..63: reserved: 0 until then) */
 };
 static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
 static volatile uint8_t org_pgen;
@@ -420,8 +429,16 @@ static uint32_t org_pmax(uint32_t i)
         return 2u;
     if (i == OP_XTALK || (i >= OP_PERC && i <= OP_PERC_SEL))
         return 1u;
-    if (i == OP_VIB)
+    if (i == OP_VIB || i == OP_ROT_MIC)
         return 6u;
+    if (i == OP_ROT || i == OP_ROT_MODEL || i == OP_ROT_HORN || i == OP_DRV)
+        return 1u;
+    if (i == OP_ROT_SPEED)
+        return 2u;
+    if (i == OP_ROT_BAL || i == OP_DRV_FAT)
+        return 8u;
+    if (i == OP_DRV_GAIN)
+        return 12u;
     return 0u;
 }
 static void org_sanitize(uint8_t *v)

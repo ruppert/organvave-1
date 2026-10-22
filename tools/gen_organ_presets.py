@@ -22,7 +22,32 @@ OUT = os.path.join(HERE, "..", "firmware", "src", "eng_organ_presets.h")
 DUMP = os.path.join(HERE, "setbfree_ref", "tonegen_dump.txt")
 PSIZE = 64
 OP_UB, OP_LB, OP_PB, OP_TEMP, OP_XTALK = 0, 9, 18, 27, 28
+OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC, OP_ROT_BAL = 34, 35, 36, 37, 38, 39
+OP_DRV, OP_DRV_GAIN, OP_DRV_FAT = 40, 41, 42
 TEMPS = {"gear60": 0, "gear50": 1, "equal": 2}
+
+
+def effects(p, fx):
+    """The rotary and the drive bytes (0.3.0). Without them the neutral values are written (horn level even, gain 0 dB),
+    so that switching an effect on in the panel starts from a sensible place."""
+    p[OP_ROT_BAL] = 4
+    p[OP_DRV_GAIN] = 6
+    if "rot" in fx:
+        model, speed, horn, width, hdb = fx["rot"]
+        assert model in ("classic", "light") and speed in ("stop", "slow", "fast") and horn in ("normal", "sharp")
+        assert width in (0, 30, 60, 90, 120, 150, 180) and -6 <= hdb <= 6
+        p[OP_ROT] = 1
+        p[OP_ROT_MODEL] = 0 if model == "classic" else 1
+        p[OP_ROT_SPEED] = ("stop", "slow", "fast").index(speed)
+        p[OP_ROT_HORN] = 0 if horn == "normal" else 1
+        p[OP_ROT_MIC] = (180 - width) // 30
+        p[OP_ROT_BAL] = 4 + int(round(hdb / 1.5))
+    if "drv" in fx:
+        gdb, char = fx["drv"]
+        assert -12 <= gdb <= 12 and 0 <= char <= 8
+        p[OP_DRV] = 1
+        p[OP_DRV_GAIN] = 6 + int(round(gdb / 2))
+        p[OP_DRV_FAT] = char
 
 
 def bars(s):
@@ -59,7 +84,8 @@ def main():
          "/* the organ patch of each factory preset (eng_organ.c OP_*) */",
          "static const uint8_t ORG_FACTORY[ORG_NFACTORY][ORG_PSIZE] = {"]
     levels = []
-    for name, up, lo, pe, tun, xt, rev in BANK:
+    for name, up, lo, pe, tun, xt, rev, *fx in BANK:
+        fx = fx[0] if fx else {}
         assert len(name) <= 12 and name == name.upper(), name
         p = [0] * PSIZE
         p[OP_UB:OP_UB + 9] = bars(up)
@@ -67,6 +93,7 @@ def main():
         p[OP_PB:OP_PB + 9] = bars(pe)
         p[OP_TEMP] = TEMPS[tun]
         p[OP_XTALK] = 1 if xt else 0
+        effects(p, fx)
         db = 20 * math.log10(ref / chord_rms(contrib, bars(up), xt))
         lv = max(1, min(127, 112 + int(round(2 * db))))
         levels.append((name, db, lv))
@@ -78,7 +105,7 @@ def main():
     L.append("")
     L.append("/* the engine's presets: the name and the reverb send (FX(dist, chorus, delay, reverb)) */")
     L.append("static const preset_t ORG_PRESETS[ORG_NFACTORY] = {")
-    for (name, up, lo, pe, tun, xt, rev) in BANK:
+    for (name, up, lo, pe, tun, xt, rev, *_) in BANK:
         L.append('    {"%s", {0, 0, 0, 0, 0, 0, 0, 0}, {0, 64, 127, 10}, 0, 0, FX(0, 0, 0, %d)},' % (name, rev))
     L.append("};")
     L.append("")

@@ -169,7 +169,7 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   feedback poles and the global feedback are setBfree's defaults (gain 3.5675 in, 0.8795 out, fb 0.5821, fb2 0.999, gfb 0.6214,
   bias 0.5347, sag 0.991 / 0.0094). Measured against `overdrive.c` itself (sines at 110 Hz and 1 kHz, 0.1 to 1.0 full
   scale): the odd harmonics within 0.11 dB, no even ones (below -99 dB, as the reference), waveform SNR 48 to 62 dB; the cost
-  is 201 loop instructions a block (about 150 a sample). Limits: the pre-differentiator's state is clamped (its gain is
+  is 201 loop instructions a block (about 150 a sample). In the instrument the output gain is setBfree's plus 3 dB (`DRV_OG` in `fx.c`): the curve saturates, and with a few keys the driven mix comes out 2 to 16 dB below the dry one. Limits: the pre-differentiator's state is clamped (its gain is
   1 / (1 - fb), 1000 at fb 0.999, outside the usable range); the input of the stage after the drive must be clamped (the
   largest gains put the output at 7 times full scale). Nothing here is tested on a real FM-1.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
@@ -216,7 +216,7 @@ designed one; the static budget of the new functions.
 | 0.0.x | the house: identity (`FM-1_8XY`), names, README / CREDITS, docs, the workflow manual only; the slimming; the UI mock-ups |
 | 0.1.0 (now) | tone generator, upper manual, click, the drawbar page, 8 factory patches; FMUG removed |
 | 0.2.0 | percussion, vibrato / chorus (done in the firmware; PERC & VIB page, editor controls; not yet on an FM-1) |
-| 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive, the effects section |
+| 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive (done in the firmware; ROTARY and DRIVE pages, editor controls; not yet on an FM-1). REVERB and DELAY pages move to 0.4.0 with the EQ |
 | 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |
 | 0.5.0 | editor, site, installer, emulator, GitHub Pages on (the site, the installer and the patch editor came early, with 0.1.0's firmware, at the owner's request) |
 | 0.9.x | beta |

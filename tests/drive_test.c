@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Guilherme Ruppert (OrganVave-1) */
 /* The drive (src/eng_drive.c) on the host, against setBfree's overdrive.c (tools/setbfree_ref/drive_render.c, default
- * constants). The reference numbers below are its output for sines at 110 Hz and 1 kHz (odd harmonics 1, 3, 5, 7 in dB
+ * constants). The reference numbers below are its output for sines at 110 Hz and 1 kHz, 0.1 to 3.9 times 1.0 (odd harmonics 1, 3, 5, 7 in dB
  * re a full-scale sine, last two seconds of three, Hann window); the curve is odd, so the even ones stay below -85 dB.
  * 1. harmonics: the odd ones within 0.4 dB of the reference (1.0 dB below -60 dB), the even ones below -85 dB.
  * 2. blocks: the output does not depend on the block length (1, 7, 32, 64: bit-exact).
@@ -49,6 +49,9 @@ static const hcase HC[] = {
     {110, 1.0, {-11.9, -13.6, -20.7, -30.4}},
     {1000, 0.3, {-18.7, -28.7, -33.4, -42.4}},
     {1000, 1.0, {-12.9, -12.7, -28.0, -23.6}},
+    {110, 3.0, {-13.4, -15.8, -22.9, -19.5}},      /* a loud chord is several times 1.0 */
+    {110, 3.9, {-14.8, -17.3, -21.0, -20.2}},
+    {1000, 3.0, {-14.4, -16.2, -20.5, -19.8}},
 };
 
 int main(void)

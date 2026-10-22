@@ -23,7 +23,8 @@ typedef struct {
     int32_t tn[4];                           /* the horn's tone biquad: x1, x2, y1, y2 */
     int32_t d[6], g[6];                      /* the taps' delay (Q16 samples) and gain (Q14) now */
     int32_t sd[6], sg[6];                    /* their steps per sample */
-    uint32_t tone;                           /* the horn character: 0 default, 1 sharp */
+    uint32_t tone;                           /* the horn character: 0 default, 1 sharp (set from the rotor's hset every block) */
+    int32_t hlev;                            /* the horn's level, Q14: LT_HLEV times the rotor's horn level over its default */
 } lt_t;
 
 static uint32_t lt_isqrt64(uint64_t v)
@@ -100,6 +101,8 @@ static void lt_samples(rot_t *r, lt_t *t, const int32_t *in, int32_t *outL, int3
 {
     int32_t td[6], tg[6];
     uint32_t i, k;
+    t->tone = r->hset ? 1u : 0u;
+    t->hlev = (int32_t)(LT_HLEV * r->hl / 11469);       /* the horn level (11469: the default 0.7) */
     lt_targets(r, n, td, tg);
     for (k = 0; k < 6; k++) {
         t->sd[k] = (td[k] - t->d[k]) / (int32_t)n;
@@ -119,8 +122,8 @@ static void lt_samples(rot_t *r, lt_t *t, const int32_t *in, int32_t *outL, int3
         }
         yl = mul14(lt_read(t->hl, w, t->d[0]), t->g[0]) + mul14(lt_read(t->hl, w, t->d[1]), t->g[1]);
         yr = mul14(lt_read(t->hl, w, t->d[2]), t->g[2]) + mul14(lt_read(t->hl, w, t->d[3]), t->g[3]);
-        outL[i] = mul14(yl, LT_HLEV) + mul14(mul14(lt_read(t->dl, w, t->d[4]), t->g[4]), LT_DLEV);
-        outR[i] = mul14(yr, LT_HLEV) + mul14(mul14(lt_read(t->dl, w, t->d[5]), t->g[5]), LT_DLEV);
+        outL[i] = mul14(yl, t->hlev) + mul14(mul14(lt_read(t->dl, w, t->d[4]), t->g[4]), LT_DLEV);
+        outR[i] = mul14(yr, t->hlev) + mul14(mul14(lt_read(t->dl, w, t->d[5]), t->g[5]), LT_DLEV);
         t->w = w + 1u;
         r->ph_h += r->inc_h;
         r->ph_d += r->inc_d;

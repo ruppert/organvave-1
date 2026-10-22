@@ -3,7 +3,7 @@
 /* The organ's screens and controls (firmware/src/organ_app.c) on the host: HOME and DRAWBARS drawn and told apart, the
  * drawbar knobs (the four marked bars, SELECT moves them, the range clamped), PRESET over the factory and the user
  * presets (wrapping), SAVE (the first free slot, the name, the patch kept), GLO (MIDI IN, MIDI CHANNEL, ABOUT closes),
- * the octave keys. */
+ * the octave keys, PERC & VIB, ROTARY and DRIVE (the knobs, SCL; with a directory argument the pages are written as .ppm). */
 #define CHECK_TAG "organ app"
 #include "editor_host.h"
 
@@ -19,9 +19,11 @@ static uint32_t frame_hash(void)                        /* what a frame draws (o
     return h;
 }
 
-int main(void)
+static const char *shot_dir;
+int main(int argc, char **argv)
 {
     int bad = 0;
+    shot_dir = argc > 1 ? argv[1] : 0;
     uint32_t h_home, h_draw, h_save, k, v0, i;
     uint8_t pk[UPF_N];
 
@@ -146,6 +148,10 @@ int main(void)
             bad += check("  .. SELECT moves no bar here (the page stays)", oa_page == 2 && org_patch[OP_UB + oa_win] == before);
         }
         press(B_FX);
+        bad += check("FX again: the ROTARY page", oa_page == 3);
+        press(B_FX);
+        bad += check("FX again: the DRIVE page", oa_page == 4);
+        press(B_FX);
         bad += check("FX again: HOME", oa_page == 0);
         press(B_ENV);
         bad += check("ENV on HOME: the percussion on", org_patch[OP_PERC] == 1);
@@ -155,6 +161,84 @@ int main(void)
         bad += check("  .. and to VIB 1", org_patch[OP_VIB] == 1);
         press(B_ENV);
         bad += check("ENV again: the percussion off", org_patch[OP_PERC] == 0);
+    }
+
+    /* ROTARY and DRIVE (0.3.0): the pages, the knobs, SCL */
+    {
+        uint32_t h_r, h_d;
+        press(B_HOME);
+        org_set(OP_ROT, 0);                                   /* (the preset on air may have it on) */
+        bad += check("SCL with the rotary off: ROTARY on at SLOW", (press(B_SCL), org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 1));
+        press(B_SCL);
+        bad += check("SCL again: FAST", org_patch[OP_ROT_SPEED] == 2);
+        press(B_SCL);
+        bad += check("SCL again: STOP", org_patch[OP_ROT_SPEED] == 0);
+        press(B_SCL);
+        bad += check("SCL again: SLOW", org_patch[OP_ROT_SPEED] == 1);
+        press(B_FX); press(B_FX);
+        bad += check("FX twice from HOME: the ROTARY page (PERC & VIB first)", oa_page == 3);
+        h_r = frame_hash();
+        turn(EN_K1, 1);
+        bad += check("ROTARY: KNOB 1 switches it off", org_patch[OP_ROT] == 0);
+        turn(EN_K1, 1);
+        turn(EN_K2, 1);
+        bad += check("  .. KNOB 2: LIGHT", org_patch[OP_ROT_MODEL] == 1);
+        turn(EN_K3, -1);
+        bad += check("  .. KNOB 3: the sharp horn", org_patch[OP_ROT_HORN] == 1);
+        turn(EN_K4, 1);
+        bad += check("  .. KNOB 4: FAST", org_patch[OP_ROT_SPEED] == 2);
+        turn(EN_K4, 1);
+        bad += check("  .. KNOB 4 stops at FAST", org_patch[OP_ROT_SPEED] == 2);
+        turn(EN_ALGO, -1);
+        bad += check("  .. ALGORITHM counter-clockwise narrows the image", org_patch[OP_ROT_MIC] == 1);
+        for (i = 0; i < 8u; i++)
+            turn(EN_ALGO, -1);
+        bad += check("  .. and stops at mono", org_patch[OP_ROT_MIC] == 6);
+        turn(EN_SELECT, 1);
+        org_set(OP_ROT_BAL, 4);
+        turn(EN_SELECT, -1);
+        bad += check("  .. SELECT: the horn level", org_patch[OP_ROT_BAL] == 3);
+        bad += check("  .. a different picture from the first", frame_hash() != h_r);
+        press(B_FX);
+        bad += check("FX: the DRIVE page", oa_page == 4);
+        h_d = frame_hash();
+        turn(EN_K1, 1);
+        bad += check("DRIVE: KNOB 1 switches it on", org_patch[OP_DRV] == 1);
+        org_set(OP_DRV_GAIN, 6);
+        turn(EN_K2, 1);
+        bad += check("  .. KNOB 2: the gain up a step", org_patch[OP_DRV_GAIN] == 7);
+        for (i = 0; i < 14u; i++)
+            turn(EN_K2, -1);
+        bad += check("  .. and down to the bottom", org_patch[OP_DRV_GAIN] == 0);
+        turn(EN_K3, 3);
+        bad += check("  .. KNOB 3: the character", org_patch[OP_DRV_FAT] == 1);
+        bad += check("  .. a different picture", frame_hash() != h_d);
+        if (shot_dir) {
+            static const char *const N[5] = {"home", "drawbars", "perc", "rotary", "drive"};
+            uint32_t pg;
+            org_set(OP_ROT, 1);
+            org_set(OP_DRV, 1);
+            oa_msg_until = 0;
+            oa_pp_until = 0;
+            for (pg = 0; pg < 5u; pg++) {
+                char path[200];
+                FILE *f;
+                oa_page = (uint8_t)pg;
+                (void)frame_hash();
+                snprintf(path, sizeof path, "%s/%s.ppm", shot_dir, N[pg]);
+                f = fopen(path, "wb");
+                if (f) {
+                    fprintf(f, "P6\n240 240\n255\n");
+                    for (i = 0; i < 240u * 240u; i++) {
+                        uint16_t c = (uint16_t)((host_screen[i] >> 8) | (host_screen[i] << 8));     /* (host.h stores the LCD's byte order) */
+                        unsigned char px[3] = {(unsigned char)(((c >> 11) & 31) * 255 / 31), (unsigned char)(((c >> 5) & 63) * 255 / 63), (unsigned char)((c & 31) * 255 / 31)};
+                        fwrite(px, 1, 3, f);
+                    }
+                    fclose(f);
+                }
+            }
+        }
+        press(B_HOME);
     }
 
     printf("%s\n", bad ? "ORGAN APP TEST FAILED" : "organ app test passed");

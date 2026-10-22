@@ -1033,17 +1033,24 @@ SURF = (3, 4, 10), ...
 
 ## Organ patch (85-86; 0.1.0)
 
-The organ's sound is the **patch**: `ORG_PSIZE` (64) bytes, every byte 0..127, of which the first 34 are used (`OP_*` in
+The organ's sound is the **patch**: `ORG_PSIZE` (64) bytes, every byte 0..127, of which the first 43 are used (`OP_*` in
 `eng_organ.c`): the nine drawbars of the upper manual (`OP_UB` 0..8, 0 = out, 8 = full: the 16' to 1' footages), the lower
 manual's (`OP_LB` 9..17) and the pedals' (`OP_PB` 18..26) nine, the tuning (`OP_TEMP` 27: 0 gear 60 Hz, 1 gear 50 Hz,
 2 equal temperament), the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model), the percussion (`OP_PERC` 29: 0 off, 1 on;
 `OP_PERC_SOFT` 30: 0 normal, which lowers the mix to 0.605 while on, 1 soft; `OP_PERC_FAST` 31: 0 slow, 4 s to -60 dB,
 1 fast, 1 s; `OP_PERC_SEL` 32: 0 the 4' second harmonic, 1 the 2 2/3' third), and the scanner (`OP_VIB` 33: 0 off, 1..3
-VIB 1..3, 4..6 CHO 1..3). The rest are reserved, 0. The lower and pedal bars are stored and kept; the sound of those
-manuals arrives with 0.4.0.
+VIB 1..3, 4..6 CHO 1..3), and, from 0.3.0, the rotary speaker (`OP_ROT` 34: 0 off, 1 on; `OP_ROT_MODEL` 35: 0 CLASSIC,
+setBfree's whirl, 1 LIGHT, the cheaper model; `OP_ROT_SPEED` 36: 0 stop, 1 slow, 2 fast; `OP_ROT_HORN` 37: 0 the normal horn,
+1 the sharp one; `OP_ROT_MIC` 38: 0..6, the mics' angle, 180 degrees minus 30 a step, so 0 is the widest image and 6 the
+narrowest; `OP_ROT_BAL` 39: 0..8, the horn's level against the drum, 1.5 dB a step around 4, which is even) and the drive
+(`OP_DRV` 40: 0 off, 1 on; `OP_DRV_GAIN` 41: 0..12, the input gain, 2 dB a step around 6, setBfree's default of 3.5675;
+`OP_DRV_FAT` 42: 0..8, the character: 0 is setBfree's default, higher values put more bass into the curve and then more
+out of it). The rest are reserved, 0. The lower and pedal bars are stored and kept; the sound of those manuals arrives with 0.4.0.
 
 Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 0.1.0 (a user preset, the autosave, a
-factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Nothing is migrated. The patch is the instrument's own: it travels
+factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Version 0.3.0 gave meaning to
+bytes 34..42 the same way: a patch from 0.1.0 or 0.2.0 reads them as 0, the rotary and the drive off, and sounds as it did.
+(A patch that turns the rotary on sets `OP_ROT_BAL` to 4 itself; a 0 there is the horn 6 dB down.) Nothing is migrated. The patch is the instrument's own: it travels
 with user presets and the autosave, not with the track's parameters.
 
 | cmd | Request args | Reply args |

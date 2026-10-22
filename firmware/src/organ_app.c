@@ -33,7 +33,7 @@
 #define C_HOT    RGB565(0x2e, 0x28, 0x22)
 
 #define OA_NWIN 6u                                       /* the four marked bars start at 0..5 */
-static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB */
+static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE (FX walks 2, 3, 4) */
 static uint8_t oa_win = 2;                               /* the first of the four bars the knobs pull (8' .. 2') */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
 
@@ -522,6 +522,49 @@ static void scr_perc(void)                              /* PERC & VIB: the percu
     footer("KNOBS 1-4: PERC   ALGORITHM: VIBRATO");
 }
 
+/* a row of n small cells, the first v lit (a value on a scale) */
+static void meter(int32_t x, int32_t y, int32_t n, int32_t v)
+{
+    int32_t i;
+    for (i = 0; i < n; i++)
+        rrect(x + i * 8, y, 6, 9, 1, i < v ? C_AMBER : RGB565(0x3a, 0x26, 0x14));
+}
+/* a labelled value row: the label left, the cells, the control that sets it right */
+static void mrow(int32_t y, const char *label, int32_t n, int32_t v, const char *ctl)
+{
+    ltext(22, y, &AF_X, label, C_CREAM, C_PANEL);
+    meter(96, y - 1, n, v);
+    rtext(234, y, &AF_X, ctl, C_DIM, C_PANEL);
+}
+
+static const char *const ROT_SPD[3] = {"STOP", "SLOW", "FAST"};
+static void scr_rotary(void)                            /* ROTARY: on, model, horn, speed (the knobs), width, balance */
+{
+    uint32_t sp = org_patch[OP_ROT_SPEED] <= 2u ? org_patch[OP_ROT_SPEED] : 0u;
+    char b[32];
+    header("ROTARY", org_patch[OP_ROT] ? ROT_SPD[sp] : "OFF");
+    lamp(22, 58, org_patch[OP_ROT] ? "ROTARY ON   (KNOB 1)" : "ROTARY OFF   (KNOB 1)", org_patch[OP_ROT] != 0);
+    lamp(22, 80, org_patch[OP_ROT_MODEL] ? "MODEL LIGHT   (KNOB 2)" : "MODEL CLASSIC   (KNOB 2)", org_patch[OP_ROT] != 0);
+    lamp(22, 102, org_patch[OP_ROT_HORN] ? "HORN SHARP   (KNOB 3)" : "HORN NORMAL   (KNOB 3)", org_patch[OP_ROT_HORN] != 0);
+    str_cpy(b, "SPEED ", 8);
+    str_cpy(b + 6, ROT_SPD[sp], 6);
+    str_cpy(b + str_len(b), "   (KNOB 4)", 12);
+    lamp(22, 124, b, sp != 0u);
+    mrow(152, "WIDTH", 7, 6 - (int32_t)(org_patch[OP_ROT_MIC] <= 6u ? org_patch[OP_ROT_MIC] : 0u), "ALGORITHM");
+    mrow(174, "HORN LEVEL", 9, (int32_t)(org_patch[OP_ROT_BAL] <= 8u ? org_patch[OP_ROT_BAL] : 4u), "SELECT");
+    footer("SCL: SLOW / FAST / STOP");
+}
+
+static void scr_drive(void)                             /* DRIVE: on (knob 1), gain (knob 2), character (knob 3) */
+{
+    header("DRIVE", org_patch[OP_DRV] ? "ON" : "OFF");
+    lamp(22, 58, org_patch[OP_DRV] ? "DRIVE ON   (KNOB 1)" : "DRIVE OFF   (KNOB 1)", org_patch[OP_DRV] != 0);
+    mrow(92, "GAIN", 13, 1 + (int32_t)(org_patch[OP_DRV_GAIN] <= 12u ? org_patch[OP_DRV_GAIN] : 6u), "KNOB 2");
+    mrow(116, "CHARACTER", 9, (int32_t)(org_patch[OP_DRV_FAT] <= 8u ? org_patch[OP_DRV_FAT] : 0u), "KNOB 3");
+    ltext(22, 150, &AF_X, "THE PREAMP OF THE ORGAN, BEFORE THE ROTARY", C_DIM, C_PANEL);
+    footer("KNOBS: ON, GAIN, CHARACTER");
+}
+
 static void scr_home(void)
 {
     char num[8], nm[16];
@@ -535,7 +578,8 @@ static void scr_home(void)
         drawbar(56 + k * 16, 100, org_patch[OP_UB + (uint32_t)k], 7, 14, k, 0, 1);
     lamp(22, 182, "PERCUSSION", org_patch[OP_PERC] != 0);
     lamp(22, 198, VIB_SHORT[org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u], org_patch[OP_VIB] != 0);
-    lamp(130, 182, "ROTOR", 0);
+    lamp(130, 182, !org_patch[OP_ROT] ? "ROTOR" : org_patch[OP_ROT_SPEED] == 2u ? "ROTOR FAST" : org_patch[OP_ROT_SPEED] == 1u ? "ROTOR SLOW" : "ROTOR STOP", org_patch[OP_ROT] != 0);
+    lamp(22, 214, "DRIVE", org_patch[OP_DRV] != 0);
     lamp(130, 198, org_patch[OP_TEMP] == 2u ? "EQUAL" : org_patch[OP_TEMP] == 1u ? "50 HZ" : "60 HZ", 1);
     footer("PRESETS: CHOOSE   OCT- / OCT+: OCTAVE");
 }
@@ -568,6 +612,10 @@ static void oa_scene(void)
         scr_drawbars();
     else if (oa_page == 2u)
         scr_perc();
+    else if (oa_page == 3u)
+        scr_rotary();
+    else if (oa_page == 4u)
+        scr_drive();
     else
         scr_home();
     if (oa_gl == 1u)
@@ -677,10 +725,17 @@ static void oa_buttons(uint32_t pressed)
             oa_sv_open();
         return;
     }
-    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: the PERC & VIB page; again: HOME */
+    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: PERC & VIB, then ROTARY, then DRIVE, then HOME */
         oa_close_all();
-        oa_page = oa_page == 2u ? 0u : 2u;
+        oa_page = oa_page >= 2u && oa_page < 4u ? (uint8_t)(oa_page + 1u) : oa_page == 4u ? 0u : 2u;
         return;
+    }
+    if ((pressed >> panel.btn[B_SCL]) & 1u) {             /* SCL: the rotor's speed: off -> SLOW -> FAST -> STOP -> SLOW */
+        if (!org_patch[OP_ROT]) {
+            org_set(OP_ROT_SPEED, 1);
+            org_set(OP_ROT, 1);
+        } else
+            org_set(OP_ROT_SPEED, org_patch[OP_ROT_SPEED] == 1u ? 2u : org_patch[OP_ROT_SPEED] == 2u ? 0u : 1u);
     }
     if ((pressed >> panel.btn[B_ENV]) & 1u)               /* ENV: the percussion on or off */
         org_set(OP_PERC, !org_patch[OP_PERC]);
@@ -746,6 +801,33 @@ static void oa_input(void)
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         oa_preset(s);
+    if (oa_page == 3u) {                                  /* ROTARY: switches, speed, width (ALGORITHM), horn level (SELECT) */
+        if (panel_enc(EN_K1) != 0)
+            org_set(OP_ROT, !org_patch[OP_ROT]);
+        if (panel_enc(EN_K2) != 0)
+            org_set(OP_ROT_MODEL, !org_patch[OP_ROT_MODEL]);
+        if (panel_enc(EN_K3) != 0)
+            org_set(OP_ROT_HORN, !org_patch[OP_ROT_HORN]);
+        if ((s = panel_enc(EN_K4)) != 0)
+            org_set(OP_ROT_SPEED, (uint32_t)clamp((int32_t)org_patch[OP_ROT_SPEED] + (s > 0 ? 1 : -1), 0, 2));
+        if ((s = panel_enc(EN_ALGO)) != 0)
+            org_set(OP_ROT_MIC, (uint32_t)clamp((int32_t)org_patch[OP_ROT_MIC] - (s > 0 ? 1 : -1), 0, 6));
+        if ((s = panel_enc(EN_SELECT)) != 0)
+            org_set(OP_ROT_BAL, (uint32_t)clamp((int32_t)org_patch[OP_ROT_BAL] + (s > 0 ? 1 : -1), 0, 8));
+        return;
+    }
+    if (oa_page == 4u) {                                  /* DRIVE: on, gain, character */
+        (void)panel_enc(EN_SELECT);
+        (void)panel_enc(EN_ALGO);
+        if (panel_enc(EN_K1) != 0)
+            org_set(OP_DRV, !org_patch[OP_DRV]);
+        if ((s = panel_enc(EN_K2)) != 0)
+            org_set(OP_DRV_GAIN, (uint32_t)clamp((int32_t)org_patch[OP_DRV_GAIN] + (s > 0 ? 1 : -1), 0, 12));
+        if ((s = panel_enc(EN_K3)) != 0)
+            org_set(OP_DRV_FAT, (uint32_t)clamp((int32_t)org_patch[OP_DRV_FAT] + (s > 0 ? 1 : -1), 0, 8));
+        (void)panel_enc(EN_K4);
+        return;
+    }
     if (oa_page == 2u) {                                  /* PERC & VIB: the knobs switch the percussion, ALGORITHM the vibrato */
         (void)panel_enc(EN_SELECT);
         if (panel_enc(EN_K1) != 0)
@@ -787,7 +869,8 @@ static void oa_leds(void)
         led_put(nd, panel.btn[k], 1);                       /* every button's glow */
     led_put(nl, panel.btn[B_HOME], oa_page == 0u);
     led_put(nl, panel.btn[B_EDIT], oa_page == 1u);
-    led_put(nl, panel.btn[B_FX], oa_page == 2u);
+    led_put(nl, panel.btn[B_FX], oa_page >= 2u);
+    led_put(nl, panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
     led_put(nl, panel.btn[B_LFO], org_patch[OP_VIB] != 0);
     led_put(nl, panel.btn[B_SAVE], oa_sv);

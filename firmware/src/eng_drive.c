@@ -17,8 +17,7 @@
  * pre-differentiator's state is clamped at 3,000,000 (below 2^22; its gain is 1 / (1 - fb): at fb 0.999 it is 1000, which is far out of
  * the usable range: the clamp only acts on absurd settings). No 64-bit multiply anywhere.
  * The curve is the table DR_D (1/64 steps up to |x| = 16, linear interpolation, error under 7e-5). Latency: 16 + 4
- * samples. Needs the input at or below 1.0 times a gain such that |u| stays under 64 (IG up to 10 with a full-scale
- * input is 10: fine). */
+ * samples. The input gain is limited to 10 (Q12 40960): with the input at 4.0 the FIR's output times the gain stays under 32. */
 #ifndef ENG_DRIVE_C
 #define ENG_DRIVE_C
 #include "eng_drive_tables.h"
@@ -90,15 +89,20 @@ static void dr_defaults(dr_t *d)
     dr_set(d, 14612, 3603, 9766000, 16760438, 10425000, 35043, 157700, 16626000);
 }
 
-static void dr_init(dr_t *d)
+/* the state emptied, the settings kept */
+static void dr_clear(dr_t *d)
 {
     uint32_t i;
-    dr_defaults(d);
     d->sagz = d->z = d->w = d->g = 0;
     for (i = 0; i < 8 + DR_MAX; i++)
         d->hx[i] = 0;
     for (i = 0; i < 32 + DR_MAX; i++)
         d->hy[i] = 0;
+}
+static void dr_init(dr_t *d)
+{
+    dr_defaults(d);
+    dr_clear(d);
 }
 
 /* D(x) for x >= 0 in Q16 (x in Q16): the table, interpolated */
@@ -132,7 +136,7 @@ static void dr_run(dr_t *d, const int32_t *in, int32_t *out, uint32_t n)
         s = DR_IN[0] * hx[i] + DR_IN[1] * hx[i - 1] + DR_IN[2] * hx[i - 2] + DR_IN[3] * hx[i - 3] + DR_IN[4] * hx[i - 4]
             + DR_IN[5] * hx[i - 5] + DR_IN[6] * hx[i - 6] + DR_IN[7] * hx[i - 7];
         /* DR_IN is stored as {c0..c8} of x[n]..x[n-8]: its tap 8 is 0 */
-        u = ((s >> 12) * ig) >> 12;
+        u = ((s >> 14) * ig) >> 10;                 /* (s Q28: >> 14 is Q14, times ig Q12 is Q26: |value x ig| < 32) */
         /* the global feedback */
         u += dr_m24w(d->g, d->g24);
         /* the pre-differentiator */
