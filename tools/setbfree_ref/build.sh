@@ -16,3 +16,9 @@ cc -O2 -std=gnu99 -w -I"$S" -I"$OUT/setBfree/b_whirl" -I"$OUT/setBfree/b_overdri
 	-DHAVE_ASEQ=0 -o "$OUT/sbf_ref" "$HERE/sbf_ref.c" "$HERE/stubs.c" \
 	"$S/vibrato.c" "$S/midi.c" "$S/cfgParser.c" "$S/state.c" "$S/pgmParser.c" "$S/program.c" -lm
 echo "built $OUT/sbf_ref"
+
+# the rotary's reference: setBfree's whirl.c as it is (the tables, and the render the rotary port is measured against)
+B="$OUT/setBfree/b_whirl"
+cc -O2 -std=gnu99 -w -I"$S" -I"$B" -DHAVE_ASEQ=0 -o "$OUT/whirl_tables" "$HERE/whirl_tables.c" "$B/eqcomp.c" -lm
+cc -O2 -std=gnu99 -w -I"$S" -I"$B" -DHAVE_ASEQ=0 -o "$OUT/whirl_render" "$HERE/whirl_render.c" "$B/eqcomp.c" -lm
+echo "built $OUT/whirl_tables and $OUT/whirl_render"

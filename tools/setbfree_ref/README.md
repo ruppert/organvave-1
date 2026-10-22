@@ -9,7 +9,13 @@ is measured against (ORGAN.md, DEVELOPING.md section 10). Nothing of setBfree is
   50 Hz, 0 equal; `NOXT` crosstalk off; `SWELL`). `srand(1)` first: the click envelopes are the same every run, and
   every temperament takes the 60 Hz ones (setBfree draws them after the wavetables' dither).
 - `stubs.c`: the config hooks the tone generator's init references and the reference does not use.
-- `build.sh [DIR]`: clones setBfree at 2f41983 into DIR (default `build/sbf_ref`) and builds `DIR/sbf_ref`.
+- `build.sh [DIR]`: clones setBfree at 2f41983 into DIR (default `build/sbf_ref`) and builds `DIR/sbf_ref`,
+  `DIR/whirl_tables` and `DIR/whirl_render`.
+- `whirl_tables.c` (`whirl_tables FILE.bin`): the rotary's angle tables, the tap phases and the biquads, from setBfree's
+  `b_whirl/whirl.c` at its default geometry. The generator is `tools/gen_rotary_tables.py`.
+- `whirl_render.c` (`whirl_render IN.f32 OUT.f32 HORN_RPM DRUM_RPM [ACC_HORN ACC_DRUM]`): setBfree's rotary on a mono
+  float32 input, stereo output: the floating-point reference of the rotary CLASSIC. The rotors ramp from rest to their
+  targets as `whirlProc2` does (`hornAcDc`).
 - `tonegen_dump.txt`: `sbf_ref dump`'s output (glibc's `rand()`), checked in: `tools/gen_organ_tables.py` reads it.
 - `compare.py SBF_REF ORGAN_TEST [DIR]`: renders the same cases with setBfree and with the firmware's tone generator
   (`build/host/organ_test render`) and prints the levels and the SNR. The numbers in `tests/organ_test.c` come from it.
