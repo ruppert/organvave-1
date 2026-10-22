@@ -1033,11 +1033,17 @@ SURF = (3, 4, 10), ...
 
 ## Organ patch (85-86; 0.1.0)
 
-The organ's sound is the **patch**: `ORG_PSIZE` (64) bytes, every byte 0..127, of which the first 29 are used (`OP_*` in
+The organ's sound is the **patch**: `ORG_PSIZE` (64) bytes, every byte 0..127, of which the first 34 are used (`OP_*` in
 `eng_organ.c`): the nine drawbars of the upper manual (`OP_UB` 0..8, 0 = out, 8 = full: the 16' to 1' footages), the lower
 manual's (`OP_LB` 9..17) and the pedals' (`OP_PB` 18..26) nine, the tuning (`OP_TEMP` 27: 0 gear 60 Hz, 1 gear 50 Hz,
-2 equal temperament), and the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model). The rest are reserved, 0. The lower and
-pedal bars are stored and kept; the sound of those manuals arrives with 0.4.0. The patch is the instrument's own: it travels
+2 equal temperament), the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model), the percussion (`OP_PERC` 29: 0 off, 1 on;
+`OP_PERC_SOFT` 30: 0 normal, which lowers the mix to 0.605 while on, 1 soft; `OP_PERC_FAST` 31: 0 slow, 4 s to -60 dB,
+1 fast, 1 s; `OP_PERC_SEL` 32: 0 the 4' second harmonic, 1 the 2 2/3' third), and the scanner (`OP_VIB` 33: 0 off, 1..3
+VIB 1..3, 4..6 CHO 1..3). The rest are reserved, 0. The lower and pedal bars are stored and kept; the sound of those
+manuals arrives with 0.4.0.
+
+Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 0.1.0 (a user preset, the autosave, a
+factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Nothing is migrated. The patch is the instrument's own: it travels
 with user presets and the autosave, not with the track's parameters.
 
 | cmd | Request args | Reply args |

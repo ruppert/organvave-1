@@ -79,13 +79,30 @@
       </label>
       <label class="chk"><input type="checkbox" id="xtalk"> Crosstalk (setBfree's model)</label>
     </div>
+
+    <div class="set row">
+      <label class="chk"><input type="checkbox" id="perc"> Percussion (0.2.0: the swell x 0.605 unless soft; the 1' muted)</label>
+      <label class="chk"><input type="checkbox" id="psoft"> Soft</label>
+      <label class="chk"><input type="checkbox" id="pfast"> Fast (1 s, not 4 s)</label>
+      <label class="chk"><input type="checkbox" id="psel"> 2 2/3' third (not 4' second)</label>
+    </div>
+    <div class="set row">
+      <label>Vibrato / chorus
+        <select id="vib">
+          <option value="0">Off</option><option value="1">Vibrato 1</option><option value="2">Vibrato 2</option>
+          <option value="3">Vibrato 3</option><option value="4">Chorus 1</option><option value="5">Chorus 2</option>
+          <option value="6">Chorus 3</option>
+        </select>
+      </label>
+    </div>
   </div>
 </main>
 
 <script>
 // ---- the protocol (web/EDITOR_PROTOCOL.md): F0 7D 46 4C <cmd> <args> F7
 const CMD = { INFO: 1, ORG_GET: 85, ORG_PUT: 86 };
-const ORG_PSIZE = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, PUT_MAX = 48;
+const ORG_PSIZE = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, OP_PERC = 29, OP_PERC_SOFT = 30,
+      OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, PUT_MAX = 48;
 const FOOT = ["16′", "5⅓′", "8′", "4′", "2⅔′", "2′", "1⅗′", "1⅓′", "1′"];
 const $ = (id) => document.getElementById(id);
 
@@ -215,6 +232,11 @@ function showPatch() {
   }
   $("temp").value = String(patch[OP_TEMP] ?? 0);
   $("xtalk").checked = !!patch[OP_XTALK];
+  $("perc").checked = !!patch[OP_PERC];
+  $("psoft").checked = !!patch[OP_PERC_SOFT];
+  $("pfast").checked = !!patch[OP_PERC_FAST];
+  $("psel").checked = !!patch[OP_PERC_SEL];
+  $("vib").value = String(patch[OP_VIB] ?? 0);
 }
 
 // the edits from the controls back into the patch (the device sanitizes what it stores)
@@ -222,15 +244,20 @@ function fromControls() {
   if (!patch) return;
   patch[OP_TEMP] = Number($("temp").value);
   patch[OP_XTALK] = $("xtalk").checked ? 1 : 0;
+  patch[OP_PERC] = $("perc").checked ? 1 : 0;
+  patch[OP_PERC_SOFT] = $("psoft").checked ? 1 : 0;
+  patch[OP_PERC_FAST] = $("pfast").checked ? 1 : 0;
+  patch[OP_PERC_SEL] = $("psel").checked ? 1 : 0;
+  patch[OP_VIB] = Number($("vib").value);
 }
 
-// ORG_PUT: target 0, offset, count, count bytes (count <= 48). One write of the 29 used bytes; reply: target, offset, rc
+// ORG_PUT: target 0, offset, count, count bytes (count <= 48). One write of the 34 used bytes; reply: target, offset, rc
 async function sendPatch() {
   if (busy || !dev || !patch) return;
   busy = true; setEnabled(true);
   try {
     fromControls();
-    const used = OP_XTALK + 1;
+    const used = OP_VIB + 1;
     const r = await request(CMD.ORG_PUT, [0, 0, used, ...patch.slice(0, used)]);
     if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
     say("Sent. The instrument plays this patch now; it is not saved to flash.", "ok");
@@ -245,6 +272,7 @@ $("send").onclick = sendPatch;
 $("source").onchange = readPatch;
 $("temp").onchange = () => { fromControls(); };
 $("xtalk").onchange = () => { fromControls(); };
+for (const id of ["perc", "psoft", "pfast", "psel", "vib"]) $(id).onchange = () => { fromControls(); };
 if (!navigator.requestMIDIAccess) say("This browser has no Web MIDI. Use Chrome or Edge.", "bad");
 </script>
 </body>

@@ -66,7 +66,8 @@ vm.createContext(ctx);
 // export the page's functions and state to the test
 vm.runInContext(script + `
 ;globalThis.__page = {
-  connect, readPatch, sendPatch, get patch() { return patch; }, set patch(v) { patch = v; }, OP_TEMP, OP_XTALK
+  connect, readPatch, sendPatch, get patch() { return patch; }, set patch(v) { patch = v; }, OP_TEMP, OP_XTALK,
+  OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL, OP_VIB
 };`, ctx);
 const P = ctx.__page;
 const status = () => byId("status").textContent;
@@ -102,6 +103,16 @@ ok(status().startsWith("Sent"), `send: the firmware takes the patch ("${status()
 const after = await direct(85, [0, 0]);
 const got = after.slice(3, 3 + 64);
 ok(got[0] === 3 && got[P.OP_TEMP] === 1 && got[P.OP_XTALK] === 1, "send: the instrument's patch holds the drawbar, tuning and crosstalk");
+// ---- 3b: the percussion and the vibrato (0.2.0): the bytes 29..33 go to the instrument
+byId("perc").checked = true;
+byId("psel").checked = true;
+byId("vib").value = "5";
+await P.sendPatch();
+await wait(120);
+const after2 = await direct(85, [0, 0]);
+const got2 = after2.slice(3, 3 + 64);
+ok(got2[P.OP_PERC] === 1 && got2[P.OP_PERC_SOFT] === 0 && got2[P.OP_PERC_FAST] === 0 && got2[P.OP_PERC_SEL] === 1 && got2[P.OP_VIB] === 5,
+   "send: the percussion (on, 2 2/3') and the vibrato (CHO 2) reach the instrument");
 ok(bytesEq(got.slice(1, 27), P.patch.slice(1, 27)), "send: the other drawbars are the same as sent");
 
 // ---- 4: a refusal shows the device's reason: factory 9 does not exist

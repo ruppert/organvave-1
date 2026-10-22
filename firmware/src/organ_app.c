@@ -11,7 +11,9 @@
  * writes it: 88 8000 000). A knob turned on HOME opens DRAWBARS and moves its bar. Buttons: HOME, EDIT (DRAWBARS), SAVE
  * (the dialog: PRESETS the slot, SELECT / ALGORITHM the name, SAVE again writes, HOME or EDIT cancels), GLO (MIDI IN,
  * MIDI CHANNEL, ABOUT), OCT- / OCT+ (the keys' octave, -2 .. +2). PRESETS: the factory presets, then the user ones.
- * The other buttons wait for the pages of 0.2.0 / 0.3.0 (percussion, vibrato, rotary, drive).
+ * PERC & VIB (FX, 0.2.0): KNOBS 1..4 switch the percussion (on, soft, fast, the 2 2/3' third), ALGORITHM turns the
+ * vibrato's selector (off, VIB 1..3, CHO 1..3). ENV switches the percussion and LFO turns the vibrato on HOME too (the
+ * panel's labels are the best guess until the calibration: HARDWARE CALIBRATION). The rotary and drive wait for 0.3.0.
  * Included by felucca.c before main.c. */
 
 #define RGB565(r, g, b) ((uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3)))
@@ -31,7 +33,7 @@
 #define C_HOT    RGB565(0x2e, 0x28, 0x22)
 
 #define OA_NWIN 6u                                       /* the four marked bars start at 0..5 */
-static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS */
+static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB */
 static uint8_t oa_win = 2;                               /* the first of the four bars the knobs pull (8' .. 2') */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
 
@@ -503,6 +505,23 @@ static void oa_pp_draw(void)                              /* the preset pop-up *
     ctext(120, 126, f, nm, C_CREAM, C_POP);
 }
 
+static const char *const VIB_SHORT[7] = {"VIBRATO", "VIB 1", "VIB 2", "VIB 3", "CHO 1", "CHO 2", "CHO 3"};
+static const char *const VIB_FULL[7] = {"VIBRATO OFF   (ALGORITHM)", "VIB 1   (ALGORITHM)", "VIB 2   (ALGORITHM)",
+                                        "VIB 3   (ALGORITHM)", "CHO 1   (ALGORITHM)", "CHO 2   (ALGORITHM)",
+                                        "CHO 3   (ALGORITHM)"};
+
+static void scr_perc(void)                              /* PERC & VIB: the percussion's switches, the vibrato's selector */
+{
+    uint32_t v = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u;
+    header("PERC & VIB", "");
+    lamp(22, 58, org_patch[OP_PERC] ? "PERCUSSION ON   (KNOB 1)" : "PERCUSSION OFF   (KNOB 1)", org_patch[OP_PERC] != 0);
+    lamp(22, 80, org_patch[OP_PERC_SOFT] ? "SOFT   (KNOB 2)" : "NORMAL   (KNOB 2)", org_patch[OP_PERC_SOFT] != 0);
+    lamp(22, 102, org_patch[OP_PERC_FAST] ? "FAST, 1 S   (KNOB 3)" : "SLOW, 4 S   (KNOB 3)", org_patch[OP_PERC_FAST] != 0);
+    lamp(22, 124, org_patch[OP_PERC_SEL] ? "2 2/3' THIRD   (KNOB 4)" : "4' SECOND   (KNOB 4)", org_patch[OP_PERC_SEL] != 0);
+    lamp(22, 152, VIB_FULL[v], v != 0);
+    footer("KNOBS 1-4: PERC   ALGORITHM: VIBRATO");
+}
+
 static void scr_home(void)
 {
     char num[8], nm[16];
@@ -514,8 +533,8 @@ static void scr_home(void)
     cv_rect(44, 94, 152, 1, C_PANEL2);
     for (k = 0; k < 9; k++)
         drawbar(56 + k * 16, 100, org_patch[OP_UB + (uint32_t)k], 7, 14, k, 0, 1);
-    lamp(22, 182, "PERCUSSION", 0);                      /* (0.2.0 / 0.3.0 light them) */
-    lamp(22, 198, "VIBRATO", 0);
+    lamp(22, 182, "PERCUSSION", org_patch[OP_PERC] != 0);
+    lamp(22, 198, VIB_SHORT[org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u], org_patch[OP_VIB] != 0);
     lamp(130, 182, "ROTOR", 0);
     lamp(130, 198, org_patch[OP_TEMP] == 2u ? "EQUAL" : org_patch[OP_TEMP] == 1u ? "50 HZ" : "60 HZ", 1);
     footer("PRESETS: CHOOSE   OCT- / OCT+: OCTAVE");
@@ -547,6 +566,8 @@ static void oa_scene(void)
 {
     if (oa_page == 1u)
         scr_drawbars();
+    else if (oa_page == 2u)
+        scr_perc();
     else
         scr_home();
     if (oa_gl == 1u)
@@ -656,6 +677,15 @@ static void oa_buttons(uint32_t pressed)
             oa_sv_open();
         return;
     }
+    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: the PERC & VIB page; again: HOME */
+        oa_close_all();
+        oa_page = oa_page == 2u ? 0u : 2u;
+        return;
+    }
+    if ((pressed >> panel.btn[B_ENV]) & 1u)               /* ENV: the percussion on or off */
+        org_set(OP_PERC, !org_patch[OP_PERC]);
+    if ((pressed >> panel.btn[B_LFO]) & 1u)               /* LFO: the vibrato's selector, on to the next */
+        org_set(OP_VIB, (org_patch[OP_VIB] + 1u) % 7u);
     if ((pressed >> panel.btn[B_OCTDN]) & 1u)
         song.octave = song.octave > -2 ? song.octave - 1 : song.octave;
     if ((pressed >> panel.btn[B_OCTUP]) & 1u)
@@ -716,6 +746,20 @@ static void oa_input(void)
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         oa_preset(s);
+    if (oa_page == 2u) {                                  /* PERC & VIB: the knobs switch the percussion, ALGORITHM the vibrato */
+        (void)panel_enc(EN_SELECT);
+        if (panel_enc(EN_K1) != 0)
+            org_set(OP_PERC, !org_patch[OP_PERC]);
+        if (panel_enc(EN_K2) != 0)
+            org_set(OP_PERC_SOFT, !org_patch[OP_PERC_SOFT]);
+        if (panel_enc(EN_K3) != 0)
+            org_set(OP_PERC_FAST, !org_patch[OP_PERC_FAST]);
+        if (panel_enc(EN_K4) != 0)
+            org_set(OP_PERC_SEL, !org_patch[OP_PERC_SEL]);
+        if ((s = panel_enc(EN_ALGO)) != 0)
+            org_set(OP_VIB, (uint32_t)clamp((int32_t)org_patch[OP_VIB] + s, 0, 6));
+        return;
+    }
     if ((s = panel_enc(EN_SELECT)) != 0) {                /* the four marked bars move along */
         oa_page = 1;
         oa_win = (uint8_t)clamp((int32_t)oa_win + (s > 0 ? 1 : -1), 0, (int32_t)OA_NWIN - 1);
@@ -743,6 +787,9 @@ static void oa_leds(void)
         led_put(nd, panel.btn[k], 1);                       /* every button's glow */
     led_put(nl, panel.btn[B_HOME], oa_page == 0u);
     led_put(nl, panel.btn[B_EDIT], oa_page == 1u);
+    led_put(nl, panel.btn[B_FX], oa_page == 2u);
+    led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
+    led_put(nl, panel.btn[B_LFO], org_patch[OP_VIB] != 0);
     led_put(nl, panel.btn[B_SAVE], oa_sv);
     led_put(nl, panel.btn[B_GLO], oa_gl != 0u);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);

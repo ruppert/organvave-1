@@ -116,6 +116,47 @@ int main(void)
     for (i = 0; i < 6u; i++) press(B_OCTDN);
     bad += check("OCT- six times: the bottom octave", song.octave == -2);
 
+    /* PERC & VIB (0.2.0): FX opens the page, ENV and LFO switch the percussion and the vibrato on HOME, the knobs and
+     * ALGORITHM on the page; the lamps and the picture follow the patch */
+    {
+        uint32_t h_pv, h_home2;
+        press(B_HOME);
+        h_home2 = frame_hash();
+        press(B_FX);
+        bad += check("FX: the PERC & VIB page", oa_page == 2);
+        h_pv = frame_hash();
+        bad += check("  .. a different picture", h_pv != h_home2);
+        turn(EN_K1, 1);
+        bad += check("  .. KNOB 1 switches the percussion on", org_patch[OP_PERC] == 1);
+        turn(EN_K1, 1);
+        bad += check("  .. and off again", org_patch[OP_PERC] == 0);
+        turn(EN_K2, 1);
+        bad += check("  .. KNOB 2: soft", org_patch[OP_PERC_SOFT] == 1);
+        turn(EN_K3, 1);
+        bad += check("  .. KNOB 3: fast", org_patch[OP_PERC_FAST] == 1);
+        turn(EN_K4, 1);
+        bad += check("  .. KNOB 4: the 2 2/3' third", org_patch[OP_PERC_SEL] == 1);
+        turn(EN_ALGO, 1);
+        bad += check("  .. ALGORITHM: VIB 1", org_patch[OP_VIB] == 1);
+        turn(EN_ALGO, 9);
+        bad += check("  .. the selector stops at CHO 3", org_patch[OP_VIB] == 6);
+        {
+            uint8_t before = org_patch[OP_UB + oa_win];
+            turn(EN_SELECT, 1);
+            bad += check("  .. SELECT moves no bar here (the page stays)", oa_page == 2 && org_patch[OP_UB + oa_win] == before);
+        }
+        press(B_FX);
+        bad += check("FX again: HOME", oa_page == 0);
+        press(B_ENV);
+        bad += check("ENV on HOME: the percussion on", org_patch[OP_PERC] == 1);
+        press(B_LFO);
+        bad += check("LFO: the vibrato to CHO 3 and round to off", org_patch[OP_VIB] == 0);
+        press(B_LFO);
+        bad += check("  .. and to VIB 1", org_patch[OP_VIB] == 1);
+        press(B_ENV);
+        bad += check("ENV again: the percussion off", org_patch[OP_PERC] == 0);
+    }
+
     printf("%s\n", bad ? "ORGAN APP TEST FAILED" : "organ app test passed");
     return bad != 0;
 }

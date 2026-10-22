@@ -316,6 +316,179 @@ int main(int argc, char **argv)
             check(what, mx < 2147483647.0f / 4 && mx > 0);
         }
     }
+    /* 5. percussion (setBfree's HIPASS_PERCUSSION build). The envelope starts at 11.0 (normal) or 5.5132 (soft) and
+     *    falls 60 dB in 1 s (fast) or 4 s (slow), per 32-sample block; the mix's gain steps to 0.60512 while it is on
+     *    (normal; soft 1.0); the 1' is muted; the contact is the 4' (or 2 2/3') whatever the drawbars. */
+    {
+        uint32_t soft, fast, b;
+        double ratio[2][2];
+        for (soft = 0; soft < 2; soft++)
+            for (fast = 0; fast < 2; fast++) {
+                char what[120];
+                double want = -60.0 * 1000.0 * 32.0 / ((fast ? 1.0 : 4.0) * 44100.0);
+                double db;
+                int32_t t[CTL];
+                double p1;
+                org_init();
+                org.xtalk = 0;
+                bars("000000000");
+                org.perc = 1;
+                org.psoft = (uint8_t)soft;
+                org.pfast = (uint8_t)fast;
+                org_key(24, 1);
+                memset(t, 0, sizeof t);
+                org_render(t, CTL);                                   /* the reset, then one block of decay */
+                p1 = (double)org.pe;
+                for (b = 0; b < 1000; b++) {
+                    memset(t, 0, sizeof t);
+                    org_render(t, CTL);
+                }
+                db = 20.0 * log10((double)org.pe / p1);
+                ratio[soft][fast] = db;
+                snprintf(what, sizeof what, "percussion %s, %s: the envelope falls %.2f dB in 1000 blocks (setBfree's %.2f)",
+                         soft ? "soft" : "normal", fast ? "fast" : "slow", db, want);
+                check(what, fabs(db - want) < 0.1);
+            }
+        {
+            double rn = (double)0, rs;
+            /* the start: 11.0 normal, 5.5132 soft (the same block, so their ratio is setBfree's 0.5012) */
+            org_init();
+            org.perc = 1;
+            org.xtalk = 0;
+            bars("000000000");
+            org_key(24, 1);
+            {
+                int32_t t[CTL] = {0};
+                org_render(t, CTL);
+            }
+            rn = (double)org.pe;
+            org_init();
+            org.perc = 1;
+            org.psoft = 1;
+            org.xtalk = 0;
+            bars("000000000");
+            org_key(24, 1);
+            {
+                int32_t t[CTL] = {0};
+                org_render(t, CTL);
+            }
+            rs = (double)org.pe;
+            check("percussion: the soft start is 0.5012 of the normal (setBfree's reset gains)",
+                  fabs(rs / rn - 0.5012) < 0.0005);
+        }
+        /* the mix's gain (the swell target) */
+        org_init();
+        org.perc = 1;
+        bars("000000000");
+        org_key(24, 1);
+        {
+            int32_t t[CTL] = {0};
+            org_render(t, CTL);
+        }
+        check("percussion normal: the mix's gain is 0.60512 (setBfree's percDrawbarGain)", org.pdg == 19829);
+        org.psoft = 1;
+        org_init();
+        org.perc = 1;
+        org.psoft = 1;
+        bars("000000000");
+        org_key(24, 1);
+        {
+            int32_t t[CTL] = {0};
+            org_render(t, CTL);
+        }
+        check("percussion soft: the mix's gain stays 1.0", org.pdg == 32768);
+        /* the 1' is muted while it is on: with only the 1' drawn, the wheels' gains are all 0 */
+        {
+            uint32_t i, sum_on = 0, sum_off = 0;
+            int32_t t[CTL] = {0};
+            org_init();
+            org.xtalk = 0;
+            bars("000000008");
+            org.perc = 1;
+            org_key(24, 1);
+            org_render(t, CTL);
+            for (i = 0; i < org.nacl; i++)
+                sum_on += (uint32_t)org.w[org.acl[i]].sum;
+            org_init();
+            org.xtalk = 0;
+            bars("000000008");
+            org_key(24, 1);
+            org_render(t, CTL);
+            for (i = 0; i < org.nacl; i++)
+                sum_off += (uint32_t)org.w[org.acl[i]].sum;
+            check("percussion on: the 1' is muted (its wheels' gains 0); off, it sounds", sum_on == 0 && sum_off > 0);
+        }
+        /* the contact: with the drawbars at 0 the percussion sounds, at the 4' (2nd) or the 2 2/3' (3rd) harmonic */
+        {
+            static const double want[2] = {523.2511, 784.8767};          /* 2 x and 3 x C4 (261.6256 Hz) */
+            uint32_t sel;
+            for (sel = 0; sel < 2; sel++) {
+                char what[120];
+                double f, rr;
+                org_init();
+                org.xtalk = 0;
+                bars("000000000");
+                org.perc = 1;
+                org.psel = (uint8_t)sel;
+                org_key(24, 1);
+                run(buf, N1);
+                rr = rms(buf + 1024, N1 - 1024);
+                f = freq_zc(buf + 1024, N1 - 1024);
+                snprintf(what, sizeof what, "percussion %s with the drawbars at 0: %.1f Hz, rms %.4f (setBfree's %.1f Hz)",
+                         sel ? "2 2/3'" : "4'", f, rr, want[sel]);
+                check(what, rr > 0.01 && fabs(f - want[sel]) < 1.0);
+            }
+        }
+    }
+
+    /* 6. the scanner's vibrato and chorus against setBfree's vibratoProc (the float loop of vibrato.c, here): a
+     *    1 kHz tone through VIB1..3 and CHO1..3 agrees with the integer port to -40 dB. */
+    {
+        static int32_t in[8192], out[8192];
+        static float ref[8192];
+        uint32_t v, n;
+        for (n = 0; n < 8192; n++)
+            in[n] = (int32_t)lround(8000.0 * sin(2.0 * 3.14159265358979 * 1000.0 * n / 44100.0));
+        for (v = 1; v <= 6; v++) {
+            char what[120];
+            uint32_t amp = 3u * ((v - 1u) % 3u + 1u), mixed = v > 3u, i, nn;
+            double pos_d = 0, stat = 0, err = 0, sig = 0;
+            static double vib[1024];
+            uint32_t pos = 0;
+            memset(vib, 0, sizeof vib);
+            for (nn = 0; nn < 8192; nn++) {
+                double x = in[nn], j, f, g, wet;
+                uint32_t h, k;
+                j = (double)pos + 1.0 + amp + amp * sin(2.0 * 3.14159265358979 * stat);
+                h = (uint32_t)floor(j) % 1024u;
+                f = j - floor(j);
+                k = (h + 1u) % 1024u;
+                g = f * x;
+                vib[h] += x - g;
+                vib[k] += g;
+                wet = vib[pos];
+                vib[pos] = 0;
+                ref[nn] = (float)(mixed ? (x + wet) * 0.70710678 : wet);
+                pos = (pos + 1u) % 1024u;
+                stat += 7.25 / 44100.0;
+                (void)pos_d;
+            }
+            org_init();
+            org.vibm_cur = (uint8_t)v;
+            for (i = 0; i < 8192; i += CTL)
+                org_vib(in + i, out + i, CTL);
+            for (nn = 0; nn < 8192; nn++) {
+                double d = (double)out[nn] - ref[nn];
+                err += d * d;
+                sig += (double)ref[nn] * ref[nn];
+            }
+            snprintf(what, sizeof what, "%s: the integer port against setBfree's float loop: %.1f dB",
+                     mixed ? (v == 4 ? "CHO1" : v == 5 ? "CHO2" : "CHO3") : (v == 1 ? "VIB1" : v == 2 ? "VIB2" : "VIB3"),
+                     10.0 * log10(err / (sig + 1e-9)));
+            check(what, err < sig * 1e-4);                           /* -40 dB */
+        }
+    }
+
     printf("organ: %s\n", bad ? "FAILED" : "all ok");
     return bad != 0;
 }
