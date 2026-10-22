@@ -4,6 +4,7 @@
  * (tools/setbfree_ref/whirl_render; DEVELOPING.md).
  * 1. sidebands: 440 Hz at 0.5, horn 400 rpm, drum stopped, last second of 4 s: the carrier's sidebands at -/+ 6.67 Hz and
  *    -13.33 Hz are setBfree's -16.26 / -26.82 / -30.48 dB (Hann window; within 0.5 dB, measured within 0.05).
+ *    The same with the mic angle at 90 degrees (right channel: -5.85 / -13.09 / -15.12 dB).
  * 2. stopped rotors: no sidebands (rounding noise only), and the same render twice is identical.
  * 3. the speed ramp: reaches its target exactly (no stall short of it, 400 rpm horn, 340 rpm drum) and holds.
  * 4. bounds: a loud chord and full-scale sines at the filters' resonances never overflow (the output stays within 8x full scale, the rms in setBfree's range) with both rotors turning; silence in, silence out. */
@@ -19,6 +20,7 @@ static void check(const char *what, int ok)
     printf("rotary: %-100s %s\n", what, ok ? "ok" : "FAIL");
     bad += !ok;
 }
+static uint32_t mic_deg = 180;                       /* render(): the horn mic angle */
 static uint32_t turn(double rpm) { return (uint32_t)(rpm / 60.0 / 44100.0 * 4294967296.0 + 0.5); }
 
 /* renders n samples of in[] (float, 1.0 = full scale) into L, R (float) */
@@ -28,6 +30,7 @@ static void render(const float *in, float *L, float *R, size_t n, double hrpm, d
     int32_t x[ROT_CTL], l[ROT_CTL], rr[ROT_CTL];
     size_t i, j;
     rot_init(r);
+    rot_mic(r, mic_deg);
     rot_target(r, turn(hrpm), turn(drpm));
     for (i = 0; i < n; i += ROT_CTL) {
         size_t k = n - i < ROT_CTL ? n - i : ROT_CTL;
@@ -68,6 +71,16 @@ int main(void)
     check("sideband at 440 - 6.67 Hz is setBfree's -16.26 dB", fabs(s1 + 16.26) < 0.5);
     check("sideband at 440 + 6.67 Hz is setBfree's -26.82 dB", fabs(s2 + 26.82) < 0.5);
     check("sideband at 440 - 13.33 Hz is setBfree's -30.48 dB", fabs(s3 + 30.48) < 0.5);
+
+    mic_deg = 90;
+    render(in, L, R, N, 400, 0);
+    s1 = 20 * log10(amp(R + 3 * 44100, 44100, 440.0 - fr) / amp(R + 3 * 44100, 44100, 440.0));
+    s2 = 20 * log10(amp(R + 3 * 44100, 44100, 440.0 + fr) / amp(R + 3 * 44100, 44100, 440.0));
+    s3 = 20 * log10(amp(R + 3 * 44100, 44100, 440.0 - 2 * fr) / amp(R + 3 * 44100, 44100, 440.0));
+    printf("rotary: mic 90 degrees, right channel sidebands %.2f %.2f %.2f dB\n", s1, s2, s3);
+    check("mic angle 90: the right channel's sidebands are setBfree's (-5.85 / -13.09 / -15.12 dB)",
+          fabs(s1 + 5.85) < 0.5 && fabs(s2 + 13.09) < 0.5 && fabs(s3 + 15.12) < 0.5);
+    mic_deg = 180;
 
     render(in, L, R, N, 0, 0);
     render(in, L2, R2, N, 0, 0);

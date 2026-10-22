@@ -9,7 +9,7 @@
  * interleaved L R. The rotors start at rest and their targets are HORN_RPM / DRUM_RPM (0 = stopped); the speeds
  * follow setBfree's exponential law, blocks of 32 samples (the firmware's CTL). ACC_* overrides the acceleration
  * time constants in seconds (default: setBfree's 0.161 s horn, 4.127 s drum; the deceleration is left at its default).
- * Built with tools/setbfree_ref/build.sh (the same stubs as whirl_tables.c). */
+ * Environment: WHIRL_MIC the horn mic angle in degrees (0..180, default 180). Built with tools/setbfree_ref/build.sh (the same stubs as whirl_tables.c). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,6 +66,8 @@ int main(int argc, char **argv)
         w->hornAcc = atof(argv[5]);
         w->drumAcc = atof(argv[6]);
     }
+    if (getenv("WHIRL_MIC"))                           /* the horn mic angle in degrees (setBfree's whirl.horn.mic.angle) */
+        w->micAngle = 1.0 - atof(getenv("WHIRL_MIC")) / 180.0;
     initialize(w);
     /* whirlProc2 ramps the speed only while hornAcDc / drumAcDc is set (revControl sets them as it sets the
      * targets): +1 accelerating (hornAcc), -1 decelerating (hornDec); it clears itself on reaching the target. */

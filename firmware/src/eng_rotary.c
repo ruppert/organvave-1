@@ -34,8 +34,10 @@
  * The input is clamped to +-1.0 (Q15) in rot_block.
  *
  * Only the rotor speeds and their ramps are computed per block (CTL samples), with int64 once per block. The per-sample
- * loop is int32 only. Not yet in: the brake (STOP) of setBfree's hnBrakePos / drBrakePos, the mic angle (default 0), the
- * horn comb filter (disabled in setBfree's own build), the LIGHT model, the table copy to SRAM. */
+ * loop is int32 only. STOP is a target of 0 (the deceleration law, setBfree's default: its brake position, hnBrakePos,
+ * is 0 and its notch logic is off). The mic angle is rot_mic (validated at 180, 120, 90, 45 and 0 degrees: the same
+ * SNR as the default). Not in: the horn comb filter (disabled in setBfree's own build) and the LIGHT model.
+ */
 #ifndef ENG_ROTARY_C
 #define ENG_ROTARY_C
 #include <stdint.h>
@@ -255,6 +257,16 @@ static void rot_target(rot_t *r, uint32_t horn_tgt, uint32_t drum_tgt)
     r->rem_d = 0;
     r->acdc_h = (int8_t)((int32_t)(horn_tgt - r->inc_h) > 0 ? 1 : (horn_tgt == r->inc_h ? 0 : -1));
     r->acdc_d = (int8_t)((int32_t)(drum_tgt - r->inc_d) > 0 ? 1 : (drum_tgt == r->inc_d ? 0 : -1));
+}
+
+/* the mic angle (setBfree's whirl.horn.mic.angle, 0..180 degrees, default 180: the two mics face the horn's two sides;
+ * smaller angles bring them together: a narrower stereo image). micAngle = 1 - deg / 180, the forward mic turns by
+ * micAngle / 4 and the backward one by -micAngle / 4 of a turn (hornAngle + fwAng, hornAngle + 1 - micAngle / 4) */
+static void rot_mic(rot_t *r, uint32_t deg)
+{
+    uint32_t ma = 65536u - (deg > 180u ? 180u : deg) * 65536u / 180u;   /* micAngle, Q16 */
+    r->mic_fw = ma << 14;
+    r->mic_bw = (uint32_t)0 - (ma << 14);
 }
 
 /* one block of CTL samples (n <= ROT_CTL): in (Q15 mono) to outL and outR (Q15) */
