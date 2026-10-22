@@ -65,7 +65,8 @@ BUILDING.md has the SDK clone). If a download is refused by the network allowlis
 
 The tree holds only what the instrument uses (one FMUG part, 16 steps; Felucca's other engines, samples, UI, projects,
 second core and serial console are gone; DEVELOPING.md section 1). The suite takes a few minutes. With a real AC79 SDK
-everything should pass. With the measuring SDK stand-in (no real `uboot.boot`) four sections fail and are not yours: the
+everything should pass (the owner's `fw-AC79_AIoT_SDK-AC79NN_SDK_V1_2_1_2023-12-13.zip`, the gitee tag AC79NN_SDK_V1.2.1_2023-12-13, matches
+the reference hashes in `tools/build.py`: no warning, the whole suite green; the owner re-sends it if the sandbox lost it). With the measuring SDK stand-in (no real `uboot.boot`) four sections fail and are not yours: the
 M-UPGRADE entry and the update loader, plain and under ASan (they check the package itself). A failing section prints
 `SECTION FAILED: <name>`. A test that prints nothing and fails is a `return 1` with no message: run the binary alone.
 `web/test_editor_organ.mjs` and `web/test_site.mjs` need node; the installer's JS and the site are checked by `web/test_web.mjs`. A new failure outside
