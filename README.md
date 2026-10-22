@@ -29,6 +29,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.9.0 | beta: overload fallback (when the CPU runs late: "CPU HIGH" on screen, the delay off for 2 s, the oldest held key let go; the rotary and the drive are never changed), all-keys stress tests, user manual (not yet on an FM-1) |
 | 0.9.1 | fix: distortion with the rotary on (CLASSIC and LIGHT): the cabinet clipped its input at 1.0; a chord is several times that. Now it takes the mix down by 4 and brings it back after (not yet on an FM-1) |
 | 0.9.2 | the panel: SELECT picks an item and ALGORITHM changes it on every page; DRIVE with TYPE (DISTORTION / TUBE), GAIN, TONE, OUTPUT; every Leslie setting on the ROTARY page; LOWER and PEDAL on one page, the pedal with its two bars (not yet on an FM-1) |
+| 0.9.3 | the Leslie defaults: horn FAST 390 rpm (was 423), horn ramp 1.5 s up and 3.0 s down (was 0.161 / 0.321 s) (not yet on an FM-1) |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing

@@ -439,10 +439,10 @@ enum {
     OP_DRV_TONE = 49,           /* its tone: 0..8 "zero is the default" (c9: index (s + 4) % 9, 4 flat, 0 dark .. 8 bright) */
     OP_DRV_OUT = 50,            /* its output level, the same coding: index 4 is 0 dB, 2 dB a step (-8 .. +8 dB) */
     OP_ROT_HSLOW = 51,          /* the rotary's horn SLOW speed (version 0.9.2; 0 in older patches), c9: index 4 is 40 rpm, 12 % a step */
-    OP_ROT_HFAST = 52,          /* horn FAST speed, c9: index 4 is 423 rpm */
+    OP_ROT_HFAST = 52,          /* horn FAST speed, c9: index 4 is 390 rpm (since 0.9.3; setBfree's 423) */
     OP_ROT_DSLOW = 53,          /* drum SLOW speed, c9: index 4 is 36 rpm */
     OP_ROT_DFAST = 54,          /* drum FAST speed, c9: index 4 is 357 rpm */
-    OP_ROT_HRAMP = 55,          /* horn acceleration time (and deceleration, twice it), c9: index 4 is 0.16 s, x1.4 a step (higher: slower) */
+    OP_ROT_HRAMP = 55,          /* horn acceleration time (and deceleration, twice it), c9: index 4 is 1.5 s (since 0.9.3; setBfree's 0.161 s), x1.4 a step (higher: slower) */
     OP_ROT_DRAMP = 56,          /* drum acceleration time, c9: index 4 is 4.1 s, x1.4 a step */
     OP_NUM                      /* (57..63: reserved: 0 until then) */
 };

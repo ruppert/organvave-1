@@ -197,8 +197,8 @@ const eqFidx = (f) => (f + 5) % 12, eqFbyte = (i) => (i + 7) % 12;
 // (byte + 4) % 9, and a byte is (index + 5) % 9. The Leslie's speeds go 12 % a step and its ramps x1.4 a step (the firmware's tables)
 const c9 = (b) => (b + 4) % 9, b9 = (i) => (i + 5) % 9;
 const ROT_SPF = [163, 182, 204, 229, 256, 287, 321, 360, 403], ROT_RTF = [67, 93, 131, 183, 256, 358, 502, 702, 983];
-const SPEEDS = [["rhs", OP_ROT_HSLOW, 672], ["rhf", OP_ROT_HFAST, 7056], ["rds", OP_ROT_DSLOW, 600], ["rdf", OP_ROT_DFAST, 5955]];
-const RAMPS = [["rhr", OP_ROT_HRAMP, 161000, 2], ["rdr", OP_ROT_DRAMP, 4127000, 1]];
+const SPEEDS = [["rhs", OP_ROT_HSLOW, 672], ["rhf", OP_ROT_HFAST, 6500], ["rds", OP_ROT_DSLOW, 600], ["rdf", OP_ROT_DFAST, 5955]];
+const RAMPS = [["rhr", OP_ROT_HRAMP, 1500000, 2], ["rdr", OP_ROT_DRAMP, 4127000, 1]];
 const speedText = (i, base) => Math.floor(((base * ROT_SPF[i]) >> 8) * 3 / 50) + " rpm";
 const rampText = (i, base, dec) => ((((base >> 4) * ROT_RTF[i]) >> 4) / 1e6).toFixed(dec) + " s";
 const FOOT = ["16′", "5⅓′", "8′", "4′", "2⅔′", "2′", "1⅗′", "1⅓′", "1′"];

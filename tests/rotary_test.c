@@ -29,7 +29,7 @@ static void render(const float *in, float *L, float *R, size_t n, double hrpm, d
     rot_t *r = calloc(1, sizeof *r);
     int32_t x[ROT_CTL], l[ROT_CTL], rr[ROT_CTL];
     size_t i, j;
-    rot_init(r);
+    rot_init(r); r->k_ha = rot_k(161000u); r->k_hd = rot_k(321000u);   /* (setBfree's horn ramps: the reference's; the firmware's defaults are slower since 0.9.3) */
     rot_mic(r, mic_deg);
     rot_target(r, turn(hrpm), turn(drpm));
     for (i = 0; i < n; i += ROT_CTL) {
@@ -93,7 +93,7 @@ int main(void)
         rot_t *r = calloc(1, sizeof *r);
         int32_t x[ROT_CTL] = {0}, l[ROT_CTL], rr[ROT_CTL];
         int k;
-        rot_init(r);
+        rot_init(r); r->k_ha = rot_k(161000u); r->k_hd = rot_k(321000u);   /* (setBfree's horn ramps: the reference's; the firmware's defaults are slower since 0.9.3) */
         rot_target(r, turn(400), turn(340));
         for (k = 0; k < 44100 * 45 / ROT_CTL; k++) rot_block(r, x, l, rr, ROT_CTL);
         check("speed ramp: the horn reaches 400 rpm exactly", r->inc_h == turn(400) && !r->acdc_h);

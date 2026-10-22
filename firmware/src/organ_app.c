@@ -669,13 +669,13 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
         } else if (r == 6u)
             oa_vspeed(v, OP_ROT_HSLOW, 672u);
         else if (r == 7u)
-            oa_vspeed(v, OP_ROT_HFAST, 7056u);
+            oa_vspeed(v, OP_ROT_HFAST, 6500u);
         else if (r == 8u)
             oa_vspeed(v, OP_ROT_DSLOW, 600u);
         else if (r == 9u)
             oa_vspeed(v, OP_ROT_DFAST, 5955u);
         else if (r == 10u)
-            oa_vramp(v, OP_ROT_HRAMP, 161000u, 1);
+            oa_vramp(v, OP_ROT_HRAMP, 1500000u, 1);
         else
             oa_vramp(v, OP_ROT_DRAMP, 4127000u, 0);
     } else if (pg == 4u) {

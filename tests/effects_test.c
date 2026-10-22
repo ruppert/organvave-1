@@ -588,13 +588,13 @@ int main(void)
             P[OP_ROT_HFAST] = (uint8_t)org_b9(8);
             patch_set(P);
             blocks(4410);
-            check("the horn's fast speed follows its own byte (x 1.574 of 7.056 Hz)", (double)rot_st.tgt_h / (double)rot_inc(7056u) > 1.574 * 0.99 &&
-                  (double)rot_st.tgt_h / (double)rot_inc(7056u) < 1.574 * 1.01);
+            check("the horn's fast speed follows its own byte (x 1.574 of 6.5 Hz)", (double)rot_st.tgt_h / (double)rot_inc(6500u) > 1.574 * 0.99 &&
+                  (double)rot_st.tgt_h / (double)rot_inc(6500u) < 1.574 * 1.01);
         }
         input_off(&trk[0], 48);
         blocks(44100);
         {   /* the table of the ramps' steps against rot_k itself */
-            static const uint32_t BASE[4] = {161000u, 321000u, 4127000u, 1371000u};
+            static const uint32_t BASE[4] = {1500000u, 3000000u, 4127000u, 1371000u};
             uint32_t b, i, bad_k = 0;
             for (b = 0; b < 4u; b++)
                 for (i = 0; i < 9u; i++)

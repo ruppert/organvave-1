@@ -1059,7 +1059,7 @@ takes to speed up; it slows down 2 times (horn) and 0.33 times (drum) of that as
 bytes that **code the default as 0**, so that a patch from before is the default: a byte s is the index (s + 4) mod 9, 0..8,
 and the default is the index 4 (a byte for an index i is (i + 5) mod 9). TONE: index 0 the darkest (a low-pass at 1 kHz), 4 flat,
 8 the brightest (+8 dB of treble); OUT: 2 dB a step, index 4 is 0 dB (-8 .. +8 dB); the speeds 12 % a step around setBfree's
-(horn 40.3 and 423 rpm, drum 36 and 357 rpm); the ramps x1.4 a step in time around setBfree's (horn 0.161 s, drum 4.127 s;
+(horn 40.3 and 390 rpm (423 before 0.9.3), drum 36 and 357 rpm); the ramps x1.4 a step in time around setBfree's (horn 1.5 s up and 3.0 s down (0.161 and 0.321 s before 0.9.3), drum 4.127 s;
 higher is slower). `ORG_PUT` carries at most 48 bytes a frame: the editor sends the 57 used bytes in two. Bytes 57..63 are reserved.
 
 Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 0.1.0 (a user preset, the autosave, a

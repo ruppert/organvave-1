@@ -243,8 +243,8 @@ static void rot_init(rot_t *r)
         ((int32_t *)r)[i] = 0;
     r->hl = 11469;                      /* 0.7 */
     r->leak = 1720;                     /* 0.15 * 0.7 */
-    r->k_ha = rot_k(161000u);           /* setBfree's hornAcc 0.161 s */
-    r->k_hd = rot_k(321000u);           /* hornDec 0.321 s */
+    r->k_ha = rot_k(1500000u);          /* hornAcc 1.5 s (setBfree's 0.161 s) */
+    r->k_hd = rot_k(3000000u);          /* hornDec 3.0 s (setBfree's 0.321 s) */
     r->k_da = rot_k(4127000u);          /* drumAcc 4.127 s */
     r->k_dd = rot_k(1371000u);          /* drumDec 1.371 s */
 }

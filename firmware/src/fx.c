@@ -1081,11 +1081,11 @@ static const uint16_t ROT_BAL_HL[9] = {5734, 6820, 8110, 9644, 11469, 13639, 162
 /* the rotary's speed and ramp scales (the bytes OP_ROT_HSLOW .. OP_ROT_DRAMP, index 0..8, 4 the default): 1.12^(i-4) and 1.4^(i-4), Q8 */
 static const uint16_t ROT_SPF[9] = {163, 182, 204, 229, 256, 287, 321, 360, 403};
 static const uint16_t ROT_RTF[9] = {67, 93, 131, 183, 256, 358, 502, 702, 983};
-/* rot_k (the ramp's step per block, Q30) of the four base times (horn up 0.161 s, horn down 0.321 s, drum up 4.127 s, drum down
+/* rot_k (the ramp's step per block, Q30) of the four base times (horn up 1.5 s, horn down 3.0 s, drum up 4.127 s, drum down
  * 1.371 s) times ROT_RTF: a table, because rot_k divides in 64 bits (tests/effects_test.c checks every entry against it) */
 static const int32_t ROT_KT[4][9] = {
-    {18332593, 13238941, 9415571, 6748527, 4828442, 3454963, 2465039, 1763321, 1259556},
-    {9234235, 6660607, 4732797, 3390081, 2424462, 1734253, 1237066, 884770, 631924},
+    {1982823, 1428856, 1014574, 726377, 519296, 371366, 264852, 189402, 135263},
+    {991870, 714666, 507407, 363250, 259679, 185699, 132434, 94705, 67633},
     {721101, 519552, 368868, 264066, 188773, 134992, 96270, 68844, 49164},
     {2169204, 1563201, 1109987, 794698, 568144, 406302, 289768, 207222, 147989},
 };
@@ -1106,11 +1106,11 @@ static void fx_organ_apply(void)
     fxo_seen = org_pgen;
     rot_on = org_patch[OP_ROT];
     rot_model_req = org_patch[OP_ROT_MODEL];
-    sp = org_patch[OP_ROT_SPEED];       /* setBfree's speeds: horn 0.672 / 7.056 Hz, drum 0.600 / 5.955 Hz, each scaled by its byte (12 % a step) */
+    sp = org_patch[OP_ROT_SPEED];       /* setBfree's speeds: horn 0.672 / 6.5 Hz (390 rpm), drum 0.600 / 5.955 Hz, each scaled by its byte (12 % a step) */
     rot_target(&rot_st,
-               sp ? rot_inc(((sp == 1u ? 672u : 7056u) * ROT_SPF[org_c9(org_patch[sp == 1u ? OP_ROT_HSLOW : OP_ROT_HFAST])]) >> 8) : 0u,
+               sp ? rot_inc(((sp == 1u ? 672u : 6500u) * ROT_SPF[org_c9(org_patch[sp == 1u ? OP_ROT_HSLOW : OP_ROT_HFAST])]) >> 8) : 0u,
                sp ? rot_inc(((sp == 1u ? 600u : 5955u) * ROT_SPF[org_c9(org_patch[sp == 1u ? OP_ROT_DSLOW : OP_ROT_DFAST])]) >> 8) : 0u);
-    {   /* the ramps: setBfree's horn 0.161 s up / 0.321 s down, drum 4.127 s / 1.371 s, each scaled (x1.4 a step): ROT_KT, no division here */
+    {   /* the ramps: the horn 1.5 s up / 3.0 s down (setBfree's 0.161 / 0.321 before 0.9.3), drum 4.127 s / 1.371 s, each scaled (x1.4 a step): ROT_KT, no division here */
         uint32_t hi = org_c9(org_patch[OP_ROT_HRAMP]), di = org_c9(org_patch[OP_ROT_DRAMP]);
         rot_st.k_ha = ROT_KT[0][hi];
         rot_st.k_hd = ROT_KT[1][hi];
