@@ -13,7 +13,7 @@ palette 80-81, and the FMUG patch 82-84 (FMini-1's engine, removed in 0.1.0).
 - One track (`NTRK` 1; `TRACK` lists one, its selection argument is accepted and ignored).
 - `INFO` still starts with `"FELUCCA "` and Felucca's version and names 16 engines (`NENGINES`): engines 0..14 are `"-"` with
   no presets (`PRESET` of one: no reply); engine 15 is `ORGAN` with 16 factory patches (8 up to 0.3.1). After the track count it ends with the
-  tags `53 01 03` (live sync) and `4F 01 ORG_PSIZE` (the organ patch: 64 bytes); the editor reads the last four bytes.
+  tags `53 01 03` (live sync) and `4F 01 ORG_PSIZE` (the organ patch: 96 bytes since 0.9.4, 64 before); the editor reads the last four bytes.
 - A request frame longer than 64 bytes is dropped whole (the longest request, `ORG_PUT` of 48 bytes, is 54).
 - User presets are the records of `upreset.c` (`UPB1` banks; the patch of each in its own object, `UPF6`). An organ
   preset stores the organ patch; a preset of an older engine (FMini-1's FMUG, or a retired engine) plays the organ's first
@@ -1033,7 +1033,7 @@ SURF = (3, 4, 10), ...
 
 ## Organ patch (85-86; 0.1.0)
 
-The organ's sound is the **patch**: `ORG_PSIZE` (64) bytes, every byte 0..127, of which the first 43 are used (`OP_*` in
+The organ's sound is the **patch**: `ORG_PSIZE` (96 since 0.9.4; 64 before) bytes, every byte 0..127, of which the first 43 are used (`OP_*` in
 `eng_organ.c`): the nine drawbars of the upper manual (`OP_UB` 0..8, 0 = out, 8 = full: the 16' to 1' footages), the lower
 manual's (`OP_LB` 9..17) and the pedals' (`OP_PB` 18..26) nine, the tuning (`OP_TEMP` 27: 0 gear 60 Hz, 1 gear 50 Hz,
 2 equal temperament), the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model), the percussion (`OP_PERC` 29: 0 off, 1 on;
@@ -1060,7 +1060,37 @@ bytes that **code the default as 0**, so that a patch from before is the default
 and the default is the index 4 (a byte for an index i is (i + 5) mod 9). TONE: index 0 the darkest (a low-pass at 1 kHz), 4 flat,
 8 the brightest (+8 dB of treble); OUT: 2 dB a step, index 4 is 0 dB (-8 .. +8 dB); the speeds 12 % a step around setBfree's
 (horn 40.3 and 390 rpm (423 before 0.9.3), drum 36 and 357 rpm); the ramps x1.4 a step in time around setBfree's (horn 1.5 s up and 3.0 s down (0.161 and 0.321 s before 0.9.3), drum 4.127 s;
-higher is slower). `ORG_PUT` carries at most 48 bytes a frame: the editor sends the 57 used bytes in two. Bytes 57..63 are reserved.
+higher is slower). `ORG_PUT` carries at most 48 bytes a frame: the editor sends the used bytes in two (57 before 0.9.4, 82 since).
+
+**From 0.9.4: ADVANCED EDIT, bytes 57..81** (`ORG_PSIZE` 96; bytes 82..95 are reserved, 0). These are setBfree's own tone-generator
+settings. Every one is a "zero is the default" byte: with N steps and the default step D, a byte b is the step (b + D) mod N, and a
+byte for a step i is (i - D) mod N (+ N), so a patch from before reads as setBfree's defaults and sounds as it did. Old
+autosaves (64 bytes) and user presets (the entry has 128 bytes, zero past the 64) read the same way; the autosave record is
+longer, and the shorter 0.9.3 one is still accepted.
+
+| byte | `OP_` | N, D | meaning of a step i |
+| --- | --- | --- | --- |
+| 57 | TUNING | 128, 64 | the wheels' tuning, A4 = 408.0 + 0.5 i Hz (440.0 default; setBfree `tuning`) |
+| 58 | ATK_MODEL | 4, 0 | the key click's attack envelope: 0 CLICK (a burst of noise), 1 COSINE, 2 LINEAR, 3 SHELF (`env.attack.model`) |
+| 59 | ATK_LEVEL | 41, 20 | the attack click level, i / 40 (`env.click.level`) |
+| 60, 61 | ATK_MIN, ATK_MAX | 41, 5 / 41, 25 | the click burst's length, i x 16 / 5 samples, min and max (`env.click.minLength`, `maxLength`); shorter is a brighter click |
+| 62 | REL_MODEL | 4, 2 | the release envelope, as 58 (default LINEAR) |
+| 63 | REL_LEVEL | 41, 10 | the release click level, i / 40 (`env.release.click.level`); it acts with the CLICK release model |
+| 64..67 | XT_COMP, XT_TRANS, XT_TSTRIP, XT_WIRE | 52, 31 / 0 / 31 / 31 | the crosstalk model's compartment, transformer, terminal strip and wiring levels (`osc.compartment-crosstalk`, `osc.transformer-crosstalk`, `osc.terminalstrip-crosstalk`, `osc.wiring-crosstalk`): step 0 is 0, step i > 0 is -2 (51 - i) dB (step 51 = 0 dB) |
+| 68, 69 | XT_FLOOR, XT_MIN | 52, 3 / 52, 0 | the contribution floor and minimum (`osc.contribution-floor`, `osc.contribution-min`), same ladder (default floor -96 dB, off) |
+| 70, 71 | PC_FAST, PC_SLOW | 100, 9 / 100, 39 | the percussion decay times (60 dB), 0.1 (i + 1) s (`perc.fastdecay`, `perc.slowdecay`) |
+| 72, 73 | PC_NORM, PC_SOFT | 13, 0 / 13, 6 | the percussion's normal and soft levels, -i dB below the gain (`perc.normalvol`, `perc.softvol`) |
+| 74 | PC_GAIN | 45, 22 | the percussion gain, i / 2 (`perc.gain`, default 11.0) |
+| 75, 76 | PC_BUSA, PC_BUSB | 9, 3 / 9, 4 | the drawbar bus the second and the third harmonic take (`perc.bus.a`, `perc.bus.b`), 0 = 16' .. 8 = 1' |
+| 77 | PC_TRIG | 10, 9 | the drawbar muted while the percussion is on: step 0 none, i > 0 the drawbar i - 1 (default the 1', `perc.trigger`) |
+| 78 | SC_HZ | 73, 13 | the scanner's rate, 4 + i / 4 Hz (`scanner.hz`, default 7.25) |
+| 79, 80, 81 | SC_V1, SC_V2, SC_V3 | 25, 6 / 25, 12 / 25, 18 | the vibrato / chorus depths, i / 2 samples (`scanner.modulation.v1..v3`) |
+
+`OP_TEMP` 27 and `OP_XTALK` 28 are the other two settings of the page. Not editable (setBfree has them but the instrument does not): the
+other tuning-gear and wheel-table options, the tone-generator's `osc.compartment` maps, the per-key taper and crosstalk lists
+(`osc.taper.*`, `osc.crosstalk.k*`), the keyboard maps and the swell's and the key compression's coefficients; the sound of the
+key compression follows the factory settings. The crosstalk table is built in RAM (10 752 entries) when a setting leaves the
+defaults: a setting that asks for more entries raises the contribution floor until it fits. The table is replaced only while no key holds it.
 
 Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 0.1.0 (a user preset, the autosave, a
 factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Version 0.3.0 gave meaning to
@@ -1071,14 +1101,14 @@ with user presets and the autosave, not with the track's parameters.
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 85 ORG_GET | target, index | target, index, rc, then (rc 0) the 64 patch bytes |
-| 86 ORG_PUT | 0, offset, count, count bytes (count <= 48, offset + count <= 64) | target, offset, rc |
+| 85 ORG_GET | target, index | target, index, rc, then (rc 0) the 96 patch bytes (64 before 0.9.4) |
+| 86 ORG_PUT | 0, offset, count, count bytes (count <= 48, offset + count <= 96) | target, offset, rc |
 
 Targets: 0 the instrument's own patch (index 0), 2 a factory patch (index 0..7, read only; `PUT` answers rc 1), 3 a user
 preset's patch (slot 0..31, read only; rc 2 when the slot is empty or holds an engine other than the organ's; a preset stored
 without its own patch gives the first factory patch, as loading it does). rc: 0 ok, 1 arguments (length, target, offset,
 index), 2 not an organ (see above). A `PUT` writes the bytes into the instrument's patch and sanitizes them into their ranges
-(the drawbars 0..8, the tuning 0..2, the crosstalk 0..1, the reserved bytes 0); it does not write flash: `UP_STORE` does.
+(the drawbars 0..8, the tuning 0..2, the crosstalk 0..1, the ADVANCED EDIT bytes 0..N-1, the reserved bytes 0); it does not write flash: `UP_STORE` does.
 
 `PRESET` (8) with engine 15 (`ORGAN`) and index n loads `ORG_FACTORY[n]` and its LEVEL, as the panel does; `NAMES` (10) of engine 15 lists the 8 factory names.
 

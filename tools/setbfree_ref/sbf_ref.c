@@ -7,6 +7,11 @@
  *   sbf_ref render OUT.f32 BARS SECS EVENTS  mono float32 at 44.1 kHz; BARS "888000000"; EVENTS "t:+key,t:-key,..."
  *                                            (key 0..60 = the upper manual C..C); env SWELL (default 1.0), TEMP 0/1/2,
  *                                            NOXT (crosstalk off)
+ *   sbf_ref adv OUT.txt                     the advanced parameters (ADVANCED EDIT, tests/organ_adv_test.c): the keys'
+ *                                            contributions and the click envelopes with the tone generator's settings
+ *                                            from the environment: COMP TRANS TSTRIP WIRE FLOOR MIN (crosstalk, 0..1),
+ *                                            ATKLEVEL ATKMIN ATKMAX RELLEVEL (0..1), ATKMODEL RELMODEL (0 click, 1 cosine,
+ *                                            2 linear, 3 shelf); the unset ones keep setBfree's defaults
  * srand(1) before the init: the click envelopes are the same every run. */
 #include "tonegen.c"
 #include <stdio.h>
@@ -70,6 +75,15 @@ int main (int argc, char** argv)
 			}
 		}
 		fprintf (f, "lower = upper + 9 buses\n");
+		/* the terminals' neighbours (the crosstalk model's wiring: compartment pair, transformers, terminal strip) */
+		for (i = 1; i <= NOF_WHEELS; i++) {
+			int te = 0, tw = 0, se = 0, sw = 0;
+			findEastWestNeighbours (terminalStrip, i, &se, &sw);
+			if (44 <= i)          /* (a wheel in neither row has no neighbours: setBfree's assert is off in a release build) */
+				if (!findEastWestNeighbours (northTransformers, i, &te, &tw))
+					findEastWestNeighbours (southTransformers, i, &te, &tw);
+			fprintf (f, "topo %d %d %d %d %d %d\n", i, wheelPairs[i], te, tw, se, sw);
+		}
 		for (k = 0; k < MAX_KEYS; k++) {
 			ListElement* lep;
 			if (64 <= k && k < 128)
@@ -122,6 +136,49 @@ int main (int argc, char** argv)
 		fclose (f);
 		return 0;
 	}
-	fprintf (stderr, "usage: sbf_ref dump OUT.txt | render OUT.f32 BARS SECS EVENTS\n");
+	if (argc >= 3 && !strcmp (argv[1], "adv")) {
+		FILE* f = fopen (argv[2], "w");
+		struct b_tonegen* t;
+		void *st, *mc;
+		int b, i, k;
+#define ENVD(name, var) if (getenv (name)) var = atof (getenv (name))
+		srand (1);
+		t = allocTonegen ();
+		st = allocRunningConfig ();
+		mc = allocMidiCfg (st);
+		initControllerTable (mc);
+		t->gearTuning = 1;
+		ENVD ("COMP", t->defaultCompartmentCrosstalk);
+		ENVD ("TRANS", t->defaultTransformerCrosstalk);
+		ENVD ("TSTRIP", t->defaultTerminalStripCrosstalk);
+		ENVD ("WIRE", t->defaultWiringCrosstalk);
+		ENVD ("FLOOR", t->contributionFloorLevel);
+		ENVD ("MIN", t->contributionMinLevel);
+		ENVD ("ATKLEVEL", t->envAttackClickLevel);
+		ENVD ("RELLEVEL", t->envReleaseClickLevel);
+		if (getenv ("ATKMIN")) setEnvAtkClkMinLength (t, atof (getenv ("ATKMIN")));
+		if (getenv ("ATKMAX")) setEnvAtkClkMaxLength (t, atof (getenv ("ATKMAX")));
+		if (getenv ("ATKMODEL")) setEnvAttackModel (t, atoi (getenv ("ATKMODEL")));
+		if (getenv ("RELMODEL")) setEnvReleaseModel (t, atoi (getenv ("RELMODEL")));
+		initToneGenerator (t, mc);
+		fprintf (f, "# sbf_ref adv\n");
+		for (k = 0; k < MAX_KEYS; k++) {
+			ListElement* lep;
+			if (64 <= k && k < 128)
+				continue;
+			for (lep = t->keyContrib[k]; lep; lep = lep->next)
+				fprintf (f, "contrib %d %d %d %.9g\n", k, LE_WHEEL_NUMBER_OF (lep), LE_BUSNUMBER_OF (lep), LE_LEVEL_OF (lep));
+		}
+		for (b = 0; b < 8; b++) {
+			fprintf (f, "attack %d", b);
+			for (i = 0; i < BUFFER_SIZE_SAMPLES; i++) fprintf (f, " %.7f", t->attackEnv[b][i]);
+			fprintf (f, "\nrelease %d", b);
+			for (i = 0; i < BUFFER_SIZE_SAMPLES; i++) fprintf (f, " %.7f", t->releaseEnv[b][i]);
+			fprintf (f, "\n");
+		}
+		fclose (f);
+		return 0;
+	}
+	fprintf (stderr, "usage: sbf_ref dump OUT.txt | adv OUT.txt | render OUT.f32 BARS SECS EVENTS\n");
 	return 2;
 }

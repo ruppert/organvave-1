@@ -20,7 +20,7 @@ from organ_bank import BANK  # noqa: E402
 
 OUT = os.path.join(HERE, "..", "firmware", "src", "eng_organ_presets.h")
 DUMP = os.path.join(HERE, "setbfree_ref", "tonegen_dump.txt")
-PSIZE = 64
+PSIZE = 96
 OP_UB, OP_LB, OP_PB, OP_TEMP, OP_XTALK = 0, 9, 18, 27, 28
 OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC, OP_ROT_BAL = 34, 35, 36, 37, 38, 39
 OP_DRV, OP_DRV_GAIN = 40, 41

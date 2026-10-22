@@ -32,7 +32,7 @@ NFRAG = 128
 
 
 def load(path):
-    d = {"wheel": {}, "contrib": [], "contribnx": [], "attack": {}, "release": {}, "keycomp": {}, "lower": False}
+    d = {"wheel": {}, "contrib": [], "contribnx": [], "attack": {}, "release": {}, "keycomp": {}, "lower": False, "topo": {}}
     for line in open(path):
         t = line.split()
         if not t or t[0].startswith("#"):
@@ -47,6 +47,8 @@ def load(path):
             d[t[0]][int(t[1])] = [float(x) for x in t[2:]]
         elif t[0] == "keycomp":
             d["keycomp"][int(t[1])] = float(t[2])
+        elif t[0] == "topo":
+            d["topo"][int(t[1])] = tuple(int(x) for x in t[2:8])
         elif t[0] == "gaintc":
             d["gaintc"] = float(t[1])
         elif t[0] == "lower":
@@ -55,7 +57,48 @@ def load(path):
             sys.exit("gen_organ_tables: the dump has wheel harmonics; the firmware's wheels are pure sines")
     assert d["lower"], "the dump must say that the lower manual is the upper one on buses + 9"
     assert sorted(d["wheel"]) == list(range(1, 92))
+    assert sorted(d["topo"]) == list(range(1, 92)), "the dump must carry the terminals' neighbours (sbf_ref dump: topo)"
     return d
+
+
+def glibc_ring(seed, pos):
+    """glibc's rand() (TYPE_3 additive feedback, srand(seed)) after `pos` outputs: the 31 words of its state (the raw 32-bit
+    values; an output is a word >> 1). The firmware continues the recurrence r[i] = r[i - 31] + r[i - 3]."""
+    r = [seed]
+    for i in range(1, 31):
+        hi, lo = divmod(r[i - 1], 127773)
+        w = 16807 * lo - 2836 * hi
+        r.append(w + 2147483647 if w < 0 else w)
+    a = r[:31]
+    for i in range(31, 34):
+        a.append(a[i - 31])
+    n = 344 + pos
+    for i in range(34, n):
+        a.append((a[i - 31] + a[i - 3]) & 0xFFFFFFFF)
+    return a[n - 31:n], a
+
+
+RAND_POS = 154561            # rand() outputs consumed before setBfree's initEnvelopes (srand(1): the wavetables' dither first)
+
+
+def check_envelopes(d):
+    """the rand() position above must give the dump's attack envelopes (default settings): a failure means the dump changed"""
+    ring, a = glibc_ring(1, RAND_POS + 4000)
+    out = [x >> 1 for x in a[344 + RAND_POS:]]
+    p = 0
+    for b in range(8):
+        burst = 16 + out[p] % 64
+        start = out[p + 1] % (128 - burst)
+        p += 2
+        x = [0.0] * start
+        for _ in range(burst):
+            x.append(1.0 - 0.5 * out[p] / 2147483647.0)
+            p += 1
+        x += [1.0] * (128 - len(x))
+        y = [x[0] / 2]
+        for i in range(1, 128):
+            y.append((y[-1] + x[i]) / 2)
+        assert max(abs(u - v) for u, v in zip(y, d["attack"][b])) < 1e-5, "RAND_POS does not give the dump's attack envelope %d" % b
 
 
 def pack(contrib):
@@ -130,6 +173,45 @@ def main():
             L += rows("", "", [q15u(x) for x in e], 16)
             L.append("  },")
         L.append("};")
+    check_envelopes(d)
+    ring, _ = glibc_ring(1, RAND_POS)
+    L.append("")
+    L.append("/* glibc's rand() state (srand(1)) at the point setBfree's initEnvelopes starts: the click envelopes of any setting are")
+    L.append(" * drawn from here (eng_organ.c org_env_build); an output is a word >> 1 */")
+    L.append("static const uint32_t ORG_RAND_RING[31] = {")
+    L += rows("", "", ring, 6, "{}u")
+    L.append("};")
+    L.append("")
+    L.append("/* the terminals' neighbours (the crosstalk model, setBfree's tonegen.c wheelPairs / transformers / terminalStrip), by wheel:")
+    L.append(" * the compartment's pair, the transformer row's two neighbours (wheels 44..91), the terminal strip's two neighbours; 0 none */")
+    for nm, col in (("ORG_XT_PAIR", 0), ("ORG_XT_TRE", 1), ("ORG_XT_TRW", 2), ("ORG_XT_TSE", 3), ("ORG_XT_TSW", 4)):
+        L.append("static const uint8_t %s[92] = {" % nm)
+        L += rows("", "", [0] + [d["topo"][w][col] for w in range(1, 92)], 23)
+        L.append("};")
+    L.append("")
+    L.append("/* the percussion's decay per block (32 samples), Q16, for 60 dB in 0.1 s .. 10.0 s (entry n: n * 0.1 s; n = 0 is 0.1 s) */")
+    L.append("static const uint16_t ORG_PERC_DEC[100] = {")
+    dec = [int(round(65536 * 10 ** (-96.0 / (FS * 0.1 * (n + 1))))) for n in range(100)]
+    assert dec[9] == 65208 and dec[39] == 65454, (dec[9], dec[39])
+    L += rows("", "", dec, 12)
+    L.append("};")
+    L.append("")
+    L.append("/* the crosstalk ladder (ADVANCED EDIT): index 0 off, then -100 .. 0 dB in 2 dB steps (index 51 is 1.0), Q24 */")
+    L.append("static const uint32_t ORG_XT_G[52] = {")
+    L += rows("", "", [0] + [int(round((1 << 24) * 10 ** (-(51 - j) * 2 / 20.0))) for j in range(1, 52)], 8, "{}u")
+    L.append("};")
+    L.append("")
+    L.append("/* the percussion's level steps, 0 .. -12 dB in 1 dB steps: gain * 2^23, so that (osc.perc.gain * 2) * entry is the envelope's start, Q24 */")
+    L.append("static const uint32_t ORG_PG[13] = {")
+    L += rows("", "", [int(round((1 << 23) * 10 ** (-j / 20.0))) for j in range(13)], 7, "{}u")
+    L.append("};")
+    L.append("")
+    L.append("/* the scanner's phase step for 4.0 .. 22.0 Hz in 0.25 Hz steps (ORG_VIB_INC * f / 7.25) */")
+    scan = [int(round(706122.0 * (4.0 + 0.25 * j) / 7.25)) for j in range(73)]      # (706122: the firmware's 7.25 Hz, eng_organ.c ORG_VIB_INC)
+    assert scan[13] == 706122
+    L.append("static const uint32_t ORG_SCAN_INC[73] = {")
+    L += rows("", "", scan, 8, "{}u")
+    L.append("};")
     L.append("")
     L.append("/* the key compression's gain for 0..127 keys down, Q15 */")
     L.append("static const uint16_t ORG_KEYCOMP[128] = {")

@@ -68,7 +68,7 @@ int main(void)
     {
         uint8_t pk[ORG_PSIZE];
         apply_preset(2);
-        memcpy(pk, org_patch, ORG_PSIZE); pk[OP_TEMP] = 1;
+        memcpy(pk, org_patch, ORG_PSIZE); pk[OP_TEMP] = 1; pk[OP_TUNING] = 70; pk[OP_XT_WIRE] = 9; pk[OP_SC_V3] = 5;
         org_set_patch(pk);
         TSEL->p[P_LEVEL] = 77; song.g[G_BPM] = 133;
         e0 = host_erases;
@@ -84,6 +84,20 @@ int main(void)
         power_on(1);
         bad += check("power-on after a clean boot: the organ patch, LEVEL, the tempo and the preset back",
                      org_patch[OP_TEMP] == 1 && TSEL->p[P_LEVEL] == 70 && song.g[G_BPM] == 133 && TSEL->preset == 2);
+        bad += check("  .. with the ADVANCED EDIT bytes (past the old 64)", org_patch[OP_TUNING] == 70 && org_patch[OP_XT_WIRE] == 9 && org_patch[OP_SC_V3] == 5);
+        {   /* a 0.9.3 record (64 patch bytes, no ADVANCED EDIT ones): still loads, the new bytes are the defaults */
+            as_rec_t a;
+            as_capture(&a);
+            memset(a.patch + OP_TUNING, 0, AS_PATCH0 - OP_TUNING);        /* (those bytes were reserved: 0) */
+            st_save(OBJ_AUTOSAVE, &a, AS_OLD_SIZE);
+            org_set_patch(pk);
+            power_on(1);
+            bad += check("a 0.9.3 autosave (shorter): loads, the ADVANCED EDIT bytes read as the defaults",
+                         org_patch[OP_TEMP] == 1 && TSEL->preset == 2 && org_patch[OP_TUNING] == 0 && org_patch[OP_XT_WIRE] == 0 && org_patch[OP_SC_V3] == 0);
+            st_save(OBJ_AUTOSAVE, &a, sizeof a);
+            power_on(1);
+            bad += check("  .. the full one again", org_patch[OP_TEMP] == 1);
+        }
         power_on(0);
         bad += check("power-on after a crash: the defaults (the autosave is not loaded)",
                      TSEL->p[P_LEVEL] != 70 && TSEL->preset == 0);

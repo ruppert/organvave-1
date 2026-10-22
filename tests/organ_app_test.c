@@ -308,10 +308,87 @@ int main(int argc, char **argv)
             turn(EN_ALGO, -1);
             bad += check("  .. the pedal's 8' is the second bar", oa_sel == 1 && org_patch[OP_PB + 2] == 3);
             press(B_EDIT);
+            bad += check("EDIT again: ADVANCED EDIT (a different picture)", oa_page == 8 && frame_hash() != h_lo);
+            press(B_EDIT);
             bad += check("EDIT again: back to the upper manual (no pedal page)", oa_man == 0 && oa_page == 1 && oa_sel == 0);
-            press(B_EDIT); press(B_EDIT); press(B_HOME); press(B_EDIT);
-            bad += check("  .. and from HOME it opens the upper manual", oa_man == 0);
+            press(B_EDIT); press(B_EDIT); press(B_EDIT); press(B_HOME); press(B_EDIT);
+            bad += check("  .. and from HOME it opens the upper manual", oa_man == 0 && oa_page == 1);
             org_set(OP_PB + 0, 0); org_set(OP_PB + 2, 0); org_set(OP_LB + 0, 0); org_set(OP_LB + 8, 0);
+        }
+        /* ADVANCED EDIT (0.9.4): EDIT, EDIT, EDIT; SELECT picks a row, ALGORITHM changes it by one step, the knobs 1-4 go to rows 1-4 */
+        {
+            uint32_t h_a, r;
+            memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
+            press(B_HOME);
+            press(B_EDIT); press(B_EDIT); press(B_EDIT);
+            bad += check("ADVANCED EDIT: the page after DRAWBARS' lower manual", oa_page == 8);
+            h_a = frame_hash();
+            bad += check("  .. 27 rows, the first picked", OA_NR[8] == 27 && oa_row[8] == 0);
+            turn(EN_ALGO, 1);
+            bad += check("  .. ALGORITHM raises TUNING by one step: 440.5 Hz", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 65 && frame_hash() != h_a);
+            turn(EN_ALGO, -2);
+            bad += check("  .. and lowers it: 439.5 Hz", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 63);
+            for (i = 0; i < 300u; i++)
+                turn(EN_ALGO, -1);
+            bad += check("  .. down to 408 Hz and stops", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 0 && org_patch[OP_TUNING] == 64);
+            for (i = 0; i < 300u; i++)
+                turn(EN_ALGO, 1);
+            bad += check("  .. up to 471.5 Hz and stops", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 127 && org_patch[OP_TUNING] == 63);
+            org_set(OP_TUNING, 0);
+            turn(EN_SELECT, 1);
+            bad += check("  .. SELECT picks the next row", oa_row[8] == 1);
+            turn(EN_ALGO, 1);
+            turn(EN_ALGO, 1);
+            turn(EN_ALGO, 1);
+            bad += check("  .. TEMPERAMENT: 60 Hz gear, 50 Hz gear, equal (and stops)", org_patch[OP_TEMP] == 2);
+            org_set(OP_TEMP, 0);
+            turn(EN_K3, 2);
+            bad += check("  .. knob 3 is ATTACK CLICK: 50 % -> 55 %", org_ci(OP_ATK_LEVEL, org_patch[OP_ATK_LEVEL]) == 22);
+            turn(EN_K4, -3);
+            bad += check("  .. knob 4 is RELEASE CLICK: 25 % -> 17.5 %", org_ci(OP_REL_LEVEL, org_patch[OP_REL_LEVEL]) == 7);
+            for (i = 0; i < 40u; i++)
+                turn(EN_SELECT, 1);
+            bad += check("  .. SELECT wraps around the 27 rows", oa_row[8] == (1 + 40) % 27);
+            for (r = 0; r < 27u; r++) {
+                uint32_t op = OA_AOP[r], rows_ok;
+                uint8_t before = org_patch[op];
+                oa_row[8] = (uint8_t)r;
+                oa_top[8] = 0;
+                turn(EN_ALGO, 1);
+                turn(EN_ALGO, -1);
+                rows_ok = op == OP_XTALK ? org_patch[op] == 0u : op == OP_TEMP ? org_patch[op] == 0u : org_ci(op, org_patch[op]) == org_ci(op, before) || org_ci(op, before) == org_pmax(op);   /* (at the top the step up stays, the one down moves) */
+                if (!rows_ok) printf("row %u op %u before %u after %u\n", r, op, before, org_patch[op]);
+                bad += check("  .. every row: a step up and down is a round trip (or the end stop)", rows_ok);
+                bad += org_patch[op] <= org_pmax(op) ? 0 : check("  .. every row stays in range", 0);
+            }
+            {
+                oa_val_t v;
+                memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
+                oa_val(8u, 0u, &v);
+                bad += check("  .. the defaults read 440.0 HZ", !strcmp(v.t, "440.0 HZ"));
+                oa_val(8u, 22u, &v);
+                bad += check("  .. PERC TRIGGER 1'", !strcmp(v.t, "1'"));
+                oa_val(8u, 23u, &v);
+                bad += check("  .. SCAN RATE 7.25 HZ", !strcmp(v.t, "7.25 HZ"));
+                oa_val(8u, 12u, &v);
+                bad += check("  .. WIRING -40 DB", !strcmp(v.t, "-40 DB"));
+                oa_val(8u, 13u, &v);
+                bad += check("  .. XT FLOOR -96 DB", !strcmp(v.t, "-96 DB"));
+                oa_val(8u, 9u, &v);
+                bad += check("  .. COMPARTMENT -40 DB", !strcmp(v.t, "-40 DB"));
+                oa_val(8u, 14u, &v);
+                bad += check("  .. XT MIN OFF", !strcmp(v.t, "OFF"));
+                oa_val(8u, 15u, &v);
+                bad += check("  .. PERC FAST 1.0 S", !strcmp(v.t, "1.0 S"));
+                oa_val(8u, 19u, &v);
+                bad += check("  .. PERC GAIN 11.0", !strcmp(v.t, "11.0"));
+                oa_val(8u, 7u, &v);
+                bad += check("  .. RELEASE MODEL LINEAR", !strcmp(v.t, "LINEAR"));
+            }
+            memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
+            press(B_EDIT);
+            bad += check("  .. EDIT goes back to the upper manual", oa_page == 1 && oa_man == 0);
+            press(B_HOME);
         }
         /* REVERB and DELAY (0.4.0): the send is the part's, the rest the instrument's globals */
         {
@@ -400,20 +477,20 @@ int main(int argc, char **argv)
             oa_page = 4;
         }
         if (shot_dir) {
-            static const char *const N[9] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq", "lower"};
+            static const char *const N[10] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq", "lower", "advanced"};
             uint32_t pg;
             org_set(OP_ROT, 1);
             org_set(OP_DRV, 1);
             oa_msg_until = 0;
             oa_pp_until = 0;
-            for (pg = 0; pg < 9u; pg++) {
+            for (pg = 0; pg < 10u; pg++) {
                 char path[200];
                 FILE *f;
                 if (pg == 7u) {                               /* (the EQ's shot shows something set) */
                     org_set(OP_EQ, 1); org_set(OP_EQ_LOW, eq_byte(5)); org_set(OP_EQ_MID, eq_byte(-3)); org_set(OP_EQ_FREQ, eq_fbyte(7));
                     org_set(OP_EQ_HIGH, eq_byte(2));
                 }
-                oa_page = (uint8_t)(pg == 8u ? 1u : pg);
+                oa_page = (uint8_t)(pg == 9u ? 8u : pg == 8u ? 1u : pg);
                 oa_man = (uint8_t)(pg == 8u);
                 oa_sel = (uint8_t)(pg == 8u ? 3u : 0u);
                 (void)frame_hash();

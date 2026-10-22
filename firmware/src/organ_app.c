@@ -32,11 +32,11 @@
 #define C_POP    RGB565(0x1b, 0x19, 0x17)
 #define C_HOT    RGB565(0x2e, 0x28, 0x22)
 
-static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY, 7 EQ (FX walks the FX pages) */
+static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY, 7 EQ (FX walks these), 8 ADVANCED EDIT (EDIT walks DRAWBARS and it) */
 static uint8_t oa_man;                                   /* the manual the DRAWBARS page edits: 0 UPPER, 1 LOWER with the PEDAL's two bars (MIDI channels 2 and 3) */
 static uint8_t oa_sel;                                   /* the bar SELECT has picked on DRAWBARS: UPPER 0..8; LOWER / PEDAL 0..10 (0, 1 the pedal's 16' and 8', then the lower's nine) */
-static uint8_t oa_row[8];                                /* each FX page: the row SELECT has picked */
-static uint8_t oa_top[8];                                /* ... and the first row on the screen */
+static uint8_t oa_row[9];                                /* each FX page: the row SELECT has picked */
+static uint8_t oa_top[9];                                /* ... and the first row on the screen */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
 
 /* ------------------------------------------------------------ pixels --- */
@@ -556,8 +556,8 @@ static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on t
  * and the knobs 1 to 4 go straight to the first four rows. A list longer than the screen scrolls with the pick. The rows of a page
  * are what oa_val shows and oa_adj1 changes (one detent). */
 #define OA_VIS 8u                                       /* rows on the screen */
-static const uint8_t OA_NR[8] = {0, 0, 5, 12, 5, 4, 6, 5};
-static const char *const OA_LB[8][12] = {
+static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 27};
+static const char *const OA_LB[9][27] = {
     {0},
     {0},
     {"PERCUSSION", "VOLUME", "DECAY", "HARMONIC", "VIBRATO"},
@@ -566,7 +566,20 @@ static const char *const OA_LB[8][12] = {
     {"SEND", "TYPE", "SIZE", "TONE"},
     {"SEND", "TYPE", "TIME", "FEEDBACK", "COLOUR", "MIX"},
     {"EQ", "LOW", "MID", "HIGH", "MID FREQ"},
+    {"TUNING", "TEMPERAMENT", "ATTACK CLICK", "RELEASE CLICK", "ATTACK MODEL", "CLICK LEN MIN", "CLICK LEN MAX", "RELEASE MODEL",
+     "CROSSTALK", "COMPARTMENT", "TRANSFORMER", "TERMINAL STRIP", "WIRING", "XT FLOOR", "XT MIN",
+     "PERC FAST", "PERC SLOW", "PERC NORMAL", "PERC SOFT", "PERC GAIN", "PERC BUS A", "PERC BUS B", "PERC TRIGGER",
+     "SCAN RATE", "VIB1 DEPTH", "VIB2 DEPTH", "VIB3 DEPTH"},
 };
+/* ADVANCED EDIT: row -> the patch byte (eng_organ.c OP_*). The knobs 1-4 go to the first four rows */
+static const uint8_t OA_AOP[27] = {
+    OP_TUNING, OP_TEMP, OP_ATK_LEVEL, OP_REL_LEVEL, OP_ATK_MODEL, OP_ATK_MIN, OP_ATK_MAX, OP_REL_MODEL,
+    OP_XTALK, OP_XT_COMP, OP_XT_TRANS, OP_XT_TSTRIP, OP_XT_WIRE, OP_XT_FLOOR, OP_XT_MIN,
+    OP_PC_FAST, OP_PC_SLOW, OP_PC_NORM, OP_PC_SOFT, OP_PC_GAIN, OP_PC_BUSA, OP_PC_BUSB, OP_PC_TRIG,
+    OP_SC_HZ, OP_SC_V1, OP_SC_V2, OP_SC_V3,
+};
+static const char *const OA_FOOT[9] = {"16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'"};
+static const char *const OA_ENVM[4] = {"CLICK", "COSINE", "LINEAR", "SHELF"};
 typedef struct {
     char t[16];                                         /* the value's text */
     int8_t mn, mv;                                      /* a meter of mn cells with mv lit (mn 0: none) */
@@ -622,13 +635,68 @@ static void oa_vramp(oa_val_t *v, uint32_t op, uint32_t base_us, int32_t dec)
     v->on = 1;
 }
 
+static int32_t oa_ai(uint32_t op) { return (int32_t)org_ci(op, org_patch[op] <= org_pmax(op) ? org_patch[op] : 0u); }   /* the step an ADVANCED byte shows */
+static void oa_vladder(oa_val_t *v, int32_t i, const char *zero)      /* 0 = off; else -2 dB steps up to 0 dB */
+{
+    if (i == 0) {
+        oa_vt(v, zero);
+        return;
+    }
+    oa_vnum(v, -2 * (51 - i), 0, " DB");
+    v->on = 1;
+}
+static void oa_val_adv(uint32_t r, oa_val_t *v)
+{
+    uint32_t op = OA_AOP[r];
+    int32_t i;
+    if (op == OP_TEMP) {
+        i = oa_u(OP_TEMP, 2u);
+        oa_vt(v, i == 2 ? "EQUAL" : i == 1 ? "50 HZ GEAR" : "60 HZ GEAR");
+        v->on = 1;
+        return;
+    }
+    if (op == OP_XTALK) {
+        oa_vsw(v, OP_XTALK, "OFF", "ON");
+        return;
+    }
+    i = oa_ai(op);
+    v->on = 1;
+    switch (op) {
+    case OP_TUNING:     oa_vnum(v, 4080 + 5 * i, 1, " HZ"); break;
+    case OP_ATK_MODEL:
+    case OP_REL_MODEL:  oa_vt(v, OA_ENVM[i & 3]); break;
+    case OP_ATK_LEVEL:
+    case OP_REL_LEVEL:  oa_vnum(v, i * 5 / 2, 0, " %"); break;
+    case OP_ATK_MIN:
+    case OP_ATK_MAX:    oa_vnum(v, i * 16 / 5, 0, " SMP"); break;
+    case OP_XT_FLOOR:
+    case OP_XT_MIN:     oa_vladder(v, i, "OFF"); break;
+    case OP_XT_COMP:
+    case OP_XT_TRANS:
+    case OP_XT_TSTRIP:
+    case OP_XT_WIRE:    oa_vladder(v, i, "NONE"); break;
+    case OP_PC_FAST:
+    case OP_PC_SLOW:    oa_vnum(v, i + 1, 1, " S"); break;
+    case OP_PC_NORM:
+    case OP_PC_SOFT:    oa_vnum(v, -i, 0, " DB"); break;
+    case OP_PC_GAIN:    oa_vnum(v, 5 * i, 1, 0); break;
+    case OP_PC_BUSA:
+    case OP_PC_BUSB:    oa_vt(v, OA_FOOT[i % 9]); break;
+    case OP_PC_TRIG:    oa_vt(v, i ? OA_FOOT[(i - 1) % 9] : "NONE"); break;
+    case OP_SC_HZ:      oa_vnum(v, 400 + 25 * i, 2, " HZ"); break;
+    default:            oa_vnum(v, 5 * i, 1, 0); break;                  /* the scanner's depths, in samples */
+    }
+}
+
 static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
 {
     int32_t i;
     v->t[0] = 0;
     v->mn = v->mv = 0;
     v->on = 0;
-    if (pg == 2u) {
+    if (pg == 8u) {
+        oa_val_adv(r, v);
+    } else if (pg == 2u) {
         if (r == 0u)
             oa_vsw(v, OP_PERC, "OFF", "ON");
         else if (r == 1u)
@@ -755,10 +823,22 @@ static void oa_eqs(uint32_t op, int32_t d)
 {
     org_set(op, eq_byte(clamp(eq_db(org_patch[op] <= 24u ? org_patch[op] : 0u) + d, -12, 12)));
 }
+static void oa_adj_adv(uint32_t r, int32_t d)
+{
+    uint32_t op = OA_AOP[r];
+    if (op == OP_TEMP)
+        org_set(OP_TEMP, (uint32_t)clamp(oa_u(OP_TEMP, 2u) + d, 0, 2));
+    else if (op == OP_XTALK)
+        org_set(OP_XTALK, d > 0 ? 1u : 0u);
+    else
+        org_set(op, org_bi(op, (uint32_t)clamp(oa_ai(op) + d, 0, (int32_t)org_pmax(op))));
+}
 static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
 {
     uint32_t on = d > 0 ? 1u : 0u;
-    if (pg == 2u) {
+    if (pg == 8u) {
+        oa_adj_adv(r, d);
+    } else if (pg == 2u) {
         if (r == 0u)
             org_set(OP_PERC, on);
         else if (r == 1u)
@@ -844,7 +924,7 @@ static void oa_rows(uint32_t pg, const char *state)
     if (sel >= top + OA_VIS)
         top = sel - OA_VIS + 1u;
     oa_top[pg] = (uint8_t)top;
-    header(pg == 2u ? "PERC & VIB" : pg == 3u ? "ROTARY" : pg == 4u ? "DRIVE" : pg == 5u ? "REVERB" : pg == 6u ? "DELAY" : "EQ", state);
+    header(pg == 8u ? "ADVANCED EDIT" : pg == 2u ? "PERC & VIB" : pg == 3u ? "ROTARY" : pg == 4u ? "DRIVE" : pg == 5u ? "REVERB" : pg == 6u ? "DELAY" : "EQ", state);
     for (i = 0; i < OA_VIS && top + i < n; i++) {
         oa_val_t v;
         uint32_t r = top + i;
@@ -926,15 +1006,15 @@ static void scr_drawbars(void)
         oa_reg(r, &org_patch[OP_UB]);
         ctext(120, 203, &AF_N, r, C_CREAM, C_PANEL);
     }
-    footer(oa_man ? "SELECT: BAR   ALGORITHM: PULL   EDIT: UPPER" : "SELECT: BAR   ALGORITHM: PULL   EDIT: LOWER");
+    footer(oa_man ? "SELECT: BAR   ALGORITHM: PULL   EDIT: ADVANCED" : "SELECT: BAR   ALGORITHM: PULL   EDIT: LOWER");
 }
 
 static void oa_scene(void)
 {
     if (oa_page == 1u)
         scr_drawbars();
-    else if (oa_page >= 2u && oa_page <= 7u)
-        oa_rows(oa_page, oa_page == 2u ? "" : oa_page == 3u ? (org_patch[OP_ROT] ? ROT_SPD[oa_u(OP_ROT_SPEED, 2u)] : "OFF") :
+    else if (oa_page >= 2u && oa_page <= 8u)
+        oa_rows(oa_page, oa_page == 2u || oa_page == 8u ? "" : oa_page == 3u ? (org_patch[OP_ROT] ? ROT_SPD[oa_u(OP_ROT_SPEED, 2u)] : "OFF") :
                          oa_page == 4u ? (org_patch[OP_DRV] ? (org_patch[OP_DRV_TYPE] ? "TUBE" : "DIST") : "OFF") :
                          oa_page == 5u ? (TSEL->p[P_REV] ? N_RTYPE[clamp(song.g[G_RTYPE], 0, 4)] : "OFF") :
                          oa_page == 6u ? (TSEL->p[P_DLY] ? N_DLYTYPE[clamp(song.g[G_DTIME], 0, 6)] : "OFF") :
@@ -959,7 +1039,7 @@ static uint32_t oa_signature(void)
     uint32_t h = 2166136261u, i;
     for (i = 0; i < ORG_PSIZE; i++)
         h = (h ^ org_patch[i]) * 16777619u;
-    h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_sel << 2 ^ (uint32_t)oa_row[oa_page & 7u] << 18 ^ (uint32_t)oa_top[oa_page & 7u] << 22 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
+    h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_sel << 2 ^ (uint32_t)oa_row[oa_page % 9u] << 18 ^ (uint32_t)oa_top[oa_page % 9u] << 22 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
     h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_midi_ch << 6) * 16777619u;
     h = (h ^ oa_sv ^ (uint32_t)oa_sv_slot << 1 ^ (uint32_t)oa_sv_pos << 8 ^ (uint32_t)oa_msg_on() << 12 ^
          (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16) * 16777619u;
@@ -1032,8 +1112,12 @@ static void oa_buttons(uint32_t pressed)
         oa_page = 0;
         return;
     }
-    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars; again: the lower manual's with the pedal's two, then the upper's */
+    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars (upper); again: the lower manual's with the pedal's two; again: ADVANCED EDIT; again: the upper's */
         oa_close_all();
+        if (oa_page == 1u && oa_man) {
+            oa_page = 8;
+            return;
+        }
         oa_man = oa_page == 1u ? (uint8_t)(oa_man ^ 1u) : 0u;
         oa_sel = (uint8_t)(oa_man && oa_page == 1u ? (oa_sel < 2u ? oa_sel : 2u) : 0u);
         oa_page = 1;
@@ -1156,7 +1240,7 @@ static void oa_input(void)
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         oa_preset(s);
-    if (oa_page >= 2u && oa_page <= 7u) {                 /* the FX pages: SELECT picks a row, ALGORITHM changes it, the knobs 1-4 go to rows 1-4 */
+    if (oa_page >= 2u && oa_page <= 8u) {                 /* the FX pages and ADVANCED EDIT: SELECT picks a row, ALGORITHM changes it, the knobs 1-4 go to rows 1-4 */
         uint32_t pg = oa_page, n = OA_NR[pg];
         if ((s = panel_enc(EN_SELECT)) != 0)
             oa_row[pg] = (uint8_t)((oa_row[pg] + n + (s > 0 ? 1u : n - 1u)) % n);
@@ -1196,8 +1280,8 @@ static void oa_leds(void)
     for (k = 0; k < NB; k++)
         led_put(nd, panel.btn[k], 1);                       /* every button's glow */
     led_put(nl, panel.btn[B_HOME], oa_page == 0u);
-    led_put(nl, panel.btn[B_EDIT], oa_page == 1u);
-    led_put(nl, panel.btn[B_FX], oa_page >= 2u);
+    led_put(nl, panel.btn[B_EDIT], oa_page == 1u || oa_page == 8u);
+    led_put(nl, panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
     led_put(nl, panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
     led_put(nl, panel.btn[B_LFO], org_patch[OP_VIB] != 0);

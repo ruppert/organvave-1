@@ -13,7 +13,7 @@ if [ ! -d "$OUT/setBfree/src" ]; then
 fi
 S="$OUT/setBfree/src"
 cc -O2 -std=gnu99 -w -I"$S" -I"$OUT/setBfree/b_whirl" -I"$OUT/setBfree/b_overdrive" -I"$OUT/setBfree/b_reverb" \
-	-DHAVE_ASEQ=0 -o "$OUT/sbf_ref" "$HERE/sbf_ref.c" "$HERE/stubs.c" \
+	-DHAVE_ASEQ=0 -DNDEBUG -o "$OUT/sbf_ref" "$HERE/sbf_ref.c" "$HERE/stubs.c" \
 	"$S/vibrato.c" "$S/midi.c" "$S/cfgParser.c" "$S/state.c" "$S/pgmParser.c" "$S/program.c" -lm
 echo "built $OUT/sbf_ref"
 

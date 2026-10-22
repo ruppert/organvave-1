@@ -237,6 +237,7 @@ designed one; the static budget of the new functions.
 | 0.9.1 | fix: the rotary cabinet (both models) hard-clipped its input at +-1.0 (Q15) while the dry path hands a chord, several times that, to the soft limiter; the input is now taken down by 4 and the output brought back by 4 before MASTER (tests/effects_test.c section 10: the output follows the swell linearly) (not yet on an FM-1) |
 | 0.9.2 | the panel (owner): SELECT picks an item and ALGORITHM changes it on every FX page and on DRAWBARS; DRIVE: TYPE (DISTORTION, the former drive; TUBE, a cubic valve curve with a triode's asymmetry, no latency), GAIN, TONE (a tilt around 1 kHz), OUTPUT, the character is gone; ROTARY: the Leslie's horn and drum speeds and ramps; LOWER and PEDAL on one page, the pedal with its two real bars (patch bytes 48..56; (not yet on an FM-1) |
 | 0.9.3 | the Leslie defaults (owner): horn FAST 390 rpm, horn ramp 1.5 s (deceleration twice that); the sliders and the ROTARY page scale around them (not yet on an FM-1) |
+| 0.9.4 | ADVANCED EDIT (owner): EDIT walks UPPER, LOWER + PEDAL, then a page of 27 rows with setBfree's tone-generator settings (key click, crosstalk, tuning, percussion, scanner); the patch grows to 96 bytes (57..81), the crosstalk and click tables are built in RAM while no key holds them (not yet on an FM-1) |
 | 0.9.x | further betas |
 | 1.0.0 | after the owner tests it on the hardware |
 

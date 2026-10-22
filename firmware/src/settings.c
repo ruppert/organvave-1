@@ -96,12 +96,22 @@ static void settings_init(void)                /* after persist_boot and panel_i
 #define AS_IDLE_MS 10000u
 #define AS_GAP_MS 60000u
 #define AS_RETRY_MS 30000u
+#define AS_PATCH0 64u                          /* the patch bytes the first autosave records held */
+_Static_assert(ORG_PSIZE >= AS_PATCH0, "the patch grows");
 typedef struct {
     uint32_t magic;
     up_rec_t r;                                /* the part's values and extras (upreset.c up_capture) */
-    uint8_t patch[ORG_PSIZE];                  /* the organ patch (eng_organ.c OP_*) */
+    uint8_t patch[AS_PATCH0];                  /* the organ patch (eng_organ.c OP_*): its first AS_PATCH0 bytes (the 0.9.3 record ends after rsv) */
     uint8_t preset, user, rsv[2];              /* the factory preset, the user preset + 1 it came from; spare */
+    uint8_t patch_ext[ORG_PSIZE - AS_PATCH0];  /* 0.9.4: the rest of the patch (ADVANCED EDIT); an older record has none, the bytes read as 0 (the defaults) */
 } as_rec_t;
+typedef struct {                               /* the 0.9.3 record (ORG_PSIZE 64), whose length an old autosave still has */
+    uint32_t magic;
+    up_rec_t r;
+    uint8_t patch[AS_PATCH0];
+    uint8_t preset, user, rsv[2];
+} as_rec0_t;
+#define AS_OLD_SIZE sizeof(as_rec0_t)
 _Static_assert(sizeof(as_rec_t) <= ST_PAYLOAD_MAX, "the autosave in one flash sector");
 static struct {
     uint32_t saved, seen;                      /* the signature written last (or restored), seen last */
@@ -114,7 +124,8 @@ static void as_capture(as_rec_t *a)
     memset(a, 0, sizeof *a);
     a->magic = AS_MAGIC;
     up_capture(&a->r, 0, "AUTOSAVE");
-    memcpy(a->patch, org_patch, ORG_PSIZE);
+    memcpy(a->patch, org_patch, AS_PATCH0);
+    memcpy(a->patch_ext, org_patch + AS_PATCH0, ORG_PSIZE - AS_PATCH0);
     a->preset = TSEL->preset;
     a->user = TSEL->user;
 }
@@ -135,8 +146,11 @@ static uint32_t autosave_sig(void)             /* FNV-1a of what the record hold
 static int autosave_boot(int allowed)
 {
     as_rec_t a;
-    int rc = 0;
-    if (flash_ok && allowed && st_load(OBJ_AUTOSAVE, &a, sizeof a) == (int)sizeof a && a.magic == AS_MAGIC &&
+    uint8_t full[ORG_PSIZE];
+    int rc = 0, n;
+    memset(&a, 0, sizeof a);
+    n = flash_ok && allowed ? st_load(OBJ_AUTOSAVE, &a, sizeof a) : -1;
+    if ((n == (int)sizeof a || n == (int)AS_OLD_SIZE) && a.magic == AS_MAGIC &&
         up_valid(&a.r) && eng_ok(a.r.engine)) {
         track_t *t = TSEL;
         int16_t v[P_COUNT];
@@ -157,7 +171,9 @@ static int autosave_boot(int allowed)
         t->preset = a.preset;
         t->user = a.user <= UP_SLOTS ? a.user : 0u;
         fm1_irq_on();
-        org_set_patch(a.patch);
+        memcpy(full, a.patch, AS_PATCH0);
+        memcpy(full + AS_PATCH0, a.patch_ext, ORG_PSIZE - AS_PATCH0);
+        org_set_patch(full);
         up_extras(&a.r);
         rc = 1;
     }

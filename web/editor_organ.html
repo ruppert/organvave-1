@@ -30,6 +30,7 @@
   .bar { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--dim); }
   .bar input { writing-mode: vertical-lr; direction: rtl; width: 26px; height: 150px; accent-color: var(--orange); margin: 4px 0; }
   .bar output { color: var(--cream); font-weight: 700; }
+  .set h4, #advgroups h4 { font-size: 12px; margin: 14px 0 2px; color: var(--chrome); font-weight: 600; }
   .set { margin-top: 14px; } .set h3 { font-size: 13px; margin: 0 0 4px; color: var(--chrome); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
   .note { font-size: 13px; color: var(--dim); }
   label.chk { display: inline-flex; gap: 6px; align-items: center; }
@@ -177,17 +178,25 @@
         <input type="range" id="eqhigh" min="-12" max="12" step="1"> <output id="eqhigho"></output>
       </label>
     </div>
+
+    <div id="advbox">
+      <div class="set"><h3>Advanced (0.9.4: setBfree's tone generator)</h3></div>
+      <p class="note">The steps the panel's ADVANCED EDIT page shows. The middle of each slider is setBfree's default; an older patch reads as the
+        defaults. The crosstalk steps are 2 dB each (the firmware keeps the table in RAM; a setting that makes it too big raises the floor). The release
+        click level acts with the CLICK release model.</p>
+      <div id="advgroups"></div>
+    </div>
   </div>
 </main>
 
 <script>
 // ---- the protocol (web/EDITOR_PROTOCOL.md): F0 7D 46 4C <cmd> <args> F7
 const CMD = { INFO: 1, ORG_GET: 85, ORG_PUT: 86 };
-const ORG_PSIZE = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, OP_PERC = 29, OP_PERC_SOFT = 30,
+const ORG_PSIZE = 96, ORG_PSIZE_OLD = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, OP_PERC = 29, OP_PERC_SOFT = 30,
       OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, OP_ROT = 34, OP_ROT_MODEL = 35, OP_ROT_SPEED = 36,
       OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_EQ = 43, OP_EQ_LOW = 44, OP_EQ_MID = 45, OP_EQ_FREQ = 46, OP_EQ_HIGH = 47,
       OP_DRV_TYPE = 48, OP_DRV_TONE = 49, OP_DRV_OUT = 50, OP_ROT_HSLOW = 51, OP_ROT_HFAST = 52, OP_ROT_DSLOW = 53, OP_ROT_DFAST = 54,
-      OP_ROT_HRAMP = 55, OP_ROT_DRAMP = 56, PUT_MAX = 48;
+      OP_ROT_HRAMP = 55, OP_ROT_DRAMP = 56, OP_TUNING = 57, OP_SC_V3 = 81, PUT_MAX = 48;
 // the equaliser's bytes: zero is flat. A gain byte s is s dB up to 12 and s - 25 above; the frequency byte f is the index (f + 5) % 12 of
 // this list (0 is 900 Hz)
 const EQ_HZ = [160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200];
@@ -199,6 +208,44 @@ const c9 = (b) => (b + 4) % 9, b9 = (i) => (i + 5) % 9;
 const ROT_SPF = [163, 182, 204, 229, 256, 287, 321, 360, 403], ROT_RTF = [67, 93, 131, 183, 256, 358, 502, 702, 983];
 const SPEEDS = [["rhs", OP_ROT_HSLOW, 672], ["rhf", OP_ROT_HFAST, 6500], ["rds", OP_ROT_DSLOW, 600], ["rdf", OP_ROT_DFAST, 5955]];
 const RAMPS = [["rhr", OP_ROT_HRAMP, 1500000, 2], ["rdr", OP_ROT_DRAMP, 4127000, 1]];
+// ADVANCED EDIT (0.9.4, the bytes 57..81): [op, label, n steps, default step, text of a step]. A byte is (step - default) mod n, so a
+// zero byte is the default. The ladder is -2 dB a step up to 0 dB (step 0 is off), as the firmware's ORG_XT_G
+const ENVM = ["Click", "Cosine", "Linear", "Shelf"];
+const pct40 = (i) => (i * 2.5).toFixed(1).replace(/\.0$/, "") + " %", smp = (i) => Math.floor(i * 16 / 5) + " samples";
+const ladder = (zero) => (i) => (i === 0 ? zero : -2 * (51 - i) + " dB");
+const secs = (i) => ((i + 1) / 10).toFixed(1) + " s";
+const ADV_GROUPS = [
+  ["Key click and tuning", [
+    [57, "Tuning (A4)", 128, 64, (i) => (408 + i / 2).toFixed(1) + " Hz"],
+    [59, "Attack click level", 41, 20, pct40],
+    [60, "Attack click length, min (shorter = brighter click)", 41, 5, smp],
+    [61, "Attack click length, max", 41, 25, smp],
+    [58, "Attack model", 4, 0, (i) => ENVM[i]],
+    [63, "Release click level", 41, 10, pct40],
+    [62, "Release model", 4, 2, (i) => ENVM[i]]]],
+  ["Crosstalk (needs the Crosstalk box above)", [
+    [64, "Compartment (the wheel pair)", 52, 31, ladder("none")],
+    [65, "Transformer neighbours", 52, 0, ladder("none")],
+    [66, "Terminal strip neighbours", 52, 31, ladder("none")],
+    [67, "Wiring (the other buses of the key)", 52, 31, ladder("none")],
+    [68, "Contribution floor", 52, 3, ladder("off")],
+    [69, "Contribution minimum", 52, 0, ladder("off")]]],
+  ["Percussion", [
+    [70, "Fast decay", 100, 9, secs],
+    [71, "Slow decay", 100, 39, secs],
+    [72, "Normal level", 13, 0, (i) => -i + " dB"],
+    [73, "Soft level", 13, 6, (i) => -i + " dB"],
+    [74, "Gain", 45, 22, (i) => (i / 2).toFixed(1)],
+    [75, "Second bus (4′)", 9, 3, (i) => FOOT[i]],
+    [76, "Third bus (2⅔′)", 9, 4, (i) => FOOT[i]],
+    [77, "Muted drawbar", 10, 9, (i) => (i ? FOOT[i - 1] : "none")]]],
+  ["Scanner vibrato", [
+    [78, "Rate", 73, 13, (i) => (4 + i / 4).toFixed(2) + " Hz"],
+    [79, "Depth, vibrato 1 / chorus 1", 25, 6, (i) => (i / 2).toFixed(1) + " samples"],
+    [80, "Depth, vibrato 2 / chorus 2", 25, 12, (i) => (i / 2).toFixed(1) + " samples"],
+    [81, "Depth, vibrato 3 / chorus 3", 25, 18, (i) => (i / 2).toFixed(1) + " samples"]]]];
+const ADVC = [];                                     // { op, n, d, fmt, inp, out } of each slider
+
 const speedText = (i, base) => Math.floor(((base * ROT_SPF[i]) >> 8) * 3 / 50) + " rpm";
 const rampText = (i, base, dec) => ((((base >> 4) * ROT_RTF[i]) >> 4) / 1e6).toFixed(dec) + " s";
 const FOOT = ["16′", "5⅓′", "8′", "4′", "2⅔′", "2′", "1⅗′", "1⅓′", "1′"];
@@ -206,7 +253,8 @@ const $ = (id) => document.getElementById(id);
 
 let dev = null;           // { input, output, name }
 let waiter = null;        // { cmd, resolve, timer } for the one request in flight
-let patch = null;         // the 64 bytes last read or edited (the sanitized layout is the device's)
+let patch = null;         // the 96 bytes last read or edited (the sanitized layout is the device's)
+let psize = ORG_PSIZE;    // what the device holds: 96 (0.9.4), or 64 (an older firmware: no ADVANCED EDIT)
 let busy = false;
 
 const say = (text, kind = "") => { $("status").textContent = text; $("status").className = "status " + kind; };
@@ -262,14 +310,18 @@ async function open(p) {
   try { await p.input.open(); await p.output.open(); } catch (_) { return say("Could not open the MIDI port.", "bad"); }
   p.input.onmidimessage = onMidi;
   dev = p;
-  // INFO's tail says the firmware has the organ patch: 4F 01 ORG_PSIZE at the end of the reply (the F7 is not in r)
+  // INFO's tail says the firmware has the organ patch: 4F 01 ORG_PSIZE at the end of the reply (the F7 is not in r); 64 is 0.1.0 .. 0.9.3
+  let info_psize = 0;
   try {
     const info = await request(CMD.INFO, [], 1500);
     const n = info.length;
-    if (!(info[n - 3] === 0x4F && info[n - 2] === 1 && info[n - 1] === ORG_PSIZE)) {
+    info_psize = info[n - 1];
+    if (!(info[n - 3] === 0x4F && info[n - 2] === 1 && (info[n - 1] === ORG_PSIZE || info[n - 1] === ORG_PSIZE_OLD))) {
       dev = null; return say("The device answers, but its firmware has no organ patch. Install OrganVave-1 0.1.0 or later.", "bad");
     }
   } catch (err) { dev = null; return say("The device did not answer: " + err.message + ". Check the cable and the port.", "bad"); }
+  psize = info_psize;
+  $("advbox").hidden = psize < ORG_PSIZE;
   $("dev").textContent = p.name;
   setEnabled(true);
   await readPatch();
@@ -280,11 +332,13 @@ function setEnabled(on) {
   $("connect").textContent = on ? "Reconnect" : "Connect";
 }
 
-// ORG_GET: target, index. Reply: target, index, rc, then the 64 bytes when rc = 0
+// ORG_GET: target, index. Reply: target, index, rc, then the patch's 96 bytes (64 from an older firmware) when rc = 0
 async function fetchPatch(target, index) {
   const r = await request(CMD.ORG_GET, [target, index]);
   if (r[2] !== 0) throw new Error(RC[r[2]] || "rc " + r[2]);
-  return r.slice(3, 3 + ORG_PSIZE);
+  const got = Array.from(r.slice(3, 3 + psize));
+  while (got.length < ORG_PSIZE) got.push(0);        // (an older firmware: the ADVANCED bytes are the defaults)
+  return got;
 }
 
 async function readPatch() {
@@ -317,6 +371,33 @@ function buildBars() {
       host.appendChild(w);
       w._out = out; w._inp = inp;
     });
+  }
+}
+
+function buildAdv() {
+  const host = $("advgroups");
+  host.innerHTML = "";
+  for (const [title, rows] of ADV_GROUPS) {
+    const h = document.createElement("h4"); h.textContent = title; host.appendChild(h);
+    const box = document.createElement("div"); box.className = "set row"; host.appendChild(box);
+    for (const [op, label, n, d, fmt] of rows) {
+      const w = document.createElement("label");
+      const out = document.createElement("output");
+      const inp = document.createElement("input");
+      inp.type = "range"; inp.min = 0; inp.max = n - 1; inp.step = 1; inp.value = d;
+      inp.setAttribute("aria-label", label);
+      const c = { op, n, d, fmt, inp, out };
+      inp.oninput = () => { if (!patch) return; patch[op] = (Number(inp.value) - d + n) % n; out.textContent = fmt(Number(inp.value)); };
+      w.append(label + " ", inp, out);
+      box.appendChild(w);
+      ADVC.push(c);
+    }
+  }
+}
+function showAdv() {
+  for (const c of ADVC) {
+    const i = ((patch[c.op] ?? 0) + c.d) % c.n;
+    c.inp.value = i; c.out.textContent = c.fmt(i);
   }
 }
 
@@ -354,6 +435,7 @@ function showPatch() {
     $(id).value = db; $(id + "o").textContent = dbText(db);
   }
   $("eqfreq").value = String(eqFidx(patch[OP_EQ_FREQ] ?? 0));
+  showAdv();
 }
 // the sliders' texts
 function words() {
@@ -399,15 +481,16 @@ function fromControls() {
   patch[OP_EQ_HIGH] = eqByte(Number($("eqhigh").value));
   patch[OP_EQ_FREQ] = eqFbyte(Number($("eqfreq").value));
   for (const id of ["eqlow", "eqmid", "eqhigh"]) $(id + "o").textContent = dbText(Number($(id).value));
+  for (const c of ADVC) { patch[c.op] = (Number(c.inp.value) - c.d + c.n) % c.n; c.out.textContent = c.fmt(Number(c.inp.value)); }
 }
 
-// ORG_PUT: target 0, offset, count, count bytes (count <= 48). Two writes for the 57 used bytes; reply: target, offset, rc
+// ORG_PUT: target 0, offset, count, count bytes (count <= 48). Two writes for the used bytes; reply: target, offset, rc
 async function sendPatch() {
   if (busy || !dev || !patch) return;
   busy = true; setEnabled(true);
   try {
     fromControls();
-    const used = OP_ROT_DRAMP + 1;                   // 57 bytes: two frames (a frame carries at most 48)
+    const used = psize >= ORG_PSIZE ? OP_SC_V3 + 1 : OP_ROT_DRAMP + 1;   // 82 bytes (57 for an older firmware): two frames (a frame carries at most 48)
     for (let off = 0; off < used; off += PUT_MAX) {
       const n = Math.min(PUT_MAX, used - off);
       const r = await request(CMD.ORG_PUT, [0, off, n, ...patch.slice(off, off + n)]);
@@ -419,6 +502,7 @@ async function sendPatch() {
 }
 
 buildBars();
+buildAdv();
 EQ_HZ.forEach((hz, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = hz >= 1000 ? (hz / 1000) + " kHz" : hz + " Hz"; $("eqfreq").appendChild(o); });
 $("connect").onclick = connect;
 $("read").onclick = readPatch;
