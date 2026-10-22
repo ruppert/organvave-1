@@ -12,7 +12,7 @@ palette 80-81, and the FMUG patch 82-84 (FMini-1's engine, removed in 0.1.0).
 
 - One track (`NTRK` 1; `TRACK` lists one, its selection argument is accepted and ignored).
 - `INFO` still starts with `"FELUCCA "` and Felucca's version and names 16 engines (`NENGINES`): engines 0..14 are `"-"` with
-  no presets (`PRESET` of one: no reply); engine 15 is `ORGAN` with 8 factory patches. After the track count it ends with the
+  no presets (`PRESET` of one: no reply); engine 15 is `ORGAN` with 16 factory patches (8 up to 0.3.1). After the track count it ends with the
   tags `53 01 03` (live sync) and `4F 01 ORG_PSIZE` (the organ patch: 64 bytes); the editor reads the last four bytes.
 - A request frame longer than 64 bytes is dropped whole (the longest request, `ORG_PUT` of 48 bytes, is 54).
 - User presets are the records of `upreset.c` (`UPB1` banks; the patch of each in its own object, `UPF6`). An organ

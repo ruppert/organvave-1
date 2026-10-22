@@ -429,11 +429,22 @@ static volatile uint8_t fm_bend_mode;                    /* GLO > PITCH BEND: 0 
 static volatile uint8_t fm_bt;                           /* GLO > BLUETOOTH ON/OFF: the Bluetooth MIDI source is heard only when ON */
 static volatile uint8_t fm_cc_rx[128];
 static volatile uint32_t fm_cc_pend[4];
-static int fm_midi_ok(uint32_t source, uint32_t ch)
+/* The organ's manuals by MIDI channel, as setBfree's defaults: the upper on channel 1, the lower on 2, the pedals on 3 (any other
+ * channel plays the upper, as before 0.4.0). GLO > MIDI IN's channel N moves the three to N, N + 1, N + 2 (round the 16) and then
+ * ignores every other channel. Returns 0 upper, 1 lower, 2 pedals, 3 none */
+static uint32_t __attribute__((noinline)) org_manual_of(uint32_t ch)
+{
+    uint32_t d;
+    if (!fm_midi_ch)
+        return ch == 1u ? 1u : ch == 2u ? 2u : 0u;
+    d = (ch + 16u - (fm_midi_ch - 1u)) & 15u;
+    return d < 3u ? d : 3u;
+}
+static int __attribute__((noinline)) fm_midi_ok(uint32_t source, uint32_t ch)
 {
     if (source == 3u && !fm_bt)
         return 0;
-    return (fm_midi_src == 3u || fm_midi_src + 1u == source) && (!fm_midi_ch || fm_midi_ch - 1u == ch);
+    return (fm_midi_src == 3u || fm_midi_src + 1u == source) && org_manual_of(ch) < 3u;
 }
 
 #include "midi_control.c"

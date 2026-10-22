@@ -197,6 +197,19 @@ effects (above), VOICE (click, crosstalk, tuning 60 / 50 Hz / equal, level), LOW
 FAST / SLOW. MIDI CC as setBfree: upper drawbars 70..78 (inverted), swell CC 7 / 11, sustain toggles the rotor. Editor: new
 commands from 85 (ORG_GET / ORG_PUT / ORG_PRESET), an INFO tag, a drawbar value format.
 
+### MIDI (0.4.0)
+
+setBfree's map. The channel picks the manual: 1 the upper (MIDI 36..96 are its 61 keys), 2 the lower (36..96), 3 the pedals
+(24..55, 32 keys); with GLO > MIDI CHANNEL set to N the three are N, N + 1, N + 2 (round the 16) and other channels are
+ignored; with ALL every other channel plays the upper, as before 0.4.0. CC 7 and 11 are the swell (127: the level the factory
+presets are balanced at, 0: silent; setBfree's default gain for no CC is not reproduced). CC 70..78 set the nine drawbars of
+the channel's manual, inverted (127: 0, 0: 8). CC 1 sets the rotor speed (0..42 SLOW, 43..85 STOP, 86..127 FAST) and CC 64
+(the sustain pedal, on press) toggles SLOW and FAST. CC 123 releases the channel's manual, CC 120 everything. The panel's
+27 keys play the upper manual only; the LOWER and PEDAL drawbars are edited on the second and third press of EDIT.
+The drawbar and speed CCs are noted in the audio ISR and applied by the main loop (organ_app.c `oa_cc_poll`); the notes and
+the swell go straight to the audio path (midi_control.c). Not mapped: setBfree's percussion volume (CC 81), the transposes
+and the keyboard split.
+
 ## Presets
 
 A bank in physical units (registration "888000000", percussion, vibrato, rotary with its MODEL, drive in dB, click, level), 16 to 32
@@ -218,7 +231,7 @@ designed one; the static budget of the new functions.
 | 0.2.0 | percussion, vibrato / chorus (done in the firmware; PERC & VIB page, editor controls; not yet on an FM-1) |
 | 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive (done in the firmware; ROTARY and DRIVE pages, editor controls; not yet on an FM-1) |
 | 0.3.1 | REVERB and DELAY pages: send, type, size and tone; delay send, type, time, feedback, colour, mix (UI over the existing engine; the sends are saved with the preset, the rest with a user preset; not yet on an FM-1). The EQ moves to 0.4.0 |
-| 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |
+| 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). The EQ is not in the plan before 1.0.0 unless the owner asks |
 | 0.5.0 | editor, site, installer, emulator, GitHub Pages on (the site, the installer and the patch editor came early, with 0.1.0's firmware, at the owner's request) |
 | 0.9.x | beta |
 | 1.0.0 | after the owner tests it on the hardware |

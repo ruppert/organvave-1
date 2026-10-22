@@ -24,7 +24,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.2.0 | percussion, vibrato / chorus |
 | 0.3.0 | rotary (CLASSIC and LIGHT), drive |
 | 0.3.1 | REVERB and DELAY pages (the engine's reverbs and delays, on the FX button) |
-| 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |
+| 0.4.0 | lower manual and pedals over MIDI (channels 1 / 2 / 3, or GLO's channel N, N + 1, N + 2), the swell (CC 7 / 11), the drawbar CCs 70..78, the rotor speed (CC 1, CC 64), LOWER and PEDAL drawbar pages (EDIT), a bank of 16 factory presets (not yet on an FM-1). The EQ is not in the plan before 1.0.0 unless the owner asks |
 | 0.5.0 | editor, site, installer, emulator |
 | 1.0.0 | after it has been tested on the hardware |
 

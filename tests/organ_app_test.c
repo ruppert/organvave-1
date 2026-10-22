@@ -217,6 +217,31 @@ int main(int argc, char **argv)
         turn(EN_K3, 3);
         bad += check("  .. KNOB 3: the character", org_patch[OP_DRV_FAT] == 1);
         bad += check("  .. a different picture", frame_hash() != h_d);
+        /* EDIT walks the manuals' drawbars: UPPER, LOWER, PEDAL (the last two play over MIDI) */
+        {
+            uint32_t h_up, h_lo;
+            press(B_HOME);
+            press(B_EDIT);
+            bad += check("EDIT: the DRAWBARS page, the upper manual", oa_page == 1 && oa_man == 0);
+            h_up = frame_hash();
+            press(B_EDIT);
+            bad += check("EDIT again: the lower manual (a different picture)", oa_page == 1 && oa_man == 1 && frame_hash() != h_up);
+            h_lo = frame_hash();
+            org_set(OP_LB + oa_win, 3);
+            org_set(OP_UB + oa_win, 8);
+            turn(EN_K1, 1);
+            bad += check("  .. the knobs pull the lower bars (the marked window)", org_patch[OP_LB + oa_win] == 4 && org_patch[OP_UB + oa_win] == 8);
+            bad += check("  .. and the picture follows", frame_hash() != h_lo);
+            press(B_EDIT);
+            bad += check("EDIT again: the pedals", oa_man == 2);
+            org_set(OP_PB + oa_win, 5);
+            turn(EN_K1, -1);
+            bad += check("  .. the knobs pull the pedal bars", org_patch[OP_PB + oa_win] == 4);
+            press(B_EDIT);
+            bad += check("EDIT again: back to the upper manual", oa_man == 0 && oa_page == 1);
+            press(B_EDIT); press(B_HOME); press(B_EDIT);
+            bad += check("  .. and from HOME it opens the upper manual", oa_man == 0);
+        }
         /* REVERB and DELAY (0.4.0): the send is the part's, the rest the instrument's globals */
         {
             uint32_t h_rv, h_dl;

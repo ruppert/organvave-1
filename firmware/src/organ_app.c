@@ -34,6 +34,7 @@
 
 #define OA_NWIN 6u                                       /* the four marked bars start at 0..5 */
 static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY (FX walks 2..6) */
+static uint8_t oa_man;                                   /* the manual the DRAWBARS page edits: 0 UPPER, 1 LOWER, 2 PEDAL (the last two play over MIDI) */
 static uint8_t oa_win = 2;                               /* the first of the four bars the knobs pull (8' .. 2') */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
 
@@ -465,6 +466,18 @@ static void oa_gl_dialog(void)
         str_cpy(b, "ALL", 4);
     oa_line(96, "MIDI CHANNEL", b, oa_gl_row == 1u);
     oa_line(122, "ABOUT", ">", oa_gl_row == 2u);
+    if (fm_midi_ch) {                                     /* the manuals follow the channel: N upper, N + 1 lower, N + 2 pedals */
+        char c[24];
+        uint32_t n1 = (uint32_t)fm_midi_ch, n2 = n1 % 16u + 1u, n3 = n2 % 16u + 1u;
+        fmt_int(c, n1);
+        str_cpy(c + str_len(c), " UPPER  ", 9);
+        fmt_int(c + str_len(c), n2);
+        str_cpy(c + str_len(c), " LOWER  ", 9);
+        fmt_int(c + str_len(c), n3);
+        str_cpy(c + str_len(c), " PEDAL", 7);
+        ctext(120, 160, &AF_X, c, C_DIM, C_POP);
+    } else
+        ctext(120, 160, &AF_X, "1 UPPER  2 LOWER  3 PEDAL", C_DIM, C_POP);
     ctext(120, 190, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
 }
 
@@ -624,18 +637,18 @@ static void scr_drawbars(void)
     str_cpy(r, num, 4);
     str_cpy(r + str_len(r), " ", 2);
     str_cpy(r + str_len(r), nm, 13);
-    header("UPPER", r);
+    header(oa_man == 2u ? "PEDAL" : oa_man ? "LOWER" : "UPPER", r);
     bar_slot(20 - 25 / 2, 26, 25 * 9);
     for (i = 0; i < 9; i++) {
         int32_t cx = 20 + i * 25, hot = (uint32_t)i >= oa_win && (uint32_t)i < oa_win + 4u;
-        drawbar(cx, 26, org_patch[OP_UB + (uint32_t)i], 15, 22, i, hot, 0);
+        drawbar(cx, 26, org_patch[9u * oa_man + (uint32_t)i], 15, 22, i, hot, 0);
         ctext(cx, 180, &AF_X, FOOT[i], hot ? C_ORANGE : C_DIM, C_PANEL);
         if (FRAC[i][0])
             ctext(cx, 189, &AF_X, FRAC[i], hot ? C_ORANGE : C_DIM, C_PANEL);
     }
-    oa_reg(r, &org_patch[OP_UB]);
+    oa_reg(r, &org_patch[9u * oa_man]);
     ctext(120, 203, &AF_N, r, C_CREAM, C_PANEL);
-    footer("KNOBS: THE FOUR MARKED   SELECT: MOVE THEM");
+    footer(oa_man ? (oa_man == 2u ? "MIDI PEDALS   EDIT: NEXT MANUAL" : "MIDI LOWER   EDIT: NEXT MANUAL") : "KNOBS: THE FOUR MARKED   SELECT: MOVE   EDIT: LOWER");
 }
 
 static void oa_scene(void)
@@ -672,7 +685,7 @@ static uint32_t oa_signature(void)
     uint32_t h = 2166136261u, i;
     for (i = 0; i < ORG_PSIZE; i++)
         h = (h ^ org_patch[i]) * 16777619u;
-    h = (h ^ oa_page ^ (uint32_t)oa_win << 2 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
+    h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_win << 2 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
     h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_midi_ch << 6) * 16777619u;
     h = (h ^ oa_sv ^ (uint32_t)oa_sv_slot << 1 ^ (uint32_t)oa_sv_pos << 8 ^ (uint32_t)oa_msg_on() << 12 ^
          (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16) * 16777619u;
@@ -731,8 +744,8 @@ static void oa_close_all(void)
 }
 static void oa_bar(uint32_t i, int32_t s)                 /* drawbar i (upper) pulled s steps */
 {
-    int32_t v = (int32_t)org_patch[OP_UB + i] + (s > 0 ? 1 : -1) * (s > 0 ? s : -s);
-    org_set(OP_UB + i, (uint32_t)clamp(v, 0, 8));
+    int32_t v = (int32_t)org_patch[9u * oa_man + i] + (s > 0 ? 1 : -1) * (s > 0 ? s : -s);
+    org_set(9u * oa_man + i, (uint32_t)clamp(v, 0, 8));
 }
 
 static void oa_buttons(uint32_t pressed)
@@ -742,8 +755,9 @@ static void oa_buttons(uint32_t pressed)
         oa_page = 0;
         return;
     }
-    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars */
+    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars; again: the lower manual's, then the pedals', then the upper's */
         oa_close_all();
+        oa_man = oa_page == 1u ? (uint8_t)((oa_man + 1u) % 3u) : 0u;
         oa_page = 1;
         return;
     }
@@ -787,12 +801,35 @@ static void oa_buttons(uint32_t pressed)
         song.octave = song.octave < 2 ? song.octave + 1 : song.octave;
 }
 
+/* MIDI CCs the ISR noted (midi_control.c org_midi_cc): the drawbars of the three manuals and the rotor's speed */
+static void oa_cc_poll(void)
+{
+    uint32_t m, i, rq;
+    for (m = 0; m < 3u; m++) {
+        if (!fm_dbar_pend[m])
+            continue;
+        for (i = 0; i < 9u; i++)
+            if ((fm_dbar_pend[m] >> i) & 1u) {
+                uint32_t v;
+                fm_dbar_pend[m] &= (uint16_t)~(1u << i);
+                v = (127u - fm_dbar_rx[m][i]) * 8u;               /* (setBfree: inverted, 0..8 by rounding) */
+                org_set(9u * m + i, (v + 63u) / 127u);
+            }
+    }
+    rq = fm_rot_req;
+    if (rq) {
+        fm_rot_req = 0;
+        org_set(OP_ROT_SPEED, rq == 4u ? (org_patch[OP_ROT_SPEED] == 1u ? 2u : 1u) : rq - 1u);
+    }
+}
+
 static void oa_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), k;
     int32_t s;
     (void)fm1_input_note_edges();
     midi_pc_poll();                                       /* Program Change: a preset */
+    oa_cc_poll();
     if (TSEL->eng_req != ENGI_ORGAN) {                    /* an old autosave: the instrument is the organ */
         set_engine_of(TSEL, ENGI_ORGAN);
         apply_preset_to(TSEL, 0);
@@ -911,12 +948,14 @@ static void oa_input(void)
         return;
     }
     if ((s = panel_enc(EN_SELECT)) != 0) {                /* the four marked bars move along */
+        oa_man = oa_page == 1u ? oa_man : 0u;
         oa_page = 1;
         oa_win = (uint8_t)clamp((int32_t)oa_win + (s > 0 ? 1 : -1), 0, (int32_t)OA_NWIN - 1);
     }
     (void)panel_enc(EN_ALGO);
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0) {
+            oa_man = oa_page == 1u ? oa_man : 0u;
             oa_page = 1;                                  /* (on HOME: the knob opens DRAWBARS and moves its bar) */
             oa_bar(oa_win + k, s);
         }

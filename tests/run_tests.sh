@@ -75,7 +75,9 @@ run "the drive against setBfree's: the odd harmonics of sines at 110 Hz and 1 kH
 $HC -O2 -o "$OUT/rotary_light_test" tests/rotary_light_test.c -lm
 run "the rotary LIGHT against CLASSIC: sidebands and levels (nine tones), bounds, silence, the model switch (a 20 ms fade, no jump, each model alone afterwards)" "$OUT/rotary_light_test"
 $HC -O2 -o "$OUT/effects_test" tests/effects_test.c -lm
+$HC -O1 -o "$OUT/midi_organ_test" tests/midi_organ_test.c -lm
 run "the effects section end to end: the patch bytes through mix_block (the rotary: speeds, STOP, LIGHT; the drive; the fades; silence)" "$OUT/effects_test"
+run "the organ over MIDI: the manuals by channel (GLO's MIDI channel), the swell, the drawbar CCs, the rotor speed" "$OUT/midi_organ_test"
 $HC -O2 -o "$OUT/fx_test" tests/fx_test.c -lm
 run "FX: five stereo reverbs (decay, level, corners, type changes), seven delays, three choruses, TUBE and OUTPUT, bypass at 0" "$OUT/fx_test"
 $HC -O2 -o "$OUT/speaker_test" tests/speaker_test.c -lm

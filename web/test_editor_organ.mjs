@@ -140,8 +140,8 @@ await wait(120);
 ok(byId("rot").checked === true && byId("rmodel").value === "1" && byId("rmic").value === "3" && byId("drv").checked === true &&
    Number(byId("dgain").value) === 9, "read: the page shows the rotary and the drive the instrument holds");
 
-// ---- 4: a refusal shows the device's reason: factory 9 does not exist
-byId("source").value = "2:9";
+// ---- 4: a refusal shows the device's reason: factory 99 does not exist
+byId("source").value = "2:99";
 await P.readPatch();
 await wait(120);
 ok(status().startsWith("Read failed") && status().includes("refused"), `read: a bad index is refused by the device ("${status()}")`);

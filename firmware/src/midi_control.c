@@ -85,10 +85,75 @@ static void __attribute__((noinline)) midi_forget_all(void)
     midi_bend_q8[0] = midi_bend_target[0] = 0;
 }
 
+/* The organ over MIDI (0.4.0, setBfree's map). Notes: the channel picks the manual (org_manual_of): upper MIDI 36..96 is keys 0..60,
+ * lower 36..96 is 64..124, pedals 24..55 is 128..159; anything outside is ignored. CC 7 and 11: the swell (set here, in the audio
+ * path). CC 70..78: the drawbars of the channel's manual, inverted (127 is out: 0), CC 1: the rotor speed (0..42 SLOW, 43..85 STOP,
+ * 86..127 FAST), CC 64 (the sustain pedal's press): the speed toggles SLOW / FAST. The drawbars and the speed are the patch's:
+ * the main loop applies what the ISR notes here (organ_app.c oa_cc_poll) */
+static volatile uint8_t fm_dbar_rx[3][9];
+static volatile uint16_t fm_dbar_pend[3];
+static volatile uint8_t fm_rot_req;                      /* 0 none, 1 STOP, 2 SLOW, 3 FAST, 4 toggle */
+static uint32_t org_key_of(uint32_t man, uint32_t note)
+{
+    if (man == 2u)
+        return note >= 24u && note <= 55u ? 128u + note - 24u : 255u;
+    return note >= 36u && note <= 96u ? (man ? 64u : 0u) + note - 36u : 255u;
+}
+static void org_midi_note(uint32_t ch, uint32_t note, uint32_t vel)
+{
+    uint32_t man = org_manual_of(ch), k;
+    if (man > 2u)
+        return;
+    k = org_key_of(man, note);
+    if (k == 255u)
+        return;
+    if (vel && (TSEL->p[P_MUTE] || TSEL->eng_req != TSEL->engine))
+        return;
+    org_key(k, vel ? 1u : 0u);
+}
+static void __attribute__((noinline)) org_manual_off(uint32_t man)
+{
+    uint32_t k, a = man == 2u ? 128u : man ? 64u : 0u, z = man == 2u ? 160u : man ? 125u : 61u;
+    for (k = a; k < z; k++)
+        if (org.keys[k])
+            org_key(k, 0);
+}
+/* 1: the CC was the organ's */
+static int org_midi_cc(uint32_t ch, uint32_t cc, uint32_t value)
+{
+    uint32_t man = org_manual_of(ch);
+    if (cc == 7u || cc == 11u) {
+        org.swell = (uint16_t)((value * 32768u + 63u) / 127u);
+        return 1;
+    }
+    if (cc >= 70u && cc <= 78u && man < 3u) {
+        fm_dbar_rx[man][cc - 70u] = (uint8_t)value;
+        fm_dbar_pend[man] |= (uint16_t)(1u << (cc - 70u));
+        return 1;
+    }
+    if (cc == 1u) {
+        fm_rot_req = (uint8_t)(value / 43u == 0u ? 2u : value / 43u == 1u ? 1u : 3u);
+        return 1;
+    }
+    if (cc == 64u) {
+        if (value >= 64u)
+            fm_rot_req = 4;
+        return 1;
+    }
+    if (cc == 123u) {
+        if (man < 3u)
+            org_manual_off(man);
+        return 1;
+    }
+    return 0;
+}
+
 static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
 {
     midi_channel_t *c = &midi_ch[ch];
     uint32_t i;
+    if (org_midi_cc(ch, cc, value))
+        return;
     switch (cc) {
     case 1:
         TSEL->mw = (uint8_t)value;                 /* the mod wheel */
@@ -156,7 +221,7 @@ static volatile uint8_t midi_pc;
 static void __attribute__((noinline)) midi_event(uint32_t st, uint32_t ch, uint32_t d1, uint32_t d2)
 {
     if (st == 0x90u || st == 0x80u)
-        midi_note_event(ch, d1, st == 0x90u ? d2 : 0);
+        org_midi_note(ch, d1, st == 0x90u ? d2 : 0);
     else if (st == 0xE0u) {
         midi_ch[ch].bend = (int16_t)((int32_t)(d1 | (d2 << 7)) - 8192);
         midi_expression_channel(ch);
