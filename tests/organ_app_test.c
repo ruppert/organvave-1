@@ -152,6 +152,10 @@ int main(int argc, char **argv)
         press(B_FX);
         bad += check("FX again: the DRIVE page", oa_page == 4);
         press(B_FX);
+        bad += check("FX again: the REVERB page", oa_page == 5);
+        press(B_FX);
+        bad += check("FX again: the DELAY page", oa_page == 6);
+        press(B_FX);
         bad += check("FX again: HOME", oa_page == 0);
         press(B_ENV);
         bad += check("ENV on HOME: the percussion on", org_patch[OP_PERC] == 1);
@@ -213,14 +217,60 @@ int main(int argc, char **argv)
         turn(EN_K3, 3);
         bad += check("  .. KNOB 3: the character", org_patch[OP_DRV_FAT] == 1);
         bad += check("  .. a different picture", frame_hash() != h_d);
+        /* REVERB and DELAY (0.4.0): the send is the part's, the rest the instrument's globals */
+        {
+            uint32_t h_rv, h_dl;
+            int16_t sz;
+            TSEL->p[P_REV] = 0; TSEL->p[P_DLY] = 0;
+            song.g[G_RTYPE] = 1; song.g[G_RSIZE] = 64; song.g[G_RDAMP] = 64;
+            song.g[G_DTIME] = 0; song.g[G_DRREV] = 64; song.g[G_DFDBK] = 60; song.g[G_DCOLOR] = 64; song.g[G_DMIX] = 64;
+            oa_page = 5;
+            h_rv = frame_hash();
+            turn(EN_K1, 1);
+            bad += check("REVERB: KNOB 1 raises the send (8 a detent)", TSEL->p[P_REV] == 8);
+            turn(EN_K1, -3);
+            bad += check("  .. and stops at 0", TSEL->p[P_REV] == 0);
+            for (i = 0; i < 20u; i++)
+                turn(EN_K1, 1);
+            bad += check("  .. and at 127", TSEL->p[P_REV] == 127);
+            turn(EN_K2, 1);
+            bad += check("  .. KNOB 2: the type", song.g[G_RTYPE] == 2);
+            for (i = 0; i < 4u; i++)
+                turn(EN_K2, 1);
+            bad += check("  .. round the five types", song.g[G_RTYPE] == 1);
+            turn(EN_K2, -1); turn(EN_K2, -1);
+            bad += check("  .. and backwards round", song.g[G_RTYPE] == 4);
+            sz = song.g[G_RSIZE];
+            turn(EN_K3, 1);
+            turn(EN_K4, -1);
+            bad += check("  .. KNOB 3: size, KNOB 4: tone", song.g[G_RSIZE] == sz + 8 && song.g[G_RDAMP] == 56);
+            bad += check("  .. a different picture", frame_hash() != h_rv);
+            press(B_FX);
+            bad += check("REVERB: FX goes on to DELAY", oa_page == 6);
+            h_dl = frame_hash();
+            turn(EN_K1, 2);
+            turn(EN_K2, -1);
+            turn(EN_K3, 1);
+            turn(EN_K4, 1);
+            turn(EN_ALGO, -1);
+            turn(EN_SELECT, 1);
+            bad += check("DELAY: send, type (wraps back to REVERSE), time, feedback, colour, mix",
+                         TSEL->p[P_DLY] == 8 && song.g[G_DTIME] == 6 && song.g[G_DRREV] == 72 && song.g[G_DFDBK] == 68 &&
+                         song.g[G_DCOLOR] == 56 && song.g[G_DMIX] == 72);
+            for (i = 0; i < 30u; i++)
+                turn(EN_K4, 1);
+            bad += check("  .. the feedback stops at 120", song.g[G_DFDBK] == 120);
+            bad += check("  .. a different picture", frame_hash() != h_dl);
+            oa_page = 4;
+        }
         if (shot_dir) {
-            static const char *const N[5] = {"home", "drawbars", "perc", "rotary", "drive"};
+            static const char *const N[7] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay"};
             uint32_t pg;
             org_set(OP_ROT, 1);
             org_set(OP_DRV, 1);
             oa_msg_until = 0;
             oa_pp_until = 0;
-            for (pg = 0; pg < 5u; pg++) {
+            for (pg = 0; pg < 7u; pg++) {
                 char path[200];
                 FILE *f;
                 oa_page = (uint8_t)pg;

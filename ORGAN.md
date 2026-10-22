@@ -216,7 +216,8 @@ designed one; the static budget of the new functions.
 | 0.0.x | the house: identity (`FM-1_8XY`), names, README / CREDITS, docs, the workflow manual only; the slimming; the UI mock-ups |
 | 0.1.0 (now) | tone generator, upper manual, click, the drawbar page, 8 factory patches; FMUG removed |
 | 0.2.0 | percussion, vibrato / chorus (done in the firmware; PERC & VIB page, editor controls; not yet on an FM-1) |
-| 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive (done in the firmware; ROTARY and DRIVE pages, editor controls; not yet on an FM-1). REVERB and DELAY pages move to 0.4.0 with the EQ |
+| 0.3.0 | rotary (CLASSIC and LIGHT, the MODEL setting), drive (done in the firmware; ROTARY and DRIVE pages, editor controls; not yet on an FM-1) |
+| 0.3.1 | REVERB and DELAY pages: send, type, size and tone; delay send, type, time, feedback, colour, mix (UI over the existing engine; the sends are saved with the preset, the rest with a user preset; not yet on an FM-1). The EQ moves to 0.4.0 |
 | 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |
 | 0.5.0 | editor, site, installer, emulator, GitHub Pages on (the site, the installer and the patch editor came early, with 0.1.0's firmware, at the owner's request) |
 | 0.9.x | beta |

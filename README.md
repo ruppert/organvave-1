@@ -22,7 +22,8 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.0.x | the house: identity, names, docs; the slimming |
 | 0.1.0 | tone generator, upper manual, click, the drawbar page, 8 presets (now) |
 | 0.2.0 | percussion, vibrato / chorus |
-| 0.3.0 | rotary (CLASSIC and LIGHT), drive (done; REVERB and DELAY pages follow in 0.4.0 with the EQ) |
+| 0.3.0 | rotary (CLASSIC and LIGHT), drive |
+| 0.3.1 | REVERB and DELAY pages (the engine's reverbs and delays, on the FX button) |
 | 0.4.0 | lower manual and pedals over MIDI, swell, MIDI CC, the full bank |
 | 0.5.0 | editor, site, installer, emulator |
 | 1.0.0 | after it has been tested on the hardware |

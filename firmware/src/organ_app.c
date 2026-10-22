@@ -33,7 +33,7 @@
 #define C_HOT    RGB565(0x2e, 0x28, 0x22)
 
 #define OA_NWIN 6u                                       /* the four marked bars start at 0..5 */
-static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE (FX walks 2, 3, 4) */
+static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY (FX walks 2..6) */
 static uint8_t oa_win = 2;                               /* the first of the four bars the knobs pull (8' .. 2') */
 static uint32_t oa_sig_prev = 0xFFFFFFFFu;
 
@@ -565,6 +565,38 @@ static void scr_drive(void)                             /* DRIVE: on (knob 1), g
     footer("KNOBS: ON, GAIN, CHARACTER");
 }
 
+/* REVERB and DELAY: the send is the part's (P_REV / P_DLY, saved with the preset), the rest are the instrument's globals
+ * (song.g, saved with a user preset as the reverb's type, size, tone and the delay's type, time, feedback). A detent is 8 on the
+ * 0..127 scale; the bar has 10 cells. */
+static void scr_reverb(void)                            /* REVERB: send (knob 1), type (2), size (3), tone (4) */
+{
+    uint32_t ty = (uint32_t)clamp(song.g[G_RTYPE], 0, 4);
+    header("REVERB", TSEL->p[P_REV] ? N_RTYPE[ty] : "OFF");
+    mrow(58, "SEND", 10, (TSEL->p[P_REV] * 10 + 63) / 127, "KNOB 1");
+    lamp(22, 92, N_RTYPE[ty], TSEL->p[P_REV] != 0);
+    rtext(234, 89, &AF_X, "KNOB 2", C_DIM, C_PANEL);
+    mrow(116, "SIZE", 10, (song.g[G_RSIZE] * 10 + 63) / 127, "KNOB 3");
+    mrow(140, "TONE", 10, (song.g[G_RDAMP] * 10 + 63) / 127, "KNOB 4");
+    footer("KNOBS: SEND, TYPE, SIZE, TONE");
+}
+static void scr_delay(void)                             /* DELAY: send (knob 1), type (2), time (3), feedback (4), colour (ALGORITHM), mix (SELECT) */
+{
+    uint32_t ty = (uint32_t)clamp(song.g[G_DTIME], 0, 6);
+    header("DELAY", TSEL->p[P_DLY] ? N_DLYTYPE[ty] : "OFF");
+    mrow(58, "SEND", 10, (TSEL->p[P_DLY] * 10 + 63) / 127, "KNOB 1");
+    lamp(22, 92, N_DLYTYPE[ty], TSEL->p[P_DLY] != 0);
+    rtext(234, 89, &AF_X, "KNOB 2", C_DIM, C_PANEL);
+    mrow(116, "TIME", 10, (song.g[G_DRREV] * 10 + 63) / 127, "KNOB 3");
+    mrow(140, "FEEDBACK", 10, (song.g[G_DFDBK] * 10 + 63) / 127, "KNOB 4");
+    mrow(164, "COLOUR", 10, (song.g[G_DCOLOR] * 10 + 63) / 127, "ALGORITHM");
+    mrow(188, "MIX", 10, (song.g[G_DMIX] * 10 + 63) / 127, "SELECT");
+    footer("KNOBS: SEND, TYPE, TIME, FEEDBACK");
+}
+static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on the 0..mx scale */
+{
+    return clamp(v + (s > 0 ? 8 : -8), 0, mx);
+}
+
 static void scr_home(void)
 {
     char num[8], nm[16];
@@ -616,6 +648,10 @@ static void oa_scene(void)
         scr_rotary();
     else if (oa_page == 4u)
         scr_drive();
+    else if (oa_page == 5u)
+        scr_reverb();
+    else if (oa_page == 6u)
+        scr_delay();
     else
         scr_home();
     if (oa_gl == 1u)
@@ -642,6 +678,10 @@ static uint32_t oa_signature(void)
          (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16) * 16777619u;
     for (i = 0; i < 12u; i++)
         h = (h ^ (uint8_t)oa_sv_name[i]) * 16777619u;
+    h = (h ^ t->p[P_REV] ^ (uint32_t)t->p[P_DLY] << 8 ^ (uint32_t)song.g[G_RTYPE] << 16 ^ (uint32_t)song.g[G_DTIME] << 20) * 16777619u;
+    h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_RDAMP] << 7 ^ (uint32_t)song.g[G_DRREV] << 14 ^
+         (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
+    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7) * 16777619u;
     return h;
 }
 
@@ -725,9 +765,9 @@ static void oa_buttons(uint32_t pressed)
             oa_sv_open();
         return;
     }
-    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: PERC & VIB, then ROTARY, then DRIVE, then HOME */
+    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, then HOME */
         oa_close_all();
-        oa_page = oa_page >= 2u && oa_page < 4u ? (uint8_t)(oa_page + 1u) : oa_page == 4u ? 0u : 2u;
+        oa_page = oa_page >= 2u && oa_page < 6u ? (uint8_t)(oa_page + 1u) : oa_page == 6u ? 0u : 2u;
         return;
     }
     if ((pressed >> panel.btn[B_SCL]) & 1u) {             /* SCL: the rotor's speed: off -> SLOW -> FAST -> STOP -> SLOW */
@@ -814,6 +854,34 @@ static void oa_input(void)
             org_set(OP_ROT_MIC, (uint32_t)clamp((int32_t)org_patch[OP_ROT_MIC] - (s > 0 ? 1 : -1), 0, 6));
         if ((s = panel_enc(EN_SELECT)) != 0)
             org_set(OP_ROT_BAL, (uint32_t)clamp((int32_t)org_patch[OP_ROT_BAL] + (s > 0 ? 1 : -1), 0, 8));
+        return;
+    }
+    if (oa_page == 5u) {                                  /* REVERB: send, type, size, tone */
+        (void)panel_enc(EN_SELECT);
+        (void)panel_enc(EN_ALGO);
+        if ((s = panel_enc(EN_K1)) != 0)
+            TSEL->p[P_REV] = (uint8_t)oa_step(TSEL->p[P_REV], s, 127);
+        if ((s = panel_enc(EN_K2)) != 0)
+            song.g[G_RTYPE] = (int16_t)((song.g[G_RTYPE] + (s > 0 ? 1 : 4)) % 5);
+        if ((s = panel_enc(EN_K3)) != 0)
+            song.g[G_RSIZE] = (int16_t)oa_step(song.g[G_RSIZE], s, 127);
+        if ((s = panel_enc(EN_K4)) != 0)
+            song.g[G_RDAMP] = (int16_t)oa_step(song.g[G_RDAMP], s, 127);
+        return;
+    }
+    if (oa_page == 6u) {                                  /* DELAY: send, type, time, feedback, colour, mix */
+        if ((s = panel_enc(EN_K1)) != 0)
+            TSEL->p[P_DLY] = (uint8_t)oa_step(TSEL->p[P_DLY], s, 127);
+        if ((s = panel_enc(EN_K2)) != 0)
+            song.g[G_DTIME] = (int16_t)((song.g[G_DTIME] + (s > 0 ? 1 : 6)) % 7);
+        if ((s = panel_enc(EN_K3)) != 0)
+            song.g[G_DRREV] = (int16_t)oa_step(song.g[G_DRREV], s, 127);
+        if ((s = panel_enc(EN_K4)) != 0)
+            song.g[G_DFDBK] = (int16_t)oa_step(song.g[G_DFDBK], s, 120);
+        if ((s = panel_enc(EN_ALGO)) != 0)
+            song.g[G_DCOLOR] = (int16_t)oa_step(song.g[G_DCOLOR], s, 127);
+        if ((s = panel_enc(EN_SELECT)) != 0)
+            song.g[G_DMIX] = (int16_t)oa_step(song.g[G_DMIX], s, 127);
         return;
     }
     if (oa_page == 4u) {                                  /* DRIVE: on, gain, character */
