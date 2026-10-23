@@ -1062,7 +1062,7 @@ and the default is the index 4 (a byte for an index i is (i + 5) mod 9). TONE: i
 (horn 40.3 and 390 rpm (423 before 0.9.3), drum 36 and 357 rpm); the ramps x1.4 a step in time around setBfree's (horn 1.5 s up and 3.0 s down (0.161 and 0.321 s before 0.9.3), drum 4.127 s;
 higher is slower). `ORG_PUT` carries at most 48 bytes a frame: the editor sends the used bytes in two (57 before 0.9.4, 82 in 0.9.4, 84 since 0.9.5).
 
-**From 0.9.4: ADVANCED EDIT, bytes 57..84** (`ORG_PSIZE` 96; bytes 85..95 are reserved, 0; 82 and 83 are 0.9.5's, 84 is 0.9.6's). These are setBfree's own tone-generator
+**From 0.9.4: ADVANCED EDIT, bytes 57..85** (`ORG_PSIZE` 96; bytes 86..95 are reserved, 0; 82 and 83 are 0.9.5's, 84 and 85 are 0.9.6's). These are setBfree's own tone-generator
 settings. Every one is a "zero is the default" byte: with N steps and the default step D, a byte b is the step (b + D) mod N, and a
 byte for a step i is (i - D) mod N (+ N), so a patch from before reads as setBfree's defaults and sounds as it did. Old
 autosaves (64 bytes) and user presets (the entry has 128 bytes, zero past the 64) read the same way; the autosave record is
@@ -1085,7 +1085,8 @@ longer, and the shorter 0.9.3 one is still accepted.
 | 77 | PC_TRIG | 10, 9 | the drawbar muted while the percussion is on: step 0 none, i > 0 the drawbar i - 1 (default the 1', `perc.trigger`) |
 | 78 | SC_HZ | 73, 13 | the scanner's rate, 4 + i / 4 Hz (`scanner.hz`, default 7.25) |
 | 79, 80, 81 | SC_V1, SC_V2, SC_V3 | 25, 6 / 25, 12 / 25, 18 | the vibrato / chorus depths, i / 2 samples (`scanner.modulation.v1..v3`) |
-| 84 | CLICK_GAIN | 41, 20 | **0.9.6**: the click gain, i / 20 (0 .. 200 %, 100 % the default): the samples of the attack and the release click's burst (CLICK models only). Above 100 % the burst gets a bump (the attack louder, the release's gate deeper, so its tail is louder); below, the burst is scaled and faded back over 8 samples (0 silences the attack and opens the release gate) |
+| 84 | CLICK_GAIN | 41, 20 | **0.9.6**: the attack click's gain, i / 20 (0 .. 200 %, 100 % the default): the samples of the attack burst (CLICK model only). Above 100 % the burst gets a bump of 4 e (1 - e) times (gain - 1) (the attack louder); below, the burst is scaled and faded back over 8 samples (0 silences it) |
+| 85 | REL_GAIN | 41, 20 | **0.9.6**: the same for the release burst (CLICK release model): above 100 % the bump goes down (the release's gate is 1 - e, so its tail is louder); below 100 % the gate opens. Byte 84 held the gain of both clicks in 0.9.6's first build (not on an FM-1), so a patch with it set reads as the attack's gain only |
 | 82 | SPLIT | 2, 0 | **0.9.5**: the keyboard split, 0 off, 1 on: with it on, a note of the UPPER MIDI channel below the split point plays the lower manual and the pedals (the pedals' 32 keys, MIDI 24..55) and not the upper manual |
 | 83 | SPLIT_PT | 61, 19 | **0.9.5**: the split point, the lowest note of the upper manual, MIDI 36 + i (default step 19: G3, 55); the firmware ignores it while 82 is 0 |
 

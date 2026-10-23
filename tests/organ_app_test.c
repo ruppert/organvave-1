@@ -396,7 +396,7 @@ int main(int argc, char **argv)
             press(B_EDIT); press(B_EDIT); press(B_EDIT);
             bad += check("ADVANCED EDIT: the page after DRAWBARS' lower manual", oa_page == 8);
             h_a = frame_hash();
-            bad += check("  .. 30 rows, the first picked", OA_NR[8] == 30 && oa_row[8] == 0);
+            bad += check("  .. 31 rows, the first picked", OA_NR[8] == 31 && oa_row[8] == 0);
             turn(EN_ALGO, 1);
             bad += check("  .. ALGORITHM raises TUNING by one step: 440.5 Hz", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 65 && frame_hash() != h_a);
             turn(EN_ALGO, -2);
@@ -425,8 +425,8 @@ int main(int argc, char **argv)
             org_set(OP_SPLIT_PT, 0);
             for (i = 0; i < 40u; i++)
                 turn(EN_SELECT, 1);
-            bad += check("  .. SELECT wraps around the 30 rows", oa_row[8] == (1 + 40) % 30);
-            for (r = 0; r < 30u; r++) {
+            bad += check("  .. SELECT wraps around the 31 rows", oa_row[8] == (1 + 40) % 31);
+            for (r = 0; r < 31u; r++) {
                 uint32_t op = OA_AOP[r], rows_ok;
                 uint8_t before = org_patch[op];
                 oa_row[8] = (uint8_t)r;

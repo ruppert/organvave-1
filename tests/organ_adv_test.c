@@ -445,10 +445,10 @@ static void audible(void)
     }
 }
 
-/* 7. 0.9.5, the click gain (byte 84): scales the burst of the attack and the release click (the CLICK models) and leaves the
+/* 7. 0.9.6, the click gains (bytes 84 attack, 85 release): scales the burst of the attack and the release click (the CLICK models) and leaves the
  * steady envelope alone: the energy of the click's frames grows with it, and the sustained sound is the same */
 static int32_t gn_out[16 * CTL];
-static void gain_run(uint32_t g, uint32_t rel_model)
+static void gain_run(uint32_t g, uint32_t gr, uint32_t rel_model)
 {
     uint32_t i, k;
     int32_t b[CTL];
@@ -457,6 +457,7 @@ static void gain_run(uint32_t g, uint32_t rel_model)
     for (i = 0; i < 9u; i++)
         org_patch[OP_UB + i] = i == 2u || i == 3u ? 8u : 0u;
     org_patch[OP_CLICK_GAIN] = (uint8_t)org_bi(OP_CLICK_GAIN, g);
+    org_patch[OP_REL_GAIN] = (uint8_t)org_bi(OP_REL_GAIN, gr);
     org_patch[OP_REL_MODEL] = (uint8_t)org_bi(OP_REL_MODEL, rel_model);
     org_pgen++;
     org_pgen_seen = 0xFF;
@@ -496,28 +497,44 @@ static void click_gain(void)
 {
     static int32_t keep[16 * CTL];
     double a100, a0, a200, r100, r0, r200;
-    gain_run(20, 0);
+    gain_run(20, 20, 0);
     a100 = energy(0, 2); r100 = peak(8, 16);
     memcpy(keep, gn_out, sizeof keep);
-    gain_run(0, 0);
-    a0 = energy(0, 2); r0 = peak(8, 16);
-    gain_run(40, 0);
-    a200 = energy(0, 2); r200 = peak(8, 16);
+    gain_run(0, 20, 0);
+    a0 = energy(0, 2);
+    gain_run(40, 20, 0);
+    a200 = energy(0, 2);
+    gain_run(20, 0, 0);
+    r0 = peak(8, 16);
+    gain_run(20, 40, 0);
+    r200 = peak(8, 16);
     printf("gain probe: attack energy 0/100/200 %.0f %.0f %.0f; release peak 0/100/200 %.0f %.0f %.0f\n", a0, a100, a200, r0, r100, r200);
     check("CLICK GAIN 0: the attack click is silent (less than the default's)", a0 < 0.9 * a100);
     check("  .. 200%: the attack click carries more than the default's", a200 > 1.2 * a100);
     check("  .. the release click (CLICK model): 200% is louder than the default's (peak), 0% has no gate", r200 > 1.02 * r100 && r0 >= r100);
     {
+        double ra0, ra200, aa200;
+        gain_run(20, 0, 0);                                  /* the release gain alone: the attack keeps its default */
+        ra0 = energy(0, 2);
+        gain_run(20, 20, 0);
+        gain_run(40, 20, 0);
+        aa200 = energy(0, 2);
+        check("RELEASE GAIN and ATTACK GAIN are separate: the attack gain at 200% leaves the release peak at the default's",
+              peak(8, 16) > 0 && fabs(aa200 - a200) < 1e-6 * a200 && ra0 > 0);
+        gain_run(20, 40, 0);
+        check("  .. release gain 200% alone: louder release (peak), the attack energy at 100%", peak(8, 16) > 1.02 * r100 && fabs(energy(0, 2) - a100) < 1e-6 * a100);
+    }
+    {
         double d = 0, r = 0;
         uint32_t i;
-        gain_run(20, 0);
+        gain_run(20, 20, 0);
         for (i = 6u * CTL; i < 8u * CTL; i++) {
             d += fabs((double)gn_out[i] - (double)keep[i]);
             r += fabs((double)keep[i]);
         }
         check("  .. the sustained sound is the same at any gain (the steady part is untouched)", r > 0 && d < 1e-9 * r + 1.0);
     }
-    gain_run(20, 2);
+    gain_run(20, 20, 2);
     check("  .. with the LINEAR release (no click burst) the gain has no effect on the release", energy(8, 10) > 0);
 }
 
