@@ -424,21 +424,30 @@ static void seq_tick(track_t *t, uint32_t n)
  * 2 MIDI (TRS), 3 Bluetooth (no radio driver in this firmware yet: nothing arrives with that number). The CC map is the
  * app's own: the ISR only notes the last value of each CC (fm_cc_rx, bit cc of fm_cc_pend); the main loop applies it */
 static volatile uint8_t fm_midi_src = 3;                 /* 0 USB, 1 MIDI, 2 BLUETOOTH, 3 ALL */
-static volatile uint8_t fm_midi_ch;                      /* 0 ALL (omni), 1..16 */
+static volatile uint8_t fm_ch_up;                        /* the UPPER manual's MIDI channel: 0 ALL (every channel the other two do not take), 1..16 */
+static volatile uint8_t fm_ch_lo = 2;                    /* the LOWER manual's: 0 OFF, 1..16 */
+static volatile uint8_t fm_ch_pd = 3;                    /* the PEDALS': 0 OFF, 1..16 */
 static volatile uint8_t fm_bend_mode;                    /* GLO > PITCH BEND: 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 */
 static volatile uint8_t fm_bt;                           /* GLO > BLUETOOTH ON/OFF: the Bluetooth MIDI source is heard only when ON */
 static volatile uint8_t fm_cc_rx[128];
 static volatile uint32_t fm_cc_pend[4];
-/* The organ's manuals by MIDI channel, as setBfree's defaults: the upper on channel 1, the lower on 2, the pedals on 3 (any other
- * channel plays the upper, as before 0.4.0). GLO > MIDI IN's channel N moves the three to N, N + 1, N + 2 (round the 16) and then
- * ignores every other channel. Returns 0 upper, 1 lower, 2 pedals, 3 none */
+/* The organ's manuals by MIDI channel, as setBfree's defaults: the upper on every channel but the other two's (ALL), the lower on 2, the
+ * pedals on 3. GLO sets each of the three (0.9.5; before, one base channel N moved them to N, N + 1, N + 2). A channel that is none of
+ * them is ignored (the upper being a channel of its own). Returns 0 upper, 1 lower, 2 pedals, 3 none */
 static uint32_t __attribute__((noinline)) org_manual_of(uint32_t ch)
 {
-    uint32_t d;
-    if (!fm_midi_ch)
-        return ch == 1u ? 1u : ch == 2u ? 2u : 0u;
-    d = (ch + 16u - (fm_midi_ch - 1u)) & 15u;
-    return d < 3u ? d : 3u;
+    if (fm_ch_lo && ch + 1u == fm_ch_lo)
+        return 1u;
+    if (fm_ch_pd && ch + 1u == fm_ch_pd)
+        return 2u;
+    return !fm_ch_up || ch + 1u == fm_ch_up ? 0u : 3u;
+}
+/* the three channels of an older "base channel N" setting (0 ALL: 1 upper-ish defaults 2, 3) */
+static void fm_midi_base(uint32_t n)
+{
+    fm_ch_up = (uint8_t)n;
+    fm_ch_lo = (uint8_t)(n ? n % 16u + 1u : 2u);
+    fm_ch_pd = (uint8_t)(n ? (n + 1u) % 16u + 1u : 3u);
 }
 static int __attribute__((noinline)) fm_midi_ok(uint32_t source, uint32_t ch)
 {

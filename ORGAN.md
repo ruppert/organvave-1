@@ -200,8 +200,9 @@ commands from 85 (ORG_GET / ORG_PUT / ORG_PRESET), an INFO tag, a drawbar value 
 ### MIDI (0.4.0)
 
 setBfree's map. The channel picks the manual: 1 the upper (MIDI 36..96 are its 61 keys), 2 the lower (36..96), 3 the pedals
-(24..55, 32 keys); with GLO > MIDI CHANNEL set to N the three are N, N + 1, N + 2 (round the 16) and other channels are
-ignored; with ALL every other channel plays the upper, as before 0.4.0. CC 7 and 11 are the swell (127: the level the factory
+(24..55, 32 keys). Since 0.9.5 GLO sets each channel: the upper is ALL (every channel the other two do not take) or 1..16, the
+lower and the pedals are OFF or 1..16 (defaults 2 and 3, as setBfree). With SPLIT on (ADVANCED EDIT), the upper channel's notes below
+SPLIT POINT also play the lower manual and the pedals. CC 7 and 11 are the swell (127: the level the factory
 presets are balanced at, 0: silent; setBfree's default gain for no CC is not reproduced). CC 70..78 set the nine drawbars of
 the channel's manual, inverted (127: 0, 0: 8). CC 1 sets the rotor speed (0..42 SLOW, 43..85 STOP, 86..127 FAST) and CC 64
 (the sustain pedal, on press) toggles SLOW and FAST. CC 123 releases the channel's manual, CC 120 everything. The panel's
@@ -238,6 +239,7 @@ designed one; the static budget of the new functions.
 | 0.9.2 | the panel (owner): SELECT picks an item and ALGORITHM changes it on every FX page and on DRAWBARS; DRIVE: TYPE (DISTORTION, the former drive; TUBE, a cubic valve curve with a triode's asymmetry, no latency), GAIN, TONE (a tilt around 1 kHz), OUTPUT, the character is gone; ROTARY: the Leslie's horn and drum speeds and ramps; LOWER and PEDAL on one page, the pedal with its two real bars (patch bytes 48..56; (not yet on an FM-1) |
 | 0.9.3 | the Leslie defaults (owner): horn FAST 390 rpm, horn ramp 1.5 s (deceleration twice that); the sliders and the ROTARY page scale around them (not yet on an FM-1) |
 | 0.9.4 | ADVANCED EDIT (owner): EDIT walks UPPER, LOWER + PEDAL, then a page of 27 rows with setBfree's tone-generator settings (key click, crosstalk, tuning, percussion, scanner); the patch grows to 96 bytes (57..81), the crosstalk and click tables are built in RAM while no key holds them (not yet on an FM-1) |
+| 0.9.5 | the key click twice setBfree's by default (attack level step 20 = 1.0, release 0.5; `ORG_ATK` / `ORG_REL` signed so ADVANCED EDIT reaches 2.0), GLO with an upper (ALL), a lower and a pedal MIDI channel and MIDI CC / MIDI Learn (86 controls, the CCs in `set_bytes` rows 8..10), ADVANCED EDIT SPLIT / SPLIT POINT (patch bytes 82, 83), the crosstalk rows switch CROSSTALK on; the crosstalk engine was checked again (audible at the extremes, tests/organ_adv_test.c section 6) (not yet on an FM-1) |
 | 0.9.x | further betas |
 | 1.0.0 | after the owner tests it on the hardware |
 

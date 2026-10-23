@@ -16,7 +16,7 @@ The tables (FS 44100, the firmware's and the reference's rate):
                      the same on buses + 9), 64..95 the pedals (setBfree's keys 128..159)
   ORG_KCX, ORG_KCX_OFF the same with the crosstalk off (compartment, terminal strip and wiring at 0)
                      an entry: wheel (1..91) << 25 | bus (0..26) << 20 | level (Q18, under 4.0)
-  ORG_ATK[8][128], ORG_REL[8][128]  the attack (the contact click) and release envelopes, Q15 (32768 = 1.0)
+  ORG_ATK[8][128], ORG_REL[8][128]  the attack (the contact click) and release envelopes, signed Q15 (32767 = 1.0)
   ORG_KEYCOMP[128]   the key compression's gain per keys down, Q15
   ORG_SWELL_TC       the swell's one-pole smoothing per sample, Q16
 """
@@ -92,7 +92,7 @@ def check_envelopes(d):
         p += 2
         x = [0.0] * start
         for _ in range(burst):
-            x.append(1.0 - 0.5 * out[p] / 2147483647.0)
+            x.append(1.0 - 1.0 * out[p] / 2147483647.0)         # (the attack click level 1.0: sbf_ref make())
             p += 1
         x += [1.0] * (128 - len(x))
         y = [x[0] / 2]
@@ -123,9 +123,10 @@ def pack(contrib):
 
 
 def q15u(x):
+    """a signed Q15 (int16): 1.0 is 32767 (the click levels above 1 make negative values)"""
     q = int(round(x * 32768))
-    assert 0 <= q <= 32768
-    return q
+    assert -32768 <= q <= 32768
+    return min(q, 32767)
 
 
 def rows(name, ctype, vals, per=12, fmt="{}"):
@@ -164,8 +165,8 @@ def main():
         L.append("};")
     for tag, key in (("ORG_ATK", "attack"), ("ORG_REL", "release")):
         L.append("")
-        L.append("/* %s envelopes, Q15 (32768 = 1.0), one per active-list slot & 7 */" % key)
-        L.append("static const uint16_t %s[8][%d] = {" % (tag, NFRAG))
+        L.append("/* %s envelopes, signed Q15 (32767 = 1.0), one per active-list slot & 7 */" % key)
+        L.append("static const int16_t %s[8][%d] = {" % (tag, NFRAG))
         for b in range(8):
             e = d[key][b]
             assert len(e) == NFRAG

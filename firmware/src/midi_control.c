@@ -77,8 +77,10 @@ static void midi_pedal_up(uint32_t ch)
 
 /* a panic (a preset load) and CC120: what MIDI held is forgotten, so a later pedal-up or note-off cannot release a
  * note started since on another sound */
+static uint32_t org_split_held[4];                  /* bit note: an upper-channel note that went to the lower manual and the pedals (the split) */
 static void __attribute__((noinline)) midi_forget_all(void)
 {
+    memset(org_split_held, 0, sizeof org_split_held);
     memset(midi_held, 0, sizeof midi_held);
     memset(midi_pedal_held, 0, sizeof midi_pedal_held);
     midi_owners = 0;
@@ -104,10 +106,29 @@ static void org_midi_note(uint32_t ch, uint32_t note, uint32_t vel)
     uint32_t man = org_manual_of(ch), k;
     if (man > 2u)
         return;
+    if (vel && (TSEL->p[P_MUTE] || TSEL->eng_req != TSEL->engine))
+        return;
+    if (man == 0u) {                                    /* the split (0.9.5): below the point the upper channel plays the lower manual and the pedals */
+        uint32_t kl = org_key_of(1u, note), kp = org_key_of(2u, note);
+        if (!vel && ((org_split_held[note >> 5] >> (note & 31u)) & 1u)) {
+            org_split_held[note >> 5] &= ~(1u << (note & 31u));
+            if (kl != 255u)
+                org_key(kl, 0);
+            if (kp != 255u)
+                org_key(kp, 0);
+            return;
+        }
+        if (vel && org_patch[OP_SPLIT] && note < 36u + org_ci(OP_SPLIT_PT, org_patch[OP_SPLIT_PT])) {
+            org_split_held[note >> 5] |= 1u << (note & 31u);
+            if (kl != 255u)
+                org_key(kl, 1);
+            if (kp != 255u)
+                org_key(kp, 1);
+            return;
+        }
+    }
     k = org_key_of(man, note);
     if (k == 255u)
-        return;
-    if (vel && (TSEL->p[P_MUTE] || TSEL->eng_req != TSEL->engine))
         return;
     org_key(k, vel ? 1u : 0u);
 }
@@ -117,6 +138,18 @@ static void __attribute__((noinline)) org_manual_off(uint32_t man)
     for (k = a; k < z; k++)
         if (org.keys[k])
             org_key(k, 0);
+    if (man == 0u) {                                    /* the split's notes too */
+        uint32_t n;
+        for (n = 0; n < 128u; n++)
+            if ((org_split_held[n >> 5] >> (n & 31u)) & 1u) {
+                uint32_t kl = org_key_of(1u, n), kp = org_key_of(2u, n);
+                if (kl != 255u)
+                    org_key(kl, 0);
+                if (kp != 255u)
+                    org_key(kp, 0);
+            }
+        memset(org_split_held, 0, sizeof org_split_held);
+    }
 }
 /* 1: the CC was the organ's */
 static int org_midi_cc(uint32_t ch, uint32_t cc, uint32_t value)
@@ -200,8 +233,8 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
 /* the CCs the CC map may take (not the ones with a meaning of their own here, nor the RPN / NRPN and bank selects) */
 static int ml_free_cc(uint32_t cc)
 {
-    return cc && cc < 120u && cc != 1u && cc != 6u && cc != 11u && cc != 32u && cc != 38u && cc != 64u &&
-           (cc < 96u || cc > 101u);
+    return cc && cc < 120u && cc != 1u && cc != 6u && cc != 7u && cc != 11u && cc != 32u && cc != 38u && cc != 64u &&
+           (cc < 70u || cc > 78u) && (cc < 96u || cc > 101u);
 }
 
 /* a CC sets parameter id of track t as a knob would: 0..127 over its range */

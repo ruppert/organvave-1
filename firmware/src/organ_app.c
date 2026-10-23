@@ -403,42 +403,111 @@ static void oa_sv_letter(int32_t s)
 }
 
 /* -------------------------------------------------------------- GLO --- */
-/* GLO opens the global settings: MIDI IN (USB / MIDI / ALL), MIDI CHANNEL (ALL / 1..16), ABOUT (the splash with the
- * version). SELECT picks a line, ALGORITHM changes it (or opens ABOUT); GLO goes back, then closes. Kept in the
- * settings record (settings.c set_bytes, row 7: FMini-1's layout for the two MIDI bytes, so they carry over) */
-static uint8_t oa_gl;                                     /* 0 closed, 1 the list, 3 ABOUT */
-static uint8_t oa_gl_row;                                 /* 0 MIDI IN, 1 MIDI CHANNEL, 2 ABOUT */
+/* GLO opens the global settings: MIDI IN (USB / MIDI / ALL), UPPER CHANNEL (ALL / 1..16), LOWER CHANNEL (OFF / 1..16), PEDAL
+ * CHANNEL (OFF / 1..16), MIDI CC (the list of the controls, each with its own CC), ABOUT (the splash with the version).
+ * SELECT picks a line, ALGORITHM changes it (or opens the list / ABOUT); GLO goes back, then closes. Kept in the settings record
+ * (settings.c set_bytes): row 7 holds FMini-1's layout for the two MIDI bytes (so they carry over) and, since 0.9.5, the marker
+ * 0xC5, the lower and pedal channels; rows 8..10 hold the CC of each patch byte (0 none) */
+#define OA_NCTL 84u                                       /* the patch bytes a CC may drive (OP_UB .. OP_SPLIT_PT; OP_DRV_FAT, unused, is skipped in the list) */
+#define OA_NROW 6u
+static uint8_t oa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
+static uint8_t oa_gl_row;                                 /* 0 MIDI IN, 1 UPPER, 2 LOWER, 3 PEDAL, 4 MIDI CC, 5 ABOUT */
+static uint8_t oa_cc_row;                                 /* MIDI CC: the control highlighted (its patch byte) */
 static uint8_t oa_cfg_dirty;
+static uint8_t oa_ccmap[OA_NCTL];                         /* the CC (1..119) that sets each patch byte, 0 none */
 static const char *const OA_SRC[3] = {"USB", "MIDI", "ALL"};       /* fm_midi_src 0, 1, 3 */
-static uint8_t *oa_cfg_byte(uint32_t i) { return &set_bytes[7u][i % 32u]; }
+static uint8_t *oa_cfg_byte(uint32_t r, uint32_t i) { return &set_bytes[r % 16u][i % 32u]; }
 static void oa_cfg_load(void)
 {
-    if (*oa_cfg_byte(0) == 0xA7u && *oa_cfg_byte(1) == 0x4Fu) {
-        uint32_t src = *oa_cfg_byte(2), ch = *oa_cfg_byte(3);
+    uint32_t i;
+    memset(oa_ccmap, 0, sizeof oa_ccmap);
+    if (*oa_cfg_byte(7, 0) == 0xA7u && *oa_cfg_byte(7, 1) == 0x4Fu) {
+        uint32_t src = *oa_cfg_byte(7, 2), ch = *oa_cfg_byte(7, 3);
         fm_midi_src = (uint8_t)(src == 0u || src == 1u ? src : 3u);
-        fm_midi_ch = (uint8_t)(ch > 16u ? 0u : ch);
+        fm_midi_base(ch > 16u ? 0u : ch);                 /* (an older setting: one base channel) */
+        if (*oa_cfg_byte(7, 4) == 0xC5u) {
+            uint32_t lo = *oa_cfg_byte(7, 5), pd = *oa_cfg_byte(7, 6);
+            fm_ch_lo = (uint8_t)(lo > 16u ? 2u : lo);
+            fm_ch_pd = (uint8_t)(pd > 16u ? 3u : pd);
+            for (i = 0; i < OA_NCTL; i++) {
+                uint32_t cc = *oa_cfg_byte(8u + i / 32u, i);
+                oa_ccmap[i] = (uint8_t)(ml_free_cc(cc) ? cc : 0u);
+            }
+        }
     } else {
         fm_midi_src = 3;
-        fm_midi_ch = 0;
+        fm_midi_base(0);
     }
     fm_bend_mode = 0;
     fm_bt = 0;
 }
 static void oa_cfg_save(void)
 {
+    uint32_t i;
     if (!oa_cfg_dirty)
         return;
     oa_cfg_dirty = 0;
-    *oa_cfg_byte(0) = 0xA7;
-    *oa_cfg_byte(1) = 0x4F;
-    *oa_cfg_byte(2) = fm_midi_src;
-    *oa_cfg_byte(3) = fm_midi_ch;
+    *oa_cfg_byte(7, 0) = 0xA7;
+    *oa_cfg_byte(7, 1) = 0x4F;
+    *oa_cfg_byte(7, 2) = fm_midi_src;
+    *oa_cfg_byte(7, 3) = fm_ch_up;
+    *oa_cfg_byte(7, 4) = 0xC5;
+    *oa_cfg_byte(7, 5) = fm_ch_lo;
+    *oa_cfg_byte(7, 6) = fm_ch_pd;
+    for (i = 0; i < OA_NCTL; i++)
+        *oa_cfg_byte(8u + i / 32u, i) = oa_ccmap[i];
     settings_save();                                      /* (deferred while anything sounds) */
 }
 static void oa_gl_close(void)
 {
     oa_gl = 0;
     oa_cfg_save();
+}
+/* the next control of the MIDI CC list (OP_DRV_FAT is not one) */
+static uint8_t oa_cc_step(uint32_t at, int32_t s)
+{
+    uint32_t n = at;
+    do
+        n = (n + OA_NCTL + (s > 0 ? 1u : OA_NCTL - 1u)) % OA_NCTL;
+    while (n == OP_DRV_FAT);
+    return (uint8_t)n;
+}
+/* the next CC a control may take: 0 (none), then 2..119 without the ones that have a meaning of their own */
+static uint8_t oa_cc_next(uint32_t cc, int32_t s)
+{
+    int32_t c = (int32_t)cc;
+    do
+        c += s > 0 ? 1 : -1;
+    while (c > 0 && c < 120 && !ml_free_cc((uint32_t)c));
+    return (uint8_t)(c < 0 ? 0 : c > 119 ? cc : c);
+}
+/* a CC to a control: one control per CC */
+static void oa_cc_assign(uint32_t ctl, uint32_t cc)
+{
+    uint32_t i;
+    if (cc)
+        for (i = 0; i < OA_NCTL; i++)
+            if (oa_ccmap[i] == cc)
+                oa_ccmap[i] = 0;
+    oa_ccmap[ctl % OA_NCTL] = (uint8_t)cc;
+    oa_cfg_dirty = 1;
+}
+/* a control moved by a CC (value 0..127 over its range, as a knob would) */
+static void oa_ctl_cc(uint32_t b, uint32_t v)
+{
+    uint32_t mx = org_pmax(b), idx = (v * mx + 63u) / 127u;
+    if (b == OP_DRV_FAT)
+        return;
+    if (b >= OP_TUNING && b < OP_NUM)
+        org_set(b, org_bi(b, idx));
+    else if (b >= OP_DRV_TONE && b <= OP_ROT_DRAMP)
+        org_set(b, org_b9(idx));
+    else if (b == OP_EQ_LOW || b == OP_EQ_MID || b == OP_EQ_HIGH)
+        org_set(b, eq_byte((int32_t)idx - 12));
+    else
+        org_set(b, idx);
+    if (b >= OP_XT_COMP && b <= OP_XT_MIN && org_patch[b])
+        org_set(OP_XTALK, 1u);
 }
 
 /* ------------------------------------------------------------ scenes --- */
@@ -463,26 +532,25 @@ static void oa_gl_dialog(void)
 {
     char b[8];
     oa_frame("GLOBAL");
-    oa_line(70, "MIDI IN", OA_SRC[fm_midi_src == 3u ? 2u : fm_midi_src & 1u], oa_gl_row == 0u);
-    if (fm_midi_ch)
-        fmt_int(b, fm_midi_ch);
+    oa_line(58, "MIDI IN", OA_SRC[fm_midi_src == 3u ? 2u : fm_midi_src & 1u], oa_gl_row == 0u);
+    if (fm_ch_up)
+        fmt_int(b, fm_ch_up);
     else
         str_cpy(b, "ALL", 4);
-    oa_line(96, "MIDI CHANNEL", b, oa_gl_row == 1u);
-    oa_line(122, "ABOUT", ">", oa_gl_row == 2u);
-    if (fm_midi_ch) {                                     /* the manuals follow the channel: N upper, N + 1 lower, N + 2 pedals */
-        char c[24];
-        uint32_t n1 = (uint32_t)fm_midi_ch, n2 = n1 % 16u + 1u, n3 = n2 % 16u + 1u;
-        fmt_int(c, n1);
-        str_cpy(c + str_len(c), " UPPER  ", 9);
-        fmt_int(c + str_len(c), n2);
-        str_cpy(c + str_len(c), " LOWER  ", 9);
-        fmt_int(c + str_len(c), n3);
-        str_cpy(c + str_len(c), " PEDAL", 7);
-        ctext(120, 160, &AF_X, c, C_DIM, C_POP);
-    } else
-        ctext(120, 160, &AF_X, "1 UPPER  2 LOWER  3 PEDAL", C_DIM, C_POP);
-    ctext(120, 190, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
+    oa_line(82, "UPPER CHANNEL", b, oa_gl_row == 1u);
+    if (fm_ch_lo)
+        fmt_int(b, fm_ch_lo);
+    else
+        str_cpy(b, "OFF", 4);
+    oa_line(106, "LOWER CHANNEL", b, oa_gl_row == 2u);
+    if (fm_ch_pd)
+        fmt_int(b, fm_ch_pd);
+    else
+        str_cpy(b, "OFF", 4);
+    oa_line(130, "PEDAL CHANNEL", b, oa_gl_row == 3u);
+    oa_line(154, "MIDI CC", ">", oa_gl_row == 4u);
+    oa_line(178, "ABOUT", ">", oa_gl_row == 5u);
+    ctext(120, 198, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
 }
 
 static void oa_sv_dialog(void)
@@ -556,8 +624,8 @@ static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on t
  * and the knobs 1 to 4 go straight to the first four rows. A list longer than the screen scrolls with the pick. The rows of a page
  * are what oa_val shows and oa_adj1 changes (one detent). */
 #define OA_VIS 8u                                       /* rows on the screen */
-static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 27};
-static const char *const OA_LB[9][27] = {
+static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 29};
+static const char *const OA_LB[9][29] = {
     {0},
     {0},
     {"PERCUSSION", "VOLUME", "DECAY", "HARMONIC", "VIBRATO"},
@@ -566,20 +634,21 @@ static const char *const OA_LB[9][27] = {
     {"SEND", "TYPE", "SIZE", "TONE"},
     {"SEND", "TYPE", "TIME", "FEEDBACK", "COLOUR", "MIX"},
     {"EQ", "LOW", "MID", "HIGH", "MID FREQ"},
-    {"TUNING", "TEMPERAMENT", "ATTACK CLICK", "RELEASE CLICK", "ATTACK MODEL", "CLICK LEN MIN", "CLICK LEN MAX", "RELEASE MODEL",
+    {"TUNING", "TEMPERAMENT", "SPLIT", "SPLIT POINT", "ATTACK CLICK", "RELEASE CLICK", "ATTACK MODEL", "CLICK LEN MIN", "CLICK LEN MAX", "RELEASE MODEL",
      "CROSSTALK", "COMPARTMENT", "TRANSFORMER", "TERMINAL STRIP", "WIRING", "XT FLOOR", "XT MIN",
      "PERC FAST", "PERC SLOW", "PERC NORMAL", "PERC SOFT", "PERC GAIN", "PERC BUS A", "PERC BUS B", "PERC TRIGGER",
      "SCAN RATE", "VIB1 DEPTH", "VIB2 DEPTH", "VIB3 DEPTH"},
 };
 /* ADVANCED EDIT: row -> the patch byte (eng_organ.c OP_*). The knobs 1-4 go to the first four rows */
-static const uint8_t OA_AOP[27] = {
-    OP_TUNING, OP_TEMP, OP_ATK_LEVEL, OP_REL_LEVEL, OP_ATK_MODEL, OP_ATK_MIN, OP_ATK_MAX, OP_REL_MODEL,
+static const uint8_t OA_AOP[29] = {
+    OP_TUNING, OP_TEMP, OP_SPLIT, OP_SPLIT_PT, OP_ATK_LEVEL, OP_REL_LEVEL, OP_ATK_MODEL, OP_ATK_MIN, OP_ATK_MAX, OP_REL_MODEL,
     OP_XTALK, OP_XT_COMP, OP_XT_TRANS, OP_XT_TSTRIP, OP_XT_WIRE, OP_XT_FLOOR, OP_XT_MIN,
     OP_PC_FAST, OP_PC_SLOW, OP_PC_NORM, OP_PC_SOFT, OP_PC_GAIN, OP_PC_BUSA, OP_PC_BUSB, OP_PC_TRIG,
     OP_SC_HZ, OP_SC_V1, OP_SC_V2, OP_SC_V3,
 };
 static const char *const OA_FOOT[9] = {"16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'"};
 static const char *const OA_ENVM[4] = {"CLICK", "COSINE", "LINEAR", "SHELF"};
+static const char *const OA_NOTE[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 typedef struct {
     char t[16];                                         /* the value's text */
     int8_t mn, mv;                                      /* a meter of mn cells with mv lit (mn 0: none) */
@@ -659,14 +728,25 @@ static void oa_val_adv(uint32_t r, oa_val_t *v)
         oa_vsw(v, OP_XTALK, "OFF", "ON");
         return;
     }
+    if (op == OP_SPLIT) {
+        oa_vsw(v, OP_SPLIT, "OFF", "ON");
+        return;
+    }
     i = oa_ai(op);
     v->on = 1;
     switch (op) {
     case OP_TUNING:     oa_vnum(v, 4080 + 5 * i, 1, " HZ"); break;
     case OP_ATK_MODEL:
     case OP_REL_MODEL:  oa_vt(v, OA_ENVM[i & 3]); break;
-    case OP_ATK_LEVEL:
-    case OP_REL_LEVEL:  oa_vnum(v, i * 5 / 2, 0, " %"); break;
+    case OP_ATK_LEVEL:  oa_vnum(v, i * 5, 0, " %"); break;
+    case OP_REL_LEVEL:  oa_vnum(v, i * 25, 1, " %"); break;
+    case OP_SPLIT_PT:   {
+        char *t = v->t;
+        uint32_t nt = 36u + (uint32_t)i;
+        str_cpy(t, OA_NOTE[nt % 12u], 4);
+        fmt_int(t + str_len(t), (int32_t)(nt / 12u) - 1);
+        break;
+    }
     case OP_ATK_MIN:
     case OP_ATK_MAX:    oa_vnum(v, i * 16 / 5, 0, " SMP"); break;
     case OP_XT_FLOOR:
@@ -686,6 +766,8 @@ static void oa_val_adv(uint32_t r, oa_val_t *v)
     case OP_SC_HZ:      oa_vnum(v, 400 + 25 * i, 2, " HZ"); break;
     default:            oa_vnum(v, 5 * i, 1, 0); break;                  /* the scanner's depths, in samples */
     }
+    if (op >= OP_XT_COMP && op <= OP_XT_MIN ? !org_patch[OP_XTALK] : op == OP_SPLIT_PT && !org_patch[OP_SPLIT])
+        v->on = 0;                                                          /* (dim: the switch above it is off) */
 }
 
 static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
@@ -830,8 +912,15 @@ static void oa_adj_adv(uint32_t r, int32_t d)
         org_set(OP_TEMP, (uint32_t)clamp(oa_u(OP_TEMP, 2u) + d, 0, 2));
     else if (op == OP_XTALK)
         org_set(OP_XTALK, d > 0 ? 1u : 0u);
-    else
+    else if (op == OP_SPLIT)
+        org_set(OP_SPLIT, d > 0 ? 1u : 0u);
+    else if (op == OP_SPLIT_PT && !org_patch[OP_SPLIT])
+        return;                                                  /* (the point is enabled by SPLIT) */
+    else {
         org_set(op, org_bi(op, (uint32_t)clamp(oa_ai(op) + d, 0, (int32_t)org_pmax(op))));
+        if (op >= OP_XT_COMP && op <= OP_XT_MIN)
+            org_set(OP_XTALK, 1u);                                /* a crosstalk setting does nothing with the crosstalk off: it is switched on */
+    }
 }
 static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
 {
@@ -1009,6 +1098,51 @@ static void scr_drawbars(void)
     footer(oa_man ? "SELECT: BAR   ALGORITHM: PULL   EDIT: ADVANCED" : "SELECT: BAR   ALGORITHM: PULL   EDIT: LOWER");
 }
 
+/* the control's name (a patch byte): the drawbars of the manuals, the pages' labels */
+static const char *const OA_CN[57] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    "PERCUSSION", "PERC SOFT", "PERC DECAY", "PERC HARMONIC", "VIBRATO", "ROTARY", "ROTARY MODEL", "ROTARY SPEED", "HORN", "ROTARY WIDTH",
+    "HORN LEVEL", "DRIVE", "DRIVE GAIN", 0, "EQ", "EQ LOW", "EQ MID", "EQ MID FREQ", "EQ HIGH", "DRIVE TYPE", "DRIVE TONE", "DRIVE OUTPUT",
+    "HORN SLOW", "HORN FAST", "DRUM SLOW", "DRUM FAST", "HORN RAMP", "DRUM RAMP",
+};
+static void oa_ctl_name(char *out, uint32_t b)
+{
+    uint32_t r;
+    if (b < 27u) {
+        static const char *const MAN[3] = {"UPPER ", "LOWER ", "PEDAL "};
+        str_cpy(out, MAN[b / 9u], 8);
+        str_cpy(out + 6, OA_FOOT[b % 9u], 9);
+        return;
+    }
+    for (r = 0; r < 29u; r++)
+        if (OA_AOP[r] == b) {
+            str_cpy(out, OA_LB[8][r], 16);
+            return;
+        }
+    str_cpy(out, b < 57u && OA_CN[b] ? OA_CN[b] : "-", 16);
+}
+static void oa_cc_dialog(void)
+{
+    uint32_t at = oa_cc_row, i, n = at;
+    int32_t k;
+    oa_frame("MIDI CC");
+    for (k = -2; k <= 2; k++) {                           /* five controls around the highlighted one */
+        char nm[16], v[8];
+        n = at;
+        for (i = 0; i < (uint32_t)(k < 0 ? -k : k); i++)
+            n = oa_cc_step(n, k);
+        oa_ctl_name(nm, n);
+        if (oa_ccmap[n]) {
+            str_cpy(v, "CC ", 4);
+            fmt_int(v + 3, oa_ccmap[n]);
+        } else
+            str_cpy(v, "OFF", 4);
+        oa_line(70 + (k + 2) * 24, nm, v, k == 0);
+    }
+    ctext(120, 187, &AF_X, "MOVE A CC TO LEARN IT", C_DIM, C_POP);
+    ctext(120, 199, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
+}
+
 static void oa_scene(void)
 {
     if (oa_page == 1u)
@@ -1023,6 +1157,8 @@ static void oa_scene(void)
         scr_home();
     if (oa_gl == 1u)
         oa_gl_dialog();
+    else if (oa_gl == 2u)
+        oa_cc_dialog();
     else if (oa_sv)
         oa_sv_dialog();
     else if (oa_msg_on()) {
@@ -1040,7 +1176,8 @@ static uint32_t oa_signature(void)
     for (i = 0; i < ORG_PSIZE; i++)
         h = (h ^ org_patch[i]) * 16777619u;
     h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_sel << 2 ^ (uint32_t)oa_row[oa_page % 9u] << 18 ^ (uint32_t)oa_top[oa_page % 9u] << 22 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
-    h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_midi_ch << 6) * 16777619u;
+    h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_ch_up << 6 ^ (uint32_t)fm_ch_lo << 11 ^ (uint32_t)fm_ch_pd << 16) * 16777619u;
+    h = (h ^ oa_cc_row ^ (uint32_t)oa_ccmap[oa_cc_row % OA_NCTL] << 8 ^ (uint32_t)oa_ccmap[oa_cc_step(oa_cc_row, 1)] << 15 ^ (uint32_t)oa_ccmap[oa_cc_step(oa_cc_row, -1)] << 20) * 16777619u;
     h = (h ^ oa_sv ^ (uint32_t)oa_sv_slot << 1 ^ (uint32_t)oa_sv_pos << 8 ^ (uint32_t)oa_msg_on() << 12 ^
          (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16) * 16777619u;
     for (i = 0; i < 12u; i++)
@@ -1127,8 +1264,10 @@ static void oa_buttons(uint32_t pressed)
         oa_sv = 0;
         if (!oa_gl)
             oa_gl = 1;
-        else if (oa_gl > 1u)
+        else if (oa_gl > 1u) {
             oa_gl = 1;
+            oa_cfg_save();
+        }
         else
             oa_gl_close();
         return;
@@ -1178,6 +1317,26 @@ static void oa_cc_poll(void)
                 org_set(9u * m + i, (v + 63u) / 127u);
             }
     }
+    for (i = 0; i < 4u; i++) {                            /* the learned CCs (GLO > MIDI CC; with that list open, a CC is learned) */
+        uint32_t pend = fm_cc_pend[i], j;
+        if (!pend)
+            continue;
+        for (j = 0; j < 32u; j++) {
+            uint32_t cc = i * 32u + j, v, c;
+            if (!((pend >> j) & 1u))
+                continue;
+            fm_cc_pend[i] &= ~(1u << j);
+            v = fm_cc_rx[cc];
+            if (oa_gl == 2u) {
+                if (ml_free_cc(cc))
+                    oa_cc_assign(oa_cc_row, cc);
+                continue;
+            }
+            for (c = 0; c < OA_NCTL; c++)
+                if (oa_ccmap[c] == cc)
+                    oa_ctl_cc(c, v);
+        }
+    }
     rq = fm_rot_req;
     if (rq) {
         fm_rot_req = 0;
@@ -1206,21 +1365,29 @@ static void oa_input(void)
         (void)panel_enc(EN_PRESET);
         if (oa_gl == 1u) {
             if ((s = panel_enc(EN_SELECT)) != 0)
-                oa_gl_row = (uint8_t)((oa_gl_row + 3u + (s > 0 ? 1u : 2u)) % 3u);
+                oa_gl_row = (uint8_t)((oa_gl_row + OA_NROW + (s > 0 ? 1u : OA_NROW - 1u)) % OA_NROW);
             if ((s = panel_enc(EN_ALGO)) != 0) {
+                int32_t d = s > 0 ? 1 : -1;
                 if (oa_gl_row == 0u) {
                     static const uint8_t SRC[3] = {0, 1, 3};
-                    int32_t d = (fm_midi_src == 3u ? 2 : (int32_t)(fm_midi_src & 1u)) + (s > 0 ? 1 : -1);
-                    fm_midi_src = SRC[clamp(d, 0, 2)];
+                    fm_midi_src = SRC[clamp((fm_midi_src == 3u ? 2 : (int32_t)(fm_midi_src & 1u)) + d, 0, 2)];
                     panic_req |= 1u;                      /* a note of the source left must not hang */
                     oa_cfg_dirty = 1;
-                } else if (oa_gl_row == 1u) {
-                    fm_midi_ch = (uint8_t)clamp((int32_t)fm_midi_ch + (s > 0 ? 1 : -1), 0, 16);
+                } else if (oa_gl_row <= 3u) {
+                    volatile uint8_t *ch = oa_gl_row == 1u ? &fm_ch_up : oa_gl_row == 2u ? &fm_ch_lo : &fm_ch_pd;
+                    *ch = (uint8_t)clamp((int32_t)*ch + d, 0, 16);
                     panic_req |= 1u;
                     oa_cfg_dirty = 1;
-                } else
+                } else if (oa_gl_row == 4u)
+                    oa_gl = 2;
+                else
                     oa_gl = 3;
             }
+        } else if (oa_gl == 2u) {                          /* MIDI CC: SELECT the control, ALGORITHM the CC (a CC arriving is learned) */
+            if ((s = panel_enc(EN_SELECT)) != 0)
+                oa_cc_row = oa_cc_step(oa_cc_row, s);
+            if ((s = panel_enc(EN_ALGO)) != 0)
+                oa_cc_assign(oa_cc_row, oa_cc_next(oa_ccmap[oa_cc_row % OA_NCTL], s));
         } else if (panel_enc(EN_SELECT) != 0 || panel_enc(EN_ALGO) != 0)   /* ABOUT: either encoder goes back */
             oa_gl = 1;
         return;

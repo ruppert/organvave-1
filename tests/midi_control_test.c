@@ -14,7 +14,7 @@ static void mreset(void)
     memset(midi_ch, 0, sizeof midi_ch);
     midi_forget_all();
     memset((void *)fm_cc_rx, 0, sizeof fm_cc_rx); memset((void *)fm_cc_pend, 0, sizeof fm_cc_pend);
-    fm_midi_src = 3; fm_midi_ch = 0; fm_bend_mode = 0; fm_bt = 0; midi_pc = 0;
+    fm_midi_src = 3; fm_midi_base(0); fm_bend_mode = 0; fm_bt = 0; midi_pc = 0;
     events_block(CTL);
 }
 static void q(uint32_t st, uint32_t d1, uint32_t d2, uint32_t source)
@@ -90,7 +90,7 @@ int main(void)
     bad += check("  .. a program past the last is ignored (no wrap)", TSEL->preset == 2);
 
     mreset();
-    fm_midi_ch = 3;
+    fm_ch_up = 3; fm_ch_lo = fm_ch_pd = 0;
     q(0x90, 60, 100, 1);
     bad += check("MIDI CH 3: channel 1 is not heard", !gate(60));
     q(0x92, 60, 100, 1);

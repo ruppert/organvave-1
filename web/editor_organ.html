@@ -196,7 +196,7 @@ const ORG_PSIZE = 96, ORG_PSIZE_OLD = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, O
       OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, OP_ROT = 34, OP_ROT_MODEL = 35, OP_ROT_SPEED = 36,
       OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_EQ = 43, OP_EQ_LOW = 44, OP_EQ_MID = 45, OP_EQ_FREQ = 46, OP_EQ_HIGH = 47,
       OP_DRV_TYPE = 48, OP_DRV_TONE = 49, OP_DRV_OUT = 50, OP_ROT_HSLOW = 51, OP_ROT_HFAST = 52, OP_ROT_DSLOW = 53, OP_ROT_DFAST = 54,
-      OP_ROT_HRAMP = 55, OP_ROT_DRAMP = 56, OP_TUNING = 57, OP_SC_V3 = 81, PUT_MAX = 48;
+      OP_ROT_HRAMP = 55, OP_ROT_DRAMP = 56, OP_TUNING = 57, OP_SC_V3 = 81, OP_SPLIT_PT = 83, PUT_MAX = 48;
 // the equaliser's bytes: zero is flat. A gain byte s is s dB up to 12 and s - 25 above; the frequency byte f is the index (f + 5) % 12 of
 // this list (0 is 900 Hz)
 const EQ_HZ = [160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200];
@@ -208,21 +208,27 @@ const c9 = (b) => (b + 4) % 9, b9 = (i) => (i + 5) % 9;
 const ROT_SPF = [163, 182, 204, 229, 256, 287, 321, 360, 403], ROT_RTF = [67, 93, 131, 183, 256, 358, 502, 702, 983];
 const SPEEDS = [["rhs", OP_ROT_HSLOW, 672], ["rhf", OP_ROT_HFAST, 6500], ["rds", OP_ROT_DSLOW, 600], ["rdf", OP_ROT_DFAST, 5955]];
 const RAMPS = [["rhr", OP_ROT_HRAMP, 1500000, 2], ["rdr", OP_ROT_DRAMP, 4127000, 1]];
-// ADVANCED EDIT (0.9.4, the bytes 57..81): [op, label, n steps, default step, text of a step]. A byte is (step - default) mod n, so a
+// ADVANCED EDIT (0.9.4, the bytes 57..81; 0.9.5 adds 82 and 83, the split): [op, label, n steps, default step, text of a step]. A byte is (step - default) mod n, so a
 // zero byte is the default. The ladder is -2 dB a step up to 0 dB (step 0 is off), as the firmware's ORG_XT_G
 const ENVM = ["Click", "Cosine", "Linear", "Shelf"];
+const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const noteName = (i) => NOTES[(36 + i) % 12] + (Math.floor((36 + i) / 12) - 1);
+const pct20 = (i) => i * 5 + " %";
 const pct40 = (i) => (i * 2.5).toFixed(1).replace(/\.0$/, "") + " %", smp = (i) => Math.floor(i * 16 / 5) + " samples";
 const ladder = (zero) => (i) => (i === 0 ? zero : -2 * (51 - i) + " dB");
 const secs = (i) => ((i + 1) / 10).toFixed(1) + " s";
 const ADV_GROUPS = [
   ["Key click and tuning", [
     [57, "Tuning (A4)", 128, 64, (i) => (408 + i / 2).toFixed(1) + " Hz"],
-    [59, "Attack click level", 41, 20, pct40],
+    [59, "Attack click level (0.9.5: 100 % is twice setBfree's)", 41, 20, pct20],
     [60, "Attack click length, min (shorter = brighter click)", 41, 5, smp],
     [61, "Attack click length, max", 41, 25, smp],
     [58, "Attack model", 4, 0, (i) => ENVM[i]],
-    [63, "Release click level", 41, 10, pct40],
+    [63, "Release click level (0.9.5: 50 % is twice setBfree's; the Click release model)", 41, 20, pct40],
     [62, "Release model", 4, 2, (i) => ENVM[i]]]],
+  ["Keyboard split (MIDI on the upper channel)", [
+    [82, "Split (off, or the notes of the upper channel below the point also play the lower manual and the pedals)", 2, 0, (i) => (i ? "On" : "Off")],
+    [83, "Split point (the lowest note of the upper manual)", 61, 19, noteName]]],
   ["Crosstalk (needs the Crosstalk box above)", [
     [64, "Compartment (the wheel pair)", 52, 31, ladder("none")],
     [65, "Transformer neighbours", 52, 0, ladder("none")],
@@ -490,7 +496,7 @@ async function sendPatch() {
   busy = true; setEnabled(true);
   try {
     fromControls();
-    const used = psize >= ORG_PSIZE ? OP_SC_V3 + 1 : OP_ROT_DRAMP + 1;   // 82 bytes (57 for an older firmware): two frames (a frame carries at most 48)
+    const used = psize >= ORG_PSIZE ? OP_SPLIT_PT + 1 : OP_ROT_DRAMP + 1;   // 84 bytes (57 for an older firmware): two frames (a frame carries at most 48)
     for (let off = 0; off < used; off += PUT_MAX) {
       const n = Math.min(PUT_MAX, used - off);
       const r = await request(CMD.ORG_PUT, [0, off, n, ...patch.slice(off, off + n)]);

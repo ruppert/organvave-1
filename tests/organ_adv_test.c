@@ -8,7 +8,8 @@
  *    for crosstalk (compartment, transformer, terminal strip, wiring, floor, min) and click settings (models, levels, lengths).
  * 3. a table too big for the RAM is built with a higher floor, not cut.
  * 4. in the engine: the RAM table is used by new keys and every key leaves nothing behind; it is rebuilt only while no key holds it.
- * 5. the tuning, the percussion and the scanner follow their bytes. */
+ * 5. the tuning, the percussion and the scanner follow their bytes.
+ * 6. the crosstalk settings are audible (the maximum far from the default) and the switch gates them. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -374,6 +375,76 @@ static void params(void)
     }
 }
 
+/* 6. 0.9.5, "the crosstalk sounds the same at the maximum and the minimum": the audio of a held chord against the default, per setting.
+ * The engine follows the settings (the maximum of each is far from the default), the minimum is near it (the default is -40 dB, a
+ * level that is already inaudible), and with the CROSSTALK switch off no setting reaches the sound */
+static int32_t xt_out[400 * CTL], xt_ref[400 * CTL];
+static void xt_run(int32_t *dst, uint32_t sw, const uint32_t *idx)
+{
+    uint32_t i, k;
+    int32_t b[CTL];
+    org_init();
+    memset(org_patch, 0, sizeof org_patch);
+    for (i = 0; i < 9u; i++)
+        org_patch[OP_UB + i] = i == 2u || i == 3u ? 8u : 0u;
+    org_patch[OP_XTALK] = (uint8_t)sw;
+    for (i = 0; i < 6u; i++)
+        org_patch[OP_XT_COMP + i] = (uint8_t)org_bi(OP_XT_COMP + i, idx[i]);
+    org_pgen++;
+    org_pgen_seen = 0xFF;
+    org_block(0);
+    org_adv_poll();
+    org_key(10, 1); org_key(14, 1); org_key(17, 1); org_key(40, 1);
+    for (k = 0; k < 400u; k++) {
+        memset(b, 0, sizeof b);
+        org_render(b, CTL);
+        memcpy(dst + k * CTL, b, sizeof b);
+    }
+}
+static double xt_diff(const int32_t *a, const int32_t *b)
+{
+    double e = 0, r = 0;
+    uint32_t i;
+    for (i = 100u * CTL; i < 400u * CTL; i++) {
+        double d = (double)a[i] - (double)b[i];
+        e += d * d;
+        r += (double)b[i] * (double)b[i];
+    }
+    return sqrt(e / r);
+}
+static void audible(void)
+{
+    static const uint32_t DEF[6] = {31, 0, 31, 31, 3, 0};      /* the default steps (-40 dB x3, off, -96 dB, off) */
+    static const char *const NM[6] = {"COMPARTMENT", "TRANSFORMER", "TERMINAL STRIP", "WIRING", "XT FLOOR", "XT MIN"};
+    uint32_t p, ok_max = 1, ok_min = 1;
+    char w[96];
+    xt_run(xt_ref, 1, DEF);
+    for (p = 0; p < 6u; p++) {
+        uint32_t a[6], j;
+        double dmax, dmin;
+        for (j = 0; j < 6u; j++)
+            a[j] = DEF[j];
+        a[p] = 51;
+        xt_run(xt_out, 1, a);
+        dmax = xt_diff(xt_out, xt_ref);
+        a[p] = 1;
+        xt_run(xt_out, 1, a);
+        dmin = xt_diff(xt_out, xt_ref);
+        snprintf(w, sizeof w, "%s: the maximum is far from the default sound (%.3f), the minimum near it (%.3f)", NM[p], dmax, dmin);
+        check(w, dmax > 0.3 && dmin < dmax / 10.0);
+        ok_max &= dmax > 0.3;
+        ok_min &= dmin < dmax / 10.0;
+    }
+    {
+        uint32_t a[6] = {51, 51, 51, 51, 3, 0}, z[6] = {0, 0, 0, 0, 0, 0};
+        xt_run(xt_out, 0, a);
+        xt_run(xt_ref, 0, z);
+        check("CROSSTALK off: the settings do not reach the sound (all at the maximum is the same as all at the minimum)", xt_diff(xt_out, xt_ref) < 1e-9);
+        xt_run(xt_out, 1, a);
+        check("  .. switched on, the same maximum is a different sound", xt_diff(xt_out, xt_ref) > 0.3);
+    }
+}
+
 int main(void)
 {
     org_init();
@@ -381,6 +452,7 @@ int main(void)
     reference();
     engine();
     params();
+    audible();
     printf(bad ? "organ adv: %d FAILED\n" : "organ adv: all ok\n", bad);
     return bad != 0;
 }

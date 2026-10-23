@@ -70,7 +70,7 @@ static void boot(void)
         org_set_patch(P);
     }
     mi_r = mi_w = 0;
-    fm_midi_src = 3; fm_midi_ch = 0;
+    fm_midi_src = 3; fm_midi_base(0);
     fm_dbar_pend[0] = fm_dbar_pend[1] = fm_dbar_pend[2] = 0;
     fm_rot_req = 0;
     for (i = 0; i < 4u; i++)
@@ -101,17 +101,70 @@ int main(void)
     step();
     check("  .. and on the others", down() == 0u);
 
-    fm_midi_ch = 5;                                  /* GLO: channel 5 .. 7 */
+    fm_midi_base(5);                                 /* an older setting: base channel 5 .. 7 */
     on(4, 60); on(5, 60); on(6, 36); on(0, 62); on(7, 62);
     step();
     check("GLO channel 5: 5 upper, 6 lower, 7 pedals; channels 1 and 8 ignored",
           org.keys[24] && org.keys[64 + 24] && org.keys[128 + 12] && !org.keys[26] && down() == 3u);
-    fm_midi_ch = 15;                                 /* round the 16: 15, 16, 1 */
+    fm_midi_base(15);                                /* round the 16: 15, 16, 1 */
     off(4, 60); off(5, 60); off(6, 36);
     on(14, 60); on(15, 60); on(0, 36);
     step();
     check("  .. channel 15 wraps: 15, 16, 1", org.keys[24] && org.keys[64 + 24] && org.keys[128 + 12]);
-    fm_midi_ch = 0;
+    off(14, 60); off(15, 60); off(0, 36);
+    step();
+    /* 0.9.5: a channel of its own for each manual (GLO), the lower and the pedals can be off */
+    fm_ch_up = 4; fm_ch_lo = 9; fm_ch_pd = 12;
+    on(3, 60); on(8, 60); on(11, 36); on(1, 62); on(2, 62);
+    step();
+    check("channels 4 / 9 / 12: each manual on its own channel, the others ignored",
+          org.keys[24] && org.keys[64 + 24] && org.keys[128 + 12] && down() == 3u);
+    off(3, 60); off(8, 60); off(11, 36);
+    step();
+    fm_ch_lo = 0; fm_ch_pd = 0;
+    on(3, 60); on(1, 60); on(2, 36);
+    step();
+    check("  .. LOWER and PEDAL OFF: only the upper is heard", org.keys[24] && down() == 1u);
+    off(3, 60);
+    step();
+    fm_ch_up = 0;
+    on(5, 60); on(6, 64);
+    step();
+    check("  .. UPPER ALL takes every channel (the others being off)", org.keys[24] && org.keys[28] && down() == 2u);
+    off(5, 60); off(6, 64);
+    step();
+    fm_midi_base(0);
+    step();
+
+    /* the split (0.9.5): the upper channel below the point plays the lower manual and the pedals as well */
+    org_patch[OP_SPLIT] = 1;
+    org_patch[OP_SPLIT_PT] = 0;                      /* the default byte: index 19, G3 (55) */
+    on(0, 48); on(0, 60);
+    step();
+    check("SPLIT on: C3 (48) below G3 plays the lower manual and the pedals, not the upper",
+          !org.keys[12] && org.keys[64 + 12] && org.keys[128 + 24] && org.keys[24] && down() == 3u);
+    off(0, 48); off(0, 60);
+    step();
+    check("  .. the note-offs release them", down() == 0u);
+    on(0, 55); on(0, 54);
+    step();
+    check("  .. G3 (55) is the upper's lowest, F#3 (54) goes below",
+          org.keys[19] && !org.keys[18] && org.keys[64 + 18] && org.keys[128 + 30] && down() == 3u);
+    org_patch[OP_SPLIT] = 0;
+    off(0, 55); off(0, 54);
+    step();
+    check("  .. SPLIT turned off with the notes held: they still end", down() == 0u);
+    on(0, 48);
+    step();
+    check("SPLIT off: the upper manual only", org.keys[12] && down() == 1u);
+    off(0, 48);
+    step();
+    org_patch[OP_SPLIT] = 1;
+    on(0, 48); on(0, 40);
+    cc(0, 123, 0);
+    step();
+    check("  .. CC 123 on the upper channel also ends the split's notes", down() == 0u);
+    org_patch[OP_SPLIT] = 0;
     cc(0, 120, 0);
     step();
     check("CC 120: every key off", down() == 0u);
@@ -136,7 +189,7 @@ int main(void)
     }
     on(1, 60); on(2, 36);
     a = rms_run(120);
-    check("with their drawbars at 0 the lower manual and the pedals are silent", a < 3.0);
+    check("with their drawbars at 0 the lower manual and the pedals are silent (but the key click, twice setBfree's since 0.9.5)", a < 8.0);
     off(1, 60); off(2, 36);
     (void)rms_run(30);
 

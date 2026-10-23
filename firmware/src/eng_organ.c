@@ -58,7 +58,7 @@ typedef struct {
     int32_t pn;                         /* the percussion's contact gain: the perc bus's level, Q12, 0 while off */
     int32_t gs, gd;                     /* this fragment: the start gain and the step the envelope scales, Q12 */
     int32_t pgs, pgd;                   /* the same for the percussion's contact gain */
-    const uint16_t *env;                /* this fragment's envelope (attack or release), or 0 */
+    const int16_t *env;                 /* this fragment's envelope (attack or release), or 0 */
     uint32_t ph;
     int16_t refc;                       /* contributions holding it (aot refCount) */
     int8_t acl;                         /* its place on the active list, -1 off */
@@ -80,8 +80,8 @@ typedef struct {
     uint32_t vinc;                      /* the scanner's phase step */
     uint32_t pe_norm, pe_soft;          /* the percussion envelope's start, Q24 (normal / soft) */
     uint16_t pdec_fast, pdec_slow;      /* its decay per block, Q16 */
-    const uint16_t (*atk)[128];         /* the attack / release envelopes in use (flash: setBfree's, or the RAM ones) */
-    const uint16_t (*rel)[128];
+    const int16_t (*atk)[128];          /* the attack / release envelopes in use (flash: setBfree's, or the RAM ones) */
+    const int16_t (*rel)[128];
     const uint32_t (*wtab)[91];         /* the wheels' increments by temperament (flash, or scaled by the tuning) */
     uint16_t swell;                     /* the swell pedal, Q15 (32768 = 1.0) */
     /* state (the audio path) */
@@ -113,8 +113,8 @@ static org_t org;
 /* ADVANCED EDIT's RAM: the crosstalk table (the layout of ORG_KC: ORG_XT_OFF[k] .. [k + 1]), the click envelopes, the scaled increments */
 static uint32_t org_xt_tab[ORG_XT_CAP] __attribute__((section(".pool")));
 static uint16_t org_xt_off[97] __attribute__((section(".pool")));
-static uint16_t org_atk_ram[8][128] __attribute__((section(".pool")));
-static uint16_t org_rel_ram[8][128] __attribute__((section(".pool")));
+static int16_t org_atk_ram[8][128] __attribute__((section(".pool")));
+static int16_t org_rel_ram[8][128] __attribute__((section(".pool")));
 static uint32_t org_winc_ram[3][91] __attribute__((section(".pool")));
 /* what the tables were built from (0: setBfree's defaults, the flash tables) */
 static uint8_t org_b_tun, org_b_env[6], org_b_xt[6], org_xt_valid;
@@ -372,7 +372,7 @@ static __attribute__((noinline)) void org_wheel_pc(org_wheel_t *w, uint32_t inc,
     uint32_t ph = w->ph, i;
     int32_t g = w->gs, pg = w->pgs;
     if (w->env) {
-        const uint16_t *e = w->env + off;
+        const int16_t *e = w->env + off;
         int32_t gd = w->gd, pgd = w->pgd;
         for (i = 0; i < n; i++) {
             int32_t s = sine_i(ph), ee = (int32_t)e[i];
@@ -418,7 +418,7 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
             continue;
         }
         if (w->env) {
-            const uint16_t *e = w->env + off;
+            const int16_t *e = w->env + off;
             int32_t gd = w->gd, *yp = y;
             for (i = n; i; i--) {
                 int32_t gg = g + (((int32_t)*e++ * gd) >> 15);
@@ -507,11 +507,11 @@ enum {
      * (ORG_ADV below): the index is (byte + D) % N, so a patch of zeros is the default. */
     OP_TUNING = 57,             /* osc.tuning: 408.0 .. 471.5 Hz in 0.5 Hz steps, 440 the default */
     OP_ATK_MODEL = 58,          /* osc.attack.model: 0 CLICK (default), 1 COSINE, 2 LINEAR, 3 SHELF */
-    OP_ATK_LEVEL = 59,          /* osc.attack.click.level: 0 .. 100 % in 2.5 % steps, 50 % the default */
+    OP_ATK_LEVEL = 59,          /* osc.attack.click.level: 0 .. 200 % in 5 % steps, 100 % the default (0.9.5: twice setBfree's 50 %) */
     OP_ATK_MIN = 60,            /* osc.attack.click.minlength: the shortest click burst, 0 .. 100 % of a fragment (128 samples), 12.5 % */
     OP_ATK_MAX = 61,            /* osc.attack.click.maxlength: the longest, 62.5 % */
     OP_REL_MODEL = 62,          /* osc.release.model: 0 CLICK, 1 COSINE, 2 LINEAR (default), 3 SHELF */
-    OP_REL_LEVEL = 63,          /* osc.release.click.level: 0 .. 100 % in 2.5 % steps, 25 % the default (acts with the CLICK model) */
+    OP_REL_LEVEL = 63,          /* osc.release.click.level: 0 .. 100 % in 2.5 % steps, 50 % the default (0.9.5: twice setBfree's 25 %; acts with the CLICK model) */
     OP_XT_COMP = 64,            /* osc.compartment-crosstalk: 0 off, then -100 .. 0 dB in 2 dB steps, -40 dB (0.01) the default */
     OP_XT_TRANS = 65,           /* osc.transformer-crosstalk: the same ladder, off the default */
     OP_XT_TSTRIP = 66,          /* osc.terminalstrip-crosstalk: the same ladder, -40 dB */
@@ -530,17 +530,21 @@ enum {
     OP_SC_V1 = 79,              /* scanner.modulation.v1: VIB1 / CHO1 depth, 0 .. 12 in 0.5 steps, 3.0 the default */
     OP_SC_V2 = 80,              /* scanner.modulation.v2: 6.0 the default */
     OP_SC_V3 = 81,              /* scanner.modulation.v3: 9.0 the default */
-    OP_NUM                      /* (82..95: reserved: 0 until then) */
+    /* version 0.9.5 */
+    OP_SPLIT = 82,              /* the keyboard split: 0 off (default), 1 on: the notes of the UPPER channel below SPLIT POINT play the lower manual and the pedals */
+    OP_SPLIT_PT = 83,           /* the split point: the lowest note of the upper manual, MIDI 36 .. 96, G3 (55) the default */
+    OP_NUM                      /* (84..95: reserved: 0 until then) */
 };
 /* ADVANCED EDIT's bytes: steps N and the default index D (the index is (byte + D) % N); the temperament and the crosstalk switch
  * are the older bytes 27 and 28 (N 3, D 0 and N 2, D 1: they keep their coding) */
 typedef struct { uint8_t op, n, d; } org_adv_t;
 static const org_adv_t ORG_ADV[] = {
     {OP_TUNING, 128, 64}, {OP_ATK_MODEL, 4, 0}, {OP_ATK_LEVEL, 41, 20}, {OP_ATK_MIN, 41, 5}, {OP_ATK_MAX, 41, 25},
-    {OP_REL_MODEL, 4, 2}, {OP_REL_LEVEL, 41, 10}, {OP_XT_COMP, 52, 31}, {OP_XT_TRANS, 52, 0}, {OP_XT_TSTRIP, 52, 31},
+    {OP_REL_MODEL, 4, 2}, {OP_REL_LEVEL, 41, 20}, {OP_XT_COMP, 52, 31}, {OP_XT_TRANS, 52, 0}, {OP_XT_TSTRIP, 52, 31},
     {OP_XT_WIRE, 52, 31}, {OP_XT_FLOOR, 52, 3}, {OP_XT_MIN, 52, 0}, {OP_PC_FAST, 100, 9}, {OP_PC_SLOW, 100, 39},
     {OP_PC_NORM, 13, 0}, {OP_PC_SOFT, 13, 6}, {OP_PC_GAIN, 45, 22}, {OP_PC_BUSA, 9, 3}, {OP_PC_BUSB, 9, 4},
     {OP_PC_TRIG, 10, 9}, {OP_SC_HZ, 73, 13}, {OP_SC_V1, 25, 6}, {OP_SC_V2, 25, 12}, {OP_SC_V3, 25, 18},
+    {OP_SPLIT, 2, 0}, {OP_SPLIT_PT, 61, 19},
 };
 #define ORG_NADV (sizeof ORG_ADV / sizeof ORG_ADV[0])
 static const org_adv_t *org_adv_of(uint32_t op)
@@ -666,7 +670,7 @@ static uint32_t org_rnd(org_rnd_t *g)
 
 /* a burst envelope in Q20 (zeros to `start`, `burst` samples of 1 - level * rand, then 1.0), smoothed by setBfree's two-point
  * average, to Q15 */
-static void org_env_burst(org_rnd_t *g, uint16_t *out, uint32_t start, uint32_t burst, int32_t lvq15)
+static void org_env_burst(org_rnd_t *g, int16_t *out, uint32_t start, uint32_t burst, int32_t lvq15)
 {
     int32_t x[128], y = 0;
     uint32_t i;
@@ -680,23 +684,23 @@ static void org_env_burst(org_rnd_t *g, uint16_t *out, uint32_t start, uint32_t 
     }
     for (i = 0; i < 128u; i++) {
         y = i ? (y + x[i]) >> 1 : x[0] >> 1;
-        out[i] = (uint16_t)((y + 16) >> 5);
+        out[i] = (int16_t)clamp((y + 16) >> 5, -32768, 32767);        /* (a click level above 1 dips below zero) */
     }
 }
-static void org_env_shelf(org_rnd_t *g, uint16_t *out, uint32_t bound)
+static void org_env_shelf(org_rnd_t *g, int16_t *out, uint32_t bound)
 {
     uint32_t start = org_umod(org_rnd(g), bound), i;
     if (start > 126u)
         start = 126u;
     for (i = 0; i < 128u; i++)
-        out[i] = (uint16_t)(i < start ? 0u : i == start ? 10923u : i == start + 1u ? 21845u : 32768u);
+        out[i] = (int16_t)(i < start ? 0 : i == start ? 10923 : i == start + 1u ? 21845 : 32767);
 }
 /* setBfree's initEnvelopes for the eight envelopes the organ uses, with the ADVANCED EDIT settings p[OP_ATK_MODEL .. OP_REL_LEVEL] */
 static void org_env_build(const uint8_t *p)
 {
     org_rnd_t g;
     uint32_t am = org_ci(OP_ATK_MODEL, p[OP_ATK_MODEL]), rm = org_ci(OP_REL_MODEL, p[OP_REL_MODEL]), b, i;
-    int32_t alq = (int32_t)((org_ci(OP_ATK_LEVEL, p[OP_ATK_LEVEL]) << 12) / 5u);       /* 2.5 % steps: n / 40 in Q15 */
+    int32_t alq = (int32_t)((org_ci(OP_ATK_LEVEL, p[OP_ATK_LEVEL]) << 13) / 5u);       /* 5 % steps: n / 20 in Q15 (0 .. 2.0) */
     int32_t rlq = (int32_t)((org_ci(OP_REL_LEVEL, p[OP_REL_LEVEL]) << 12) / 5u);
     uint32_t mn = (org_ci(OP_ATK_MIN, p[OP_ATK_MIN]) * 16u) / 5u;                       /* (int)(128 * n / 40) */
     uint32_t mx = (org_ci(OP_ATK_MAX, p[OP_ATK_MAX]) * 16u) / 5u;
@@ -704,7 +708,7 @@ static void org_env_build(const uint8_t *p)
     memcpy(g.r, ORG_RAND_RING, sizeof g.r);
     g.c = 0;
     for (b = 0; b < 8u; b++) {
-        uint16_t *a = org_atk_ram[b], *r = org_rel_ram[b];
+        int16_t *a = org_atk_ram[b], *r = org_rel_ram[b];
         if (am == 0u) {
             uint32_t burst = mn + org_umod(org_rnd(&g), bound), start;
             if (burst >= 128u)
@@ -722,16 +726,16 @@ static void org_env_build(const uint8_t *p)
         }
         if (am == 1u)                                               /* the sigmoid: 0.5 + 0.5 cos(pi (127 - i) / 127) */
             for (i = 0; i < 128u; i++)
-                a[i] = (uint16_t)((32768 + sine_i((127u - i) * 16909320u + 0x40000000u)) >> 1);
+                a[i] = (int16_t)clamp((32768 + sine_i((127u - i) * 16909320u + 0x40000000u)) >> 1, 0, 32767);
         else if (am == 2u)
             for (i = 0; i < 128u; i++)
-                a[i] = (uint16_t)(i << 8);
+                a[i] = (int16_t)(i << 8);
         if (rm == 1u)                                               /* 0.5 - 0.5 cos(pi i / 127) */
             for (i = 0; i < 128u; i++)
-                r[i] = (uint16_t)((32768 - sine_i(i * 16909320u + 0x40000000u)) >> 1);
+                r[i] = (int16_t)clamp((32768 - sine_i(i * 16909320u + 0x40000000u)) >> 1, 0, 32767);
         else if (rm == 2u)
             for (i = 0; i < 128u; i++)
-                r[i] = (uint16_t)(i << 8);
+                r[i] = (int16_t)(i << 8);
     }
 }
 
