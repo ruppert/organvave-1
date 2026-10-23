@@ -624,8 +624,8 @@ static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on t
  * and the knobs 1 to 4 go straight to the first four rows. A list longer than the screen scrolls with the pick. The rows of a page
  * are what oa_val shows and oa_adj1 changes (one detent). */
 #define OA_VIS 8u                                       /* rows on the screen */
-static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 29};
-static const char *const OA_LB[9][29] = {
+static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 30};
+static const char *const OA_LB[9][30] = {
     {0},
     {0},
     {"PERCUSSION", "VOLUME", "DECAY", "HARMONIC", "VIBRATO"},
@@ -637,14 +637,14 @@ static const char *const OA_LB[9][29] = {
     {"TUNING", "TEMPERAMENT", "SPLIT", "SPLIT POINT", "ATTACK CLICK", "RELEASE CLICK", "ATTACK MODEL", "CLICK LEN MIN", "CLICK LEN MAX", "RELEASE MODEL",
      "CROSSTALK", "COMPARTMENT", "TRANSFORMER", "TERMINAL STRIP", "WIRING", "XT FLOOR", "XT MIN",
      "PERC FAST", "PERC SLOW", "PERC NORMAL", "PERC SOFT", "PERC GAIN", "PERC BUS A", "PERC BUS B", "PERC TRIGGER",
-     "SCAN RATE", "VIB1 DEPTH", "VIB2 DEPTH", "VIB3 DEPTH"},
+     "SCAN RATE", "VIB1 DEPTH", "VIB2 DEPTH", "VIB3 DEPTH", "CLICK GAIN"},
 };
 /* ADVANCED EDIT: row -> the patch byte (eng_organ.c OP_*). The knobs 1-4 go to the first four rows */
-static const uint8_t OA_AOP[29] = {
+static const uint8_t OA_AOP[30] = {
     OP_TUNING, OP_TEMP, OP_SPLIT, OP_SPLIT_PT, OP_ATK_LEVEL, OP_REL_LEVEL, OP_ATK_MODEL, OP_ATK_MIN, OP_ATK_MAX, OP_REL_MODEL,
     OP_XTALK, OP_XT_COMP, OP_XT_TRANS, OP_XT_TSTRIP, OP_XT_WIRE, OP_XT_FLOOR, OP_XT_MIN,
     OP_PC_FAST, OP_PC_SLOW, OP_PC_NORM, OP_PC_SOFT, OP_PC_GAIN, OP_PC_BUSA, OP_PC_BUSB, OP_PC_TRIG,
-    OP_SC_HZ, OP_SC_V1, OP_SC_V2, OP_SC_V3,
+    OP_SC_HZ, OP_SC_V1, OP_SC_V2, OP_SC_V3, OP_CLICK_GAIN,
 };
 static const char *const OA_FOOT[9] = {"16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'"};
 static const char *const OA_ENVM[4] = {"CLICK", "COSINE", "LINEAR", "SHELF"};
@@ -738,7 +738,8 @@ static void oa_val_adv(uint32_t r, oa_val_t *v)
     case OP_TUNING:     oa_vnum(v, 4080 + 5 * i, 1, " HZ"); break;
     case OP_ATK_MODEL:
     case OP_REL_MODEL:  oa_vt(v, OA_ENVM[i & 3]); break;
-    case OP_ATK_LEVEL:  oa_vnum(v, i * 5, 0, " %"); break;
+    case OP_ATK_LEVEL:
+    case OP_CLICK_GAIN: oa_vnum(v, i * 5, 0, " %"); break;
     case OP_REL_LEVEL:  oa_vnum(v, i * 25, 1, " %"); break;
     case OP_SPLIT_PT:   {
         char *t = v->t;
@@ -1114,7 +1115,7 @@ static void oa_ctl_name(char *out, uint32_t b)
         str_cpy(out + 6, OA_FOOT[b % 9u], 9);
         return;
     }
-    for (r = 0; r < 29u; r++)
+    for (r = 0; r < 30u; r++)
         if (OA_AOP[r] == b) {
             str_cpy(out, OA_LB[8][r], 16);
             return;

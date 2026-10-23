@@ -156,29 +156,30 @@ ok(byId("dtype").value === "1" && Number(byId("dtone").value) === 6 && Number(by
 
 // ---- 3d: ADVANCED EDIT (0.9.4): the bytes 57..83 go to the instrument (the second frame carries bytes 48..83; 0.9.5 adds the split, 82 and 83), and read back
 const advc = (op) => P.ADVC.find((c) => c.op === op);
-ok(P.ADVC.length === 27 && new Set(P.ADVC.map((c) => c.op)).size === 27 && P.ADVC.every((c) => c.op >= 57 && c.op <= 83), "advanced: 27 sliders, one for each of the bytes 57..83");
+ok(P.ADVC.length === 28 && new Set(P.ADVC.map((c) => c.op)).size === 28 && P.ADVC.every((c) => c.op >= 57 && c.op <= 84), "advanced: 28 sliders, one for each of the bytes 57..84");
 ok(P.ADVC.every((c) => Number(c.inp.value) === c.d), "advanced: a patch of zeros shows every default (the middle of the step)");
 advc(57).inp.value = 64 + 20;                  // 450 Hz
 advc(59).inp.value = 16;                       // attack click 80 % (5 % a step, 100 % the default)
-advc(62).inp.value = 0;                        // release model CLICK
+advc(62).inp.value = 2;                        // release model LINEAR (the default is CLICK since 0.9.5)
 advc(63).inp.value = 24;                       // release click 60 %
 advc(67).inp.value = 41;                       // wiring -20 dB
 advc(77).inp.value = 0;                        // no muted drawbar
 advc(81).inp.value = 2;
 advc(82).inp.value = 1;                        // split on
+advc(84).inp.value = 30;                       // click gain 150 % (default 100 %: step 20)
 advc(83).inp.value = 30;                       // F#4
 await P.sendPatch();
 await wait(150);
 const got4 = (await direct(85, [0, 0])).slice(3, 3 + 96);
-ok(got4[57] === 20 && got4[59] === 37 && got4[62] === 2 && got4[63] === 4 && got4[67] === 10 && got4[77] === 1 && got4[81] === (2 - 18 + 25) % 25 && got4[82] === 1 && got4[83] === 11,
+ok(got4[57] === 20 && got4[59] === 37 && got4[62] === 2 && got4[63] === 4 && got4[67] === 10 && got4[77] === 1 && got4[81] === (2 - 18 + 25) % 25 && got4[82] === 1 && got4[83] === 11 && got4[84] === 10,
    "advanced: the bytes reach the instrument as (step - default) mod n (tuning 450 Hz, attack click 80 %, release CLICK, wiring -20 dB, no mute)");
-ok(got4[58] === 0 && got4[64] === 0 && got4[70] === 0 && got4[84] === 0 && got4[95] === 0, "advanced: the untouched ones stay 0 (the defaults), the reserved bytes too");
+ok(got4[58] === 0 && got4[64] === 0 && got4[70] === 0 && got4[85] === 0 && got4[95] === 0, "advanced: the untouched ones stay 0 (the defaults), the reserved bytes too");
 ok(got4[P.OP_PERC] === 1 && got4[P.OP_VIB] === 5 && got4[P.OP_ROT] === 1, "advanced: the earlier bytes are kept");
 for (const c of P.ADVC) c.inp.value = c.d;
 byId("source").value = "0";
 await P.readPatch();
 await wait(120);
-ok(Number(advc(57).inp.value) === 84 && Number(advc(59).inp.value) === 16 && Number(advc(82).inp.value) === 1 && Number(advc(83).inp.value) === 30 && Number(advc(62).inp.value) === 0 && Number(advc(81).inp.value) === 2 &&
+ok(Number(advc(57).inp.value) === 84 && Number(advc(59).inp.value) === 16 && Number(advc(82).inp.value) === 1 && Number(advc(83).inp.value) === 30 && Number(advc(62).inp.value) === 2 && Number(advc(81).inp.value) === 2 &&
    Number(advc(64).inp.value) === 31, "advanced: read shows the steps the instrument holds");
 ok(advc(57).out.textContent === "450.0 Hz" && advc(59).out.textContent === "80 %" && advc(67).out.textContent === "-20 dB" && advc(77).out.textContent === "none" && advc(83).out.textContent === "F#4" && advc(82).out.textContent === "On",
    "advanced: the texts (" + ["57", "59", "67", "77"].map((o) => advc(Number(o)).out.textContent).join(", ") + ")");

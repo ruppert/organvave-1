@@ -1062,7 +1062,7 @@ and the default is the index 4 (a byte for an index i is (i + 5) mod 9). TONE: i
 (horn 40.3 and 390 rpm (423 before 0.9.3), drum 36 and 357 rpm); the ramps x1.4 a step in time around setBfree's (horn 1.5 s up and 3.0 s down (0.161 and 0.321 s before 0.9.3), drum 4.127 s;
 higher is slower). `ORG_PUT` carries at most 48 bytes a frame: the editor sends the used bytes in two (57 before 0.9.4, 82 in 0.9.4, 84 since 0.9.5).
 
-**From 0.9.4: ADVANCED EDIT, bytes 57..83** (`ORG_PSIZE` 96; bytes 84..95 are reserved, 0; 82 and 83 are 0.9.5's). These are setBfree's own tone-generator
+**From 0.9.4: ADVANCED EDIT, bytes 57..84** (`ORG_PSIZE` 96; bytes 85..95 are reserved, 0; 82 and 83 are 0.9.5's, 84 is 0.9.6's). These are setBfree's own tone-generator
 settings. Every one is a "zero is the default" byte: with N steps and the default step D, a byte b is the step (b + D) mod N, and a
 byte for a step i is (i - D) mod N (+ N), so a patch from before reads as setBfree's defaults and sounds as it did. Old
 autosaves (64 bytes) and user presets (the entry has 128 bytes, zero past the 64) read the same way; the autosave record is
@@ -1074,8 +1074,8 @@ longer, and the shorter 0.9.3 one is still accepted.
 | 58 | ATK_MODEL | 4, 0 | the key click's attack envelope: 0 CLICK (a burst of noise), 1 COSINE, 2 LINEAR, 3 SHELF (`env.attack.model`) |
 | 59 | ATK_LEVEL | 41, 20 | the attack click level, i / 20 (`env.click.level`; **0.9.5**: was i / 40, so a stored byte now means twice the strength: the default step 20 is 1.0, setBfree's default is 0.5; the top is 2.0, four times setBfree's) |
 | 60, 61 | ATK_MIN, ATK_MAX | 41, 5 / 41, 25 | the click burst's length, i x 16 / 5 samples, min and max (`env.click.minLength`, `maxLength`); shorter is a brighter click |
-| 62 | REL_MODEL | 4, 2 | the release envelope, as 58 (default LINEAR) |
-| 63 | REL_LEVEL | 41, 20 | the release click level, i / 40 (`env.release.click.level`); it acts with the CLICK release model. **0.9.5**: the default step moved from 10 to 20 (0.5, setBfree's is 0.25) so the zero byte is the new default; a byte stored by 0.9.4 keeps its step but the step is 10 higher |
+| 62 | REL_MODEL | 4, 0 | the release envelope, as 58. **0.9.6**: the default is CLICK (step 0; was LINEAR, step 2, setBfree's own). A patch from 0.9.4 with the byte at 0 changes its release: it is now the click one, so the release level (63) is heard |
+| 63 | REL_LEVEL | 41, 20 | the release click level, i / 40 (`env.release.click.level`); it acts with the CLICK release model (the default since 0.9.5). **0.9.5**: the default step moved from 10 to 20 (0.5, setBfree's is 0.25) so the zero byte is the new default; a byte stored by 0.9.4 keeps its step but the step is 10 higher |
 | 64..67 | XT_COMP, XT_TRANS, XT_TSTRIP, XT_WIRE | 52, 31 / 0 / 31 / 31 | the crosstalk model's compartment, transformer, terminal strip and wiring levels (`osc.compartment-crosstalk`, `osc.transformer-crosstalk`, `osc.terminalstrip-crosstalk`, `osc.wiring-crosstalk`): step 0 is 0, step i > 0 is -2 (51 - i) dB (step 51 = 0 dB) |
 | 68, 69 | XT_FLOOR, XT_MIN | 52, 3 / 52, 0 | the contribution floor and minimum (`osc.contribution-floor`, `osc.contribution-min`), same ladder (default floor -96 dB, off) |
 | 70, 71 | PC_FAST, PC_SLOW | 100, 9 / 100, 39 | the percussion decay times (60 dB), 0.1 (i + 1) s (`perc.fastdecay`, `perc.slowdecay`) |
@@ -1085,6 +1085,7 @@ longer, and the shorter 0.9.3 one is still accepted.
 | 77 | PC_TRIG | 10, 9 | the drawbar muted while the percussion is on: step 0 none, i > 0 the drawbar i - 1 (default the 1', `perc.trigger`) |
 | 78 | SC_HZ | 73, 13 | the scanner's rate, 4 + i / 4 Hz (`scanner.hz`, default 7.25) |
 | 79, 80, 81 | SC_V1, SC_V2, SC_V3 | 25, 6 / 25, 12 / 25, 18 | the vibrato / chorus depths, i / 2 samples (`scanner.modulation.v1..v3`) |
+| 84 | CLICK_GAIN | 41, 20 | **0.9.6**: the click gain, i / 20 (0 .. 200 %, 100 % the default): the samples of the attack and the release click's burst (CLICK models only). Above 100 % the burst gets a bump (the attack louder, the release's gate deeper, so its tail is louder); below, the burst is scaled and faded back over 8 samples (0 silences the attack and opens the release gate) |
 | 82 | SPLIT | 2, 0 | **0.9.5**: the keyboard split, 0 off, 1 on: with it on, a note of the UPPER MIDI channel below the split point plays the lower manual and the pedals (the pedals' 32 keys, MIDI 24..55) and not the upper manual |
 | 83 | SPLIT_PT | 61, 19 | **0.9.5**: the split point, the lowest note of the upper manual, MIDI 36 + i (default step 19: G3, 55); the firmware ignores it while 82 is 0 |
 
@@ -1092,7 +1093,7 @@ longer, and the shorter 0.9.3 one is still accepted.
 
 **0.9.5, the MIDI settings** are not part of the patch: GLO keeps them in the settings record (`set_bytes` rows 7..10: the channels of the upper manual (0 = ALL), the lower and the pedals (0 = off), the CC learned for each patch byte); the editor does not see them.
 
-The click envelopes `ORG_ATK` / `ORG_REL` in flash are signed 16 bit since 0.9.5 (a level above 1.0 makes the burst's samples exceed full scale). Not editable (setBfree has them but the instrument does not): the
+The click envelopes `ORG_ATK` / `ORG_REL` in flash and in RAM are signed 16 bit, **Q14 since 0.9.6** (16384 = 1.0, so the click gain reaches 2.0). The render multiplies them with `>> 14`. **0.9.6 changes the sound of a patch from 0.9.5 that has the release model byte at 0**: it was LINEAR, and it is CLICK now (the release click level is heard). The other bytes keep their meaning. Not editable (setBfree has them but the instrument does not): the
 other tuning-gear and wheel-table options, the tone-generator's `osc.compartment` maps, the per-key taper and crosstalk lists
 (`osc.taper.*`, `osc.crosstalk.k*`), the keyboard maps and the swell's and the key compression's coefficients; the sound of the
 key compression follows the factory settings. The crosstalk table is built in RAM (10 752 entries) when a setting leaves the

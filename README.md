@@ -32,6 +32,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.9.3 | the Leslie defaults: horn FAST 390 rpm (was 423), horn ramp 1.5 s up and 3.0 s down (was 0.161 / 0.321 s) (not yet on an FM-1) |
 | 0.9.4 | ADVANCED EDIT (EDIT, EDIT, EDIT): setBfree's own tone-generator settings in 27 rows: tuning, the key click (attack and release models, levels, lengths), the crosstalk model (compartment, transformer, terminal strip, wiring, floor, minimum), the percussion (decays, levels, gain, buses, muted drawbar), the scanner (rate, depths); in the patch editor too (not yet on an FM-1) |
 | 0.9.5 | key click twice as loud (attack 100 %, release 50 %) with up to four times setBfree's in ADVANCED EDIT; GLO: a MIDI channel for the upper (ALL by default), the lower and the pedals, and MIDI CC with MIDI Learn for every control; ADVANCED EDIT: SPLIT and SPLIT POINT (G3), the upper channel's notes below the point also play the lower manual and the pedals; the crosstalk rows switch CROSSTALK on and are dimmed while it is off (not yet on an FM-1) |
+| 0.9.6 | the release model CLICK by default (setBfree's is LINEAR), so the release click level is heard; CLICK GAIN (0 .. 200 %, ADVANCED EDIT, one gain for the attack and the release click); the envelopes Q14 (not yet on an FM-1) |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing

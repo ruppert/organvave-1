@@ -17,7 +17,7 @@ REF = os.path.join(HERE, "..", "build", "sbf_ref", "sbf_ref")
 OUT = os.path.join(HERE, "..", "tests", "organ_adv_ref.txt")
 
 # op: (N, D)  (eng_organ.c ORG_ADV)
-ADV = {58: (4, 0), 59: (41, 20), 60: (41, 5), 61: (41, 25), 62: (4, 2), 63: (41, 20),
+ADV = {58: (4, 0), 59: (41, 20), 60: (41, 5), 61: (41, 25), 62: (4, 0), 63: (41, 20),
        64: (52, 31), 65: (52, 0), 66: (52, 31), 67: (52, 31), 68: (52, 3), 69: (52, 0)}
 
 
@@ -30,10 +30,10 @@ SETS = {
     "xt_more": {64: 37, 65: 21, 66: 41, 67: 41},                     # compartment -28 dB, transformer -50, strip -20, wiring -20
     "xt_parts": {64: 0, 66: 11, 67: 21, 68: 11, 69: 6},              # no compartment, strip -80 dB, wiring -60, floor -80 dB, min -90 dB
     "xt_full": {64: 46, 65: 46, 66: 46, 67: 46},                     # -10 dB everywhere: more than the RAM table holds
-    "env_click": {59: 40, 60: 2, 61: 12, 62: 0, 63: 24},             # attack click 200 %, bursts 6..38 samples, release click 60 %
+    "env_click": {59: 40, 60: 2, 61: 12, 63: 24},             # attack click 200 %, bursts 6..38 samples, release click 60 %
     "env_shelf": {58: 3, 62: 3, 60: 3, 61: 15},                      # shelf attack, shelf release
     "env_cosine": {58: 1, 62: 1},
-    "env_linear": {58: 2, 62: 0, 63: 40},                            # linear attack, click release at 100 %
+    "env_linear": {58: 2, 62: 2, 63: 40},                            # linear attack, linear release (setBfree's), release level 100 %
 }
 
 

@@ -35,6 +35,7 @@ static struct b_tonegen* make (int gear, int xtalk)
 	t->gearTuning = gear;                 /* 0 equal, 1 gear60, 2 gear50 */
 	t->envAttackClickLevel = 1.0;         /* 0.9.5: the key click twice as strong as setBfree's default (0.5), the release click too (0.25) */
 	t->envReleaseClickLevel = 0.5;
+	setEnvReleaseModel (t, 0);           /* 0.9.5: the release is the CLICK model by default (setBfree's is linear) */
 	initToneGenerator (t, mc);
 	if (gear != 1 || !xtalk) {
 		/* the click envelopes come from rand() after the wavetables' dither, so they depend on the wavetables:

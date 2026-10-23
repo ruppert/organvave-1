@@ -16,7 +16,7 @@ The tables (FS 44100, the firmware's and the reference's rate):
                      the same on buses + 9), 64..95 the pedals (setBfree's keys 128..159)
   ORG_KCX, ORG_KCX_OFF the same with the crosstalk off (compartment, terminal strip and wiring at 0)
                      an entry: wheel (1..91) << 25 | bus (0..26) << 20 | level (Q18, under 4.0)
-  ORG_ATK[8][128], ORG_REL[8][128]  the attack (the contact click) and release envelopes, signed Q15 (32767 = 1.0)
+  ORG_ATK[8][128], ORG_REL[8][128]  the attack (the contact click) and release envelopes, signed Q14 (16384 = 1.0)
   ORG_KEYCOMP[128]   the key compression's gain per keys down, Q15
   ORG_SWELL_TC       the swell's one-pole smoothing per sample, Q16
 """
@@ -99,6 +99,8 @@ def check_envelopes(d):
         for i in range(1, 128):
             y.append((y[-1] + x[i]) / 2)
         assert max(abs(u - v) for u, v in zip(y, d["attack"][b])) < 1e-5, "RAND_POS does not give the dump's attack envelope %d" % b
+        rb = 8 + out[p] % 32                                    # the release (0.9.5: the CLICK model by default): 2 + burst draws
+        p += 2 + rb
 
 
 def pack(contrib):
@@ -127,6 +129,13 @@ def q15u(x):
     q = int(round(x * 32768))
     assert -32768 <= q <= 32768
     return min(q, 32767)
+
+
+def q14s(x):
+    """a signed Q14 (int16) envelope: 1.0 is 16384 (0.9.5: the click gain can take the click to 2.0)"""
+    q = int(round(x * 16384))
+    assert -32768 <= q <= 32767
+    return q
 
 
 def rows(name, ctype, vals, per=12, fmt="{}"):
@@ -165,13 +174,13 @@ def main():
         L.append("};")
     for tag, key in (("ORG_ATK", "attack"), ("ORG_REL", "release")):
         L.append("")
-        L.append("/* %s envelopes, signed Q15 (32767 = 1.0), one per active-list slot & 7 */" % key)
+        L.append("/* %s envelopes, signed Q14 (16384 = 1.0), one per active-list slot & 7 */" % key)
         L.append("static const int16_t %s[8][%d] = {" % (tag, NFRAG))
         for b in range(8):
             e = d[key][b]
             assert len(e) == NFRAG
             L.append("  {")
-            L += rows("", "", [q15u(x) for x in e], 16)
+            L += rows("", "", [q14s(x) for x in e], 16)
             L.append("  },")
         L.append("};")
     check_envelopes(d)

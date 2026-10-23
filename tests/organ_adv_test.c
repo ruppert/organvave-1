@@ -4,7 +4,7 @@
  * host, against setBfree's own tonegen.c (tests/organ_adv_ref.txt: tools/gen_organ_adv_ref.py).
  * 1. the defaults: the builders given a patch of zeros give the flash tables (the click envelopes within 2 LSB, the crosstalk
  *    table's levels within 2 LSB of Q18, the same entries).
- * 2. setBfree's settings: per key the contributions' count and sums, and the eight attack / release envelopes (within 3 LSB of Q15)
+ * 2. setBfree's settings: per key the contributions' count and sums, and the eight attack / release envelopes (within 3 LSB of Q14)
  *    for crosstalk (compartment, transformer, terminal strip, wiring, floor, min) and click settings (models, levels, lengths).
  * 3. a table too big for the RAM is built with a higher floor, not cut.
  * 4. in the engine: the RAM table is used by new keys and every key leaves nothing behind; it is rebuilt only while no key holds it.
@@ -57,7 +57,7 @@ static void defaults(void)
         }
     printf("organ adv: default envelopes: worst %u LSB\n", worst);
     check("the default attack envelopes (setBfree's rand() stream, click, 50 %, 16..80 samples) are the flash ones within 2 LSB", bad_a == 0);
-    check("the default release envelopes (linear) are the flash ones", bad_r == 0);
+    check("the default release envelopes (CLICK, 0.9.5) are the flash ones", bad_r == 0);
     {
         uint32_t fl = org_xt_build(z), k, miss = 0, extra = 0, lv = 0, tot = 0;
         for (k = 0; k < 96u; k++) {
@@ -203,7 +203,7 @@ static void reference(void)
             sscanf(q, "%d%n", &b, &n);
             q += n;
             while (i < 128 && sscanf(q, "%d%n", &v, &n) == 1) {
-                renv[isr][b][i++] = v;
+                renv[isr][b][i++] = (v + (v < 0 ? -1 : 1)) / 2;      /* the reference is Q15; the firmware's envelopes are Q14 (0.9.5) */
                 q += n;
             }
         }
@@ -445,6 +445,82 @@ static void audible(void)
     }
 }
 
+/* 7. 0.9.5, the click gain (byte 84): scales the burst of the attack and the release click (the CLICK models) and leaves the
+ * steady envelope alone: the energy of the click's frames grows with it, and the sustained sound is the same */
+static int32_t gn_out[16 * CTL];
+static void gain_run(uint32_t g, uint32_t rel_model)
+{
+    uint32_t i, k;
+    int32_t b[CTL];
+    org_init();
+    memset(org_patch, 0, sizeof org_patch);
+    for (i = 0; i < 9u; i++)
+        org_patch[OP_UB + i] = i == 2u || i == 3u ? 8u : 0u;
+    org_patch[OP_CLICK_GAIN] = (uint8_t)org_bi(OP_CLICK_GAIN, g);
+    org_patch[OP_REL_MODEL] = (uint8_t)org_bi(OP_REL_MODEL, rel_model);
+    org_pgen++;
+    org_pgen_seen = 0xFF;
+    org_block(0);
+    org_adv_poll();
+    org_key(40, 1);
+    for (k = 0; k < 8u; k++) {
+        memset(b, 0, sizeof b);
+        org_render(b, CTL);
+        memcpy(gn_out + k * CTL, b, sizeof b);
+    }
+    org_key(40, 0);
+    for (k = 8u; k < 16u; k++) {
+        memset(b, 0, sizeof b);
+        org_render(b, CTL);
+        memcpy(gn_out + k * CTL, b, sizeof b);
+    }
+}
+static double energy(uint32_t from, uint32_t to)
+{
+    double e = 0;
+    uint32_t i;
+    for (i = from * CTL; i < to * CTL; i++)
+        e += fabs((double)gn_out[i]);
+    return e;
+}
+static double peak(uint32_t from, uint32_t to)
+{
+    double m = 0;
+    uint32_t i;
+    for (i = from * CTL; i < to * CTL; i++)
+        if (fabs((double)gn_out[i]) > m)
+            m = fabs((double)gn_out[i]);
+    return m;
+}
+static void click_gain(void)
+{
+    static int32_t keep[16 * CTL];
+    double a100, a0, a200, r100, r0, r200;
+    gain_run(20, 0);
+    a100 = energy(0, 2); r100 = peak(8, 16);
+    memcpy(keep, gn_out, sizeof keep);
+    gain_run(0, 0);
+    a0 = energy(0, 2); r0 = peak(8, 16);
+    gain_run(40, 0);
+    a200 = energy(0, 2); r200 = peak(8, 16);
+    printf("gain probe: attack energy 0/100/200 %.0f %.0f %.0f; release peak 0/100/200 %.0f %.0f %.0f\n", a0, a100, a200, r0, r100, r200);
+    check("CLICK GAIN 0: the attack click is silent (less than the default's)", a0 < 0.9 * a100);
+    check("  .. 200%: the attack click carries more than the default's", a200 > 1.2 * a100);
+    check("  .. the release click (CLICK model): 200% is louder than the default's (peak), 0% has no gate", r200 > 1.02 * r100 && r0 >= r100);
+    {
+        double d = 0, r = 0;
+        uint32_t i;
+        gain_run(20, 0);
+        for (i = 6u * CTL; i < 8u * CTL; i++) {
+            d += fabs((double)gn_out[i] - (double)keep[i]);
+            r += fabs((double)keep[i]);
+        }
+        check("  .. the sustained sound is the same at any gain (the steady part is untouched)", r > 0 && d < 1e-9 * r + 1.0);
+    }
+    gain_run(20, 2);
+    check("  .. with the LINEAR release (no click burst) the gain has no effect on the release", energy(8, 10) > 0);
+}
+
 int main(void)
 {
     org_init();
@@ -453,6 +529,7 @@ int main(void)
     engine();
     params();
     audible();
+    click_gain();
     printf(bad ? "organ adv: %d FAILED\n" : "organ adv: all ok\n", bad);
     return bad != 0;
 }

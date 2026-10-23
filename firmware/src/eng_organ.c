@@ -24,12 +24,12 @@
  * Keys use setBfree's numbers: 0..60 the upper manual (C..C), 64..124 the lower, 128..159 the pedals; buses 0..8
  * upper (16' 5 1/3' 8' 4' 2 2/3' 2' 1 3/5' 1 1/3' 1'), 9..17 lower, 18..26 pedals.
  * The output is in setBfree's units: 1.0 (one wheel at full level) = 32768.
- * ADVANCED EDIT (0.9.4): setBfree's other tone generator settings, from patch bytes 57..81 (the "zero is the default" coding):
+ * ADVANCED EDIT (0.9.4): setBfree's other tone generator settings, from patch bytes 57..84 (the "zero is the default" coding):
  * the tuning, the attack and release click envelopes (rebuilt by org_env_build: setBfree's initEnvelopes with glibc's rand()
  * drawn from the same point), the crosstalk model (org_xt_build: setBfree's applyDefaultConfiguration + compilePlayMatrix in
  * integer, into a RAM table), the percussion's times, levels and buses, the scanner's rate and depths. The defaults are the
  * tables of eng_organ_tables.h as they were, so a patch of zeros sounds as before. Built in the main loop (org_adv_poll).
- * Formats: wheel x Q15, gains Q12 (up to 16.0 per wheel: about 61 keys on one wheel at full drawbars), levels Q18,
+ * Formats: wheel x Q15, the click envelopes Q14 (0.9.5), gains Q12 (up to 16.0 per wheel: about 61 keys on one wheel at full drawbars), levels Q18,
  * the percussion's envelope Q24 (the decay per block in Q16, the one 64-bit multiply per block). */
 #include "eng_organ_tables.h"
 
@@ -117,7 +117,7 @@ static int16_t org_atk_ram[8][128] __attribute__((section(".pool")));
 static int16_t org_rel_ram[8][128] __attribute__((section(".pool")));
 static uint32_t org_winc_ram[3][91] __attribute__((section(".pool")));
 /* what the tables were built from (0: setBfree's defaults, the flash tables) */
-static uint8_t org_b_tun, org_b_env[6], org_b_xt[6], org_xt_valid;
+static uint8_t org_b_tun, org_b_env[7], org_b_xt[6], org_xt_valid;     /* org_b_env: the six click bytes 58..63 and the click gain (84) */
 static volatile uint16_t cpu_high;      /* overload: blocks left of "CPU HIGH" (the delay is off meanwhile; audio.c shed_voice arms it) */
 static volatile uint8_t org_shed_req;   /* overload: release the oldest key at the next fragment (org_fragment) */
 
@@ -376,8 +376,8 @@ static __attribute__((noinline)) void org_wheel_pc(org_wheel_t *w, uint32_t inc,
         int32_t gd = w->gd, pgd = w->pgd;
         for (i = 0; i < n; i++) {
             int32_t s = sine_i(ph), ee = (int32_t)e[i];
-            y[i] += (s * (g + ((ee * gd) >> 15))) >> 12;
-            p[i] += (s * (pg + ((ee * pgd) >> 15))) >> 12;
+            y[i] += (s * (g + ((ee * gd) >> 14))) >> 12;
+            p[i] += (s * (pg + ((ee * pgd) >> 14))) >> 12;
             ph += inc;
         }
     } else {
@@ -421,7 +421,7 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
             const int16_t *e = w->env + off;
             int32_t gd = w->gd, *yp = y;
             for (i = n; i; i--) {
-                int32_t gg = g + (((int32_t)*e++ * gd) >> 15);
+                int32_t gg = g + (((int32_t)*e++ * gd) >> 14);
                 *yp++ += (sine_i(ph) * gg) >> 12;
                 ph += inc;
             }
@@ -510,7 +510,7 @@ enum {
     OP_ATK_LEVEL = 59,          /* osc.attack.click.level: 0 .. 200 % in 5 % steps, 100 % the default (0.9.5: twice setBfree's 50 %) */
     OP_ATK_MIN = 60,            /* osc.attack.click.minlength: the shortest click burst, 0 .. 100 % of a fragment (128 samples), 12.5 % */
     OP_ATK_MAX = 61,            /* osc.attack.click.maxlength: the longest, 62.5 % */
-    OP_REL_MODEL = 62,          /* osc.release.model: 0 CLICK, 1 COSINE, 2 LINEAR (default), 3 SHELF */
+    OP_REL_MODEL = 62,          /* osc.release.model: 0 CLICK (default since 0.9.5; setBfree's is LINEAR), 1 COSINE, 2 LINEAR, 3 SHELF */
     OP_REL_LEVEL = 63,          /* osc.release.click.level: 0 .. 100 % in 2.5 % steps, 50 % the default (0.9.5: twice setBfree's 25 %; acts with the CLICK model) */
     OP_XT_COMP = 64,            /* osc.compartment-crosstalk: 0 off, then -100 .. 0 dB in 2 dB steps, -40 dB (0.01) the default */
     OP_XT_TRANS = 65,           /* osc.transformer-crosstalk: the same ladder, off the default */
@@ -533,18 +533,19 @@ enum {
     /* version 0.9.5 */
     OP_SPLIT = 82,              /* the keyboard split: 0 off (default), 1 on: the notes of the UPPER channel below SPLIT POINT play the lower manual and the pedals */
     OP_SPLIT_PT = 83,           /* the split point: the lowest note of the upper manual, MIDI 36 .. 96, G3 (55) the default */
-    OP_NUM                      /* (84..95: reserved: 0 until then) */
+    OP_CLICK_GAIN = 84,        /* the click gain (0.9.5, the CLICK models): the attack and the release click's samples, 0 .. 200 % in 5 % steps, 100 % the default */
+    OP_NUM                      /* (85..95: reserved: 0 until then) */
 };
 /* ADVANCED EDIT's bytes: steps N and the default index D (the index is (byte + D) % N); the temperament and the crosstalk switch
  * are the older bytes 27 and 28 (N 3, D 0 and N 2, D 1: they keep their coding) */
 typedef struct { uint8_t op, n, d; } org_adv_t;
 static const org_adv_t ORG_ADV[] = {
     {OP_TUNING, 128, 64}, {OP_ATK_MODEL, 4, 0}, {OP_ATK_LEVEL, 41, 20}, {OP_ATK_MIN, 41, 5}, {OP_ATK_MAX, 41, 25},
-    {OP_REL_MODEL, 4, 2}, {OP_REL_LEVEL, 41, 20}, {OP_XT_COMP, 52, 31}, {OP_XT_TRANS, 52, 0}, {OP_XT_TSTRIP, 52, 31},
+    {OP_REL_MODEL, 4, 0}, {OP_REL_LEVEL, 41, 20}, {OP_XT_COMP, 52, 31}, {OP_XT_TRANS, 52, 0}, {OP_XT_TSTRIP, 52, 31},
     {OP_XT_WIRE, 52, 31}, {OP_XT_FLOOR, 52, 3}, {OP_XT_MIN, 52, 0}, {OP_PC_FAST, 100, 9}, {OP_PC_SLOW, 100, 39},
     {OP_PC_NORM, 13, 0}, {OP_PC_SOFT, 13, 6}, {OP_PC_GAIN, 45, 22}, {OP_PC_BUSA, 9, 3}, {OP_PC_BUSB, 9, 4},
     {OP_PC_TRIG, 10, 9}, {OP_SC_HZ, 73, 13}, {OP_SC_V1, 25, 6}, {OP_SC_V2, 25, 12}, {OP_SC_V3, 25, 18},
-    {OP_SPLIT, 2, 0}, {OP_SPLIT_PT, 61, 19},
+    {OP_SPLIT, 2, 0}, {OP_SPLIT_PT, 61, 19}, {OP_CLICK_GAIN, 41, 20},
 };
 #define ORG_NADV (sizeof ORG_ADV / sizeof ORG_ADV[0])
 static const org_adv_t *org_adv_of(uint32_t op)
@@ -670,7 +671,7 @@ static uint32_t org_rnd(org_rnd_t *g)
 
 /* a burst envelope in Q20 (zeros to `start`, `burst` samples of 1 - level * rand, then 1.0), smoothed by setBfree's two-point
  * average, to Q15 */
-static void org_env_burst(org_rnd_t *g, int16_t *out, uint32_t start, uint32_t burst, int32_t lvq15)
+static void org_env_burst(org_rnd_t *g, int16_t *out, uint32_t start, uint32_t burst, int32_t lvq15, int32_t gq14, int32_t sgn)
 {
     int32_t x[128], y = 0;
     uint32_t i;
@@ -684,7 +685,23 @@ static void org_env_burst(org_rnd_t *g, int16_t *out, uint32_t start, uint32_t b
     }
     for (i = 0; i < 128u; i++) {
         y = i ? (y + x[i]) >> 1 : x[0] >> 1;
-        out[i] = (int16_t)clamp((y + 16) >> 5, -32768, 32767);        /* (a click level above 1 dips below zero) */
+        out[i] = (int16_t)clamp((y + 32) >> 6, -32768, 32767);        /* Q14 (16384 = 1.0; a level above 1 dips below zero) */
+    }
+    /* the click gain (0.9.5): the burst's samples scaled, the envelope's steady parts untouched */
+    if (gq14 == 16384)
+        return;
+    if (gq14 > 16384) {                                                    /* above 100 %: a bump of 4 e (1 - e) on the burst (0 at 0 and at 1.0: no step at either end) */
+        for (i = start; i < start + burst && i < 128u; i++) {
+            int64_t e = out[i], bump = (4 * e * (16384 - e)) >> 14;
+            out[i] = (int16_t)clamp(e + sgn * ((((int64_t)gq14 - 16384) * bump) >> 14), -32768, 32767);   /* (the release's gate is 1 - e: its bump goes down) */
+        }
+        return;
+    }
+    for (i = start; i < start + burst && i < 128u; i++)                    /* below 100 %: scaled (0 silences the click) */
+        out[i] = (int16_t)clamp(((int32_t)out[i] * gq14) >> 14, -32768, 32767);
+    for (i = start + burst; i < start + burst + 8u && i < 128u; i++) {    /* and faded back over 8 samples: no step at the burst's end */
+        int32_t f = 16384 + (((gq14 - 16384) * (int32_t)(start + burst + 8u - i)) >> 3);
+        out[i] = (int16_t)clamp(((int32_t)out[i] * f) >> 14, -32768, 32767);
     }
 }
 static void org_env_shelf(org_rnd_t *g, int16_t *out, uint32_t bound)
@@ -693,7 +710,7 @@ static void org_env_shelf(org_rnd_t *g, int16_t *out, uint32_t bound)
     if (start > 126u)
         start = 126u;
     for (i = 0; i < 128u; i++)
-        out[i] = (int16_t)(i < start ? 0 : i == start ? 10923 : i == start + 1u ? 21845 : 32767);
+        out[i] = (int16_t)(i < start ? 0 : i == start ? 5461 : i == start + 1u ? 10923 : 16384);
 }
 /* setBfree's initEnvelopes for the eight envelopes the organ uses, with the ADVANCED EDIT settings p[OP_ATK_MODEL .. OP_REL_LEVEL] */
 static void org_env_build(const uint8_t *p)
@@ -702,6 +719,7 @@ static void org_env_build(const uint8_t *p)
     uint32_t am = org_ci(OP_ATK_MODEL, p[OP_ATK_MODEL]), rm = org_ci(OP_REL_MODEL, p[OP_REL_MODEL]), b, i;
     int32_t alq = (int32_t)((org_ci(OP_ATK_LEVEL, p[OP_ATK_LEVEL]) << 13) / 5u);       /* 5 % steps: n / 20 in Q15 (0 .. 2.0) */
     int32_t rlq = (int32_t)((org_ci(OP_REL_LEVEL, p[OP_REL_LEVEL]) << 12) / 5u);
+    int32_t cgq = (int32_t)((org_ci(OP_CLICK_GAIN, p[OP_CLICK_GAIN]) << 14) / 20u);   /* the click gain: n / 20 in Q14 (0 .. 2.0) */
     uint32_t mn = (org_ci(OP_ATK_MIN, p[OP_ATK_MIN]) * 16u) / 5u;                       /* (int)(128 * n / 40) */
     uint32_t mx = (org_ci(OP_ATK_MAX, p[OP_ATK_MAX]) * 16u) / 5u;
     uint32_t bound = mx > mn ? mx - mn : 1u;
@@ -714,7 +732,7 @@ static void org_env_build(const uint8_t *p)
             if (burst >= 128u)
                 burst = 127u;
             start = org_umod(org_rnd(&g), 128u - burst);
-            org_env_burst(&g, a, start, burst, alq);
+            org_env_burst(&g, a, start, burst, alq, cgq, 1);
         } else if (am == 3u) {
             org_env_shelf(&g, a, bound);
         }
@@ -722,20 +740,20 @@ static void org_env_build(const uint8_t *p)
             org_env_shelf(&g, r, bound);
         } else if (rm == 0u) {
             uint32_t burst = 8u + org_umod(org_rnd(&g), 32u), start = org_umod(org_rnd(&g), 128u - burst);
-            org_env_burst(&g, r, start, burst, rlq);
+            org_env_burst(&g, r, start, burst, rlq, cgq, -1);
         }
         if (am == 1u)                                               /* the sigmoid: 0.5 + 0.5 cos(pi (127 - i) / 127) */
             for (i = 0; i < 128u; i++)
-                a[i] = (int16_t)clamp((32768 + sine_i((127u - i) * 16909320u + 0x40000000u)) >> 1, 0, 32767);
+                a[i] = (int16_t)clamp((32768 + sine_i((127u - i) * 16909320u + 0x40000000u)) >> 2, 0, 16384);
         else if (am == 2u)
             for (i = 0; i < 128u; i++)
-                a[i] = (int16_t)(i << 8);
+                a[i] = (int16_t)(i << 7);
         if (rm == 1u)                                               /* 0.5 - 0.5 cos(pi i / 127) */
             for (i = 0; i < 128u; i++)
-                r[i] = (int16_t)clamp((32768 - sine_i(i * 16909320u + 0x40000000u)) >> 1, 0, 32767);
+                r[i] = (int16_t)clamp((32768 - sine_i(i * 16909320u + 0x40000000u)) >> 2, 0, 16384);
         else if (rm == 2u)
             for (i = 0; i < 128u; i++)
-                r[i] = (int16_t)(i << 8);
+                r[i] = (int16_t)(i << 7);
     }
 }
 
@@ -842,7 +860,7 @@ static uint32_t org_xt_build(const uint8_t *p)
  * subtracts, on release, what it added); until then new keys keep the table that is there */
 static void org_adv_poll(void)
 {
-    static const uint8_t ZERO[6] = {0, 0, 0, 0, 0, 0};
+    static const uint8_t ZERO[7] = {0, 0, 0, 0, 0, 0, 0};
     const uint8_t *p = org_patch;
     if (p[OP_TUNING] != org_b_tun) {
         org_b_tun = p[OP_TUNING];
@@ -853,9 +871,10 @@ static void org_adv_poll(void)
             org.wtab = ORG_WINC;
         }
     }
-    if (memcmp(p + OP_ATK_MODEL, org_b_env, 6)) {
+    if (memcmp(p + OP_ATK_MODEL, org_b_env, 6) || org_b_env[6] != p[OP_CLICK_GAIN]) {
         memcpy(org_b_env, p + OP_ATK_MODEL, 6);
-        if (memcmp(org_b_env, ZERO, 6)) {
+        org_b_env[6] = p[OP_CLICK_GAIN];
+        if (memcmp(org_b_env, ZERO, 7)) {
             org_env_build(p);
             org.atk = org_atk_ram;
             org.rel = org_rel_ram;

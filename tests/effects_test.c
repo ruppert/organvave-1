@@ -323,6 +323,10 @@ int main(void)
             int32_t ref[22050];
             int32_t worst = 0;
             memcpy(ref, oL + a, sizeof ref);
+            /* (the keys go up and the release runs out before the second pass: the same keys sounding again at once
+             * would differ by the old release's tail, 14 LSB, since the CLICK release is the default (0.9.5)) */
+            input_off(&trk[0], 48); input_off(&trk[0], 55); input_off(&trk[0], 60);
+            blocks(44100);
             boot();
             P[OP_EQ] = 1;
             patch_set(P);
