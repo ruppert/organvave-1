@@ -201,7 +201,7 @@ static void drawbar(int32_t cx, int32_t y0, int32_t v, int32_t step, int32_t w, 
     static const uint16_t TOP[3] = {RGB565(0x7a, 0x52, 0x46), RGB565(0xf4, 0xf1, 0xea), RGB565(0x5a, 0x5a, 0x5a)},
                           FRONT[3] = {RGB565(0x4c, 0x2c, 0x24), RGB565(0xc4, 0xc0, 0xb6), RGB565(0x2c, 0x2c, 0x2c)},
                           NOTCH[3] = {RGB565(0x30, 0x1a, 0x14), RGB565(0x9a, 0x96, 0x8e), RGB565(0x18, 0x18, 0x18)};
-    int32_t kind = bar_kind(k), sw = w * 2 / 3, x = cx - sw / 2, len = v * step, caph = compact ? 16 : 28, ct = caph * 11 / 20, i;
+    int32_t kind = bar_kind(k), sw = w * 2 / 3, x = cx - sw / 2, len = v * step, caph = compact ? 22 : 28, ct = caph * 11 / 20, i;
     char n[2] = {0, 0};
     if (len) {                                                /* the stem */
         cv_rect(x, y0, sw, len, RGB565(0x24, 0x22, 0x20));
@@ -239,7 +239,7 @@ static void lamp(int32_t x, int32_t y, const char *label, int on)
     disc(x, y, 3, on ? C_AMBER : RGB565(0x3a, 0x26, 0x14));
     if (on)
         disc4(4 * x + 1, 4 * y, 4, RGB565(0xff, 0xe8, 0xb8));
-    ltext(x + 8, y - 3, &AF_X, label, on ? C_CREAM : C_DIM, C_PANEL);
+    ltext(x + 9, y - 4, &AF_M, label, on ? C_CREAM : C_DIM, C_PANEL);
 }
 
 /* the registration as the console writes it: "88 8000 000" (16' 5 1/3' 8', 4' 2 2/3' 2' 1 3/5', 1 1/3' 1') */
@@ -546,30 +546,41 @@ static void oa_line(int32_t y, const char *lb, const char *val, int hot)
     rtext(210, y, &AF_M, val, hot ? C_AMBER : C_CREAM, bg);
 }
 
-static void oa_gl_dialog(void)
+/* GLOBAL (0.9.8): a full screen like the FX pages, not a pop-up: the header, six rows, the scroll bar, the hint */
+static void oa_gl_line(int32_t y, const char *lb, const char *val, int hot)
+{
+    uint16_t bg = hot ? C_HOT : C_PANEL;
+    if (hot) {
+        rrect(6, y - 5, 216, 21, 3, C_ORANGE);
+        rrect(7, y - 4, 214, 19, 3, C_HOT);
+    }
+    ltext(14, y, &AF_M, lb, hot ? C_AMBER : C_CREAM, bg);
+    rtext(214, y, &AF_M, val, hot ? C_AMBER : C_CREAM, bg);
+}
+static void scr_global(void)
 {
     char b[8];
-    oa_frame("GLOBAL");
-    oa_line(58, "MIDI IN", OA_SRC[fm_midi_src == 3u ? 2u : fm_midi_src & 1u], oa_gl_row == 0u);
+    header("GLOBAL", "");
+    oa_gl_line(34, "MIDI IN", OA_SRC[fm_midi_src == 3u ? 2u : fm_midi_src & 1u], oa_gl_row == 0u);
     if (fm_ch_up)
         fmt_int(b, fm_ch_up);
     else
         str_cpy(b, "ALL", 4);
-    oa_line(82, "UPPER CHANNEL", b, oa_gl_row == 1u);
+    oa_gl_line(58, "UPPER CHANNEL", b, oa_gl_row == 1u);
     if (fm_ch_lo)
         fmt_int(b, fm_ch_lo);
     else
         str_cpy(b, "OFF", 4);
-    oa_line(106, "LOWER CHANNEL", b, oa_gl_row == 2u);
+    oa_gl_line(82, "LOWER CHANNEL", b, oa_gl_row == 2u);
     if (fm_ch_pd)
         fmt_int(b, fm_ch_pd);
     else
         str_cpy(b, "OFF", 4);
-    oa_line(130, "PEDAL CHANNEL", b, oa_gl_row == 3u);
-    oa_line(154, "MIDI CC", ">", oa_gl_row == 4u);
-    oa_line(178, "ABOUT", ">", oa_gl_row == 5u);
-    oa_scrollbar(oa_gl_row, 6u, OA_NROW, 222, 42, 150);
-    ctext(120, 198, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
+    oa_gl_line(106, "PEDAL CHANNEL", b, oa_gl_row == 3u);
+    oa_gl_line(130, "MIDI CC", ">", oa_gl_row == 4u);
+    oa_gl_line(154, "ABOUT", ">", oa_gl_row == 5u);
+    oa_scrollbar(0u, OA_NROW, OA_NROW, 230, 30, 186);
+    footer("SELECT: ITEM   ALGO: VALUE   GLO: BACK");
 }
 
 static void oa_sv_dialog(void)
@@ -1048,23 +1059,24 @@ static void oa_rows(uint32_t pg, const char *state)
 }
 
 
+/* HOME (0.9.8): the number, the name, the nine drawbars large, the four lamps; no hint line (the CPU warning still shows) */
 static void scr_home(void)
 {
     char num[8], nm[16];
     int32_t k;
     oa_preset_label(num, nm);
     header("ORGAN", "UPPER");
-    ctext(120, 36, &AF_L, num, C_AMBER, C_PANEL);
-    ctext(120, 72, text_w(&AF_M, nm) > 220 ? &AF_S : &AF_M, nm, C_CREAM, C_PANEL);
-    cv_rect(44, 94, 152, 1, C_PANEL2);
+    ctext(120, 30, &AF_L, num, C_AMBER, C_PANEL);
+    ctext(120, 66, text_w(&AF_M, nm) > 220 ? &AF_S : &AF_M, nm, C_CREAM, C_PANEL);
+    cv_rect(20, 88, 200, 1, C_PANEL2);
     for (k = 0; k < 9; k++)
-        drawbar(56 + k * 16, 100, org_patch[OP_UB + (uint32_t)k], 7, 14, k, 0, 1);
-    lamp(22, 182, "PERCUSSION", org_patch[OP_PERC] != 0);
-    lamp(22, 198, VIB_SHORT[org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u], org_patch[OP_VIB] != 0);
-    lamp(130, 182, !org_patch[OP_ROT] ? "ROTOR" : org_patch[OP_ROT_SPEED] == 2u ? "ROTOR FAST" : org_patch[OP_ROT_SPEED] == 1u ? "ROTOR SLOW" : "ROTOR STOP", org_patch[OP_ROT] != 0);
-    lamp(22, 214, "DRIVE", org_patch[OP_DRV] != 0);
-    lamp(130, 198, "60 HZ", 1);
-    footer("PRESETS: CHOOSE   OCT- / OCT+: OCTAVE");
+        drawbar(24 + k * 24, 96, org_patch[OP_UB + (uint32_t)k], 8, 22, k, 0, 1);
+    lamp(22, 200, "PERCUSSION", org_patch[OP_PERC] != 0);
+    lamp(130, 200, !org_patch[OP_ROT] ? "ROTOR" : org_patch[OP_ROT_SPEED] == 2u ? "ROTOR FAST" : org_patch[OP_ROT_SPEED] == 1u ? "ROTOR SLOW" : "ROTOR STOP", org_patch[OP_ROT] != 0);
+    lamp(22, 222, VIB_SHORT[org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u], org_patch[OP_VIB] != 0);
+    lamp(130, 222, "DRIVE", org_patch[OP_DRV] != 0);
+    if (cpu_high)
+        ctext(120, 230, &AF_X, "CPU HIGH", RGB565(0xff, 0x50, 0x38), C_PANEL);
 }
 
 /* the bars of the DRAWBARS page: UPPER nine; LOWER / PEDAL eleven, the pedal's two (16' and 8') on the left, the lower's nine on the right.
@@ -1163,7 +1175,9 @@ static void oa_cc_dialog(void)
 
 static void oa_scene(void)
 {
-    if (oa_page == 1u)
+    if (oa_gl)                                            /* GLOBAL: its own screen (the MIDI CC pop-up goes over it) */
+        scr_global();
+    else if (oa_page == 1u)
         scr_drawbars();
     else if (oa_page >= 2u && oa_page <= 8u)
         oa_rows(oa_page, oa_page == 2u || oa_page == 8u ? "" : oa_page == 3u ? (org_patch[OP_ROT] ? ROT_SPD[oa_u(OP_ROT_SPEED, 2u)] : "OFF") :
@@ -1173,9 +1187,7 @@ static void oa_scene(void)
                          (org_patch[OP_EQ] ? "ON" : "OFF"));
     else
         scr_home();
-    if (oa_gl == 1u)
-        oa_gl_dialog();
-    else if (oa_gl == 2u)
+    if (oa_gl == 2u)
         oa_cc_dialog();
     else if (oa_sv)
         oa_sv_dialog();

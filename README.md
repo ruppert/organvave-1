@@ -34,6 +34,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.9.5 | key click twice as loud (attack 100 %, release 50 %) with up to four times setBfree's in ADVANCED EDIT; GLO: a MIDI channel for the upper (ALL by default), the lower and the pedals, and MIDI CC with MIDI Learn for every control; ADVANCED EDIT: SPLIT and SPLIT POINT (G3), the upper channel's notes below the point also play the lower manual and the pedals; the crosstalk rows switch CROSSTALK on and are dimmed while it is off (not yet on an FM-1) |
 | 0.9.6 | the release model CLICK by default (setBfree's is LINEAR), so the release click level is heard; ATTACK GAIN and RELEASE GAIN (0 .. 200 % each, ADVANCED EDIT); the envelopes Q14 (not yet on an FM-1) |
 | 0.9.7 | the tuning and the temperament are fixed (A 440, 60 Hz gear): their rows are gone from ADVANCED EDIT; the screens use the larger text of GLOBAL, with a scroll bar, and the lists stop at the ends (no wrap) |
+| 0.9.8 | HOME: larger drawbars and text, no temperament and no hint line; GLOBAL a full screen like the FX pages |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing
