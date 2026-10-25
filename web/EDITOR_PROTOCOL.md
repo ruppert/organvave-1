@@ -1036,7 +1036,7 @@ SURF = (3, 4, 10), ...
 The organ's sound is the **patch**: `ORG_PSIZE` (96 since 0.9.4; 64 before) bytes, every byte 0..127, of which the first 43 are used (`OP_*` in
 `eng_organ.c`): the nine drawbars of the upper manual (`OP_UB` 0..8, 0 = out, 8 = full: the 16' to 1' footages), the lower
 manual's (`OP_LB` 9..17) and the pedals' (`OP_PB` 18..26) nine, the tuning (`OP_TEMP` 27: 0 gear 60 Hz, 1 gear 50 Hz,
-2 equal temperament), the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model), the percussion (`OP_PERC` 29: 0 off, 1 on;
+2 equal temperament; since 0.9.7 the firmware does not read it: the tuning is fixed, 60 Hz gear and A 440, and the byte is kept), the crosstalk (`OP_XTALK` 28: 0 off, 1 setBfree's model), the percussion (`OP_PERC` 29: 0 off, 1 on;
 `OP_PERC_SOFT` 30: 0 normal, which lowers the mix to 0.605 while on, 1 soft; `OP_PERC_FAST` 31: 0 slow, 4 s to -60 dB,
 1 fast, 1 s; `OP_PERC_SEL` 32: 0 the 4' second harmonic, 1 the 2 2/3' third), and the scanner (`OP_VIB` 33: 0 off, 1..3
 VIB 1..3, 4..6 CHO 1..3), and, from 0.3.0, the rotary speaker (`OP_ROT` 34: 0 off, 1 on; `OP_ROT_MODEL` 35: 0 CLASSIC,

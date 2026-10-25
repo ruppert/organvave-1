@@ -115,9 +115,8 @@ static uint32_t org_xt_tab[ORG_XT_CAP] __attribute__((section(".pool")));
 static uint16_t org_xt_off[97] __attribute__((section(".pool")));
 static int16_t org_atk_ram[8][128] __attribute__((section(".pool")));
 static int16_t org_rel_ram[8][128] __attribute__((section(".pool")));
-static uint32_t org_winc_ram[3][91] __attribute__((section(".pool")));
 /* what the tables were built from (0: setBfree's defaults, the flash tables) */
-static uint8_t org_b_tun, org_b_env[8], org_b_xt[6], org_xt_valid;     /* org_b_env: the six click bytes 58..63, the attack gain (84), the release gain (85) */
+static uint8_t org_b_env[8], org_b_xt[6], org_xt_valid;     /* org_b_env: the six click bytes 58..63, the attack gain (84), the release gain (85) */
 static volatile uint16_t cpu_high;      /* overload: blocks left of "CPU HIGH" (the delay is off meanwhile; audio.c shed_voice arms it) */
 static volatile uint8_t org_shed_req;   /* overload: release the oldest key at the next fragment (org_fragment) */
 
@@ -125,7 +124,6 @@ static void org_init(void)
 {
     uint32_t i;
     memset(&org, 0, sizeof org);
-    org_b_tun = 0;
     memset(org_b_env, 0, sizeof org_b_env);
     memset(org_b_xt, 0, sizeof org_b_xt);
     org_xt_valid = 0;
@@ -759,14 +757,6 @@ static void org_env_build(const uint8_t *p)
     }
 }
 
-/* the wheels' increments scaled by the tuning: osc.tuning / 440, the tuning being 408.0 + 0.5 idx Hz */
-static void org_tuning_build(uint32_t idx)
-{
-    uint32_t t, w, ratio = (816u + idx) * 2440323u;                 /* x / 880 in Q31 */
-    for (t = 0; t < 3u; t++)
-        for (w = 0; w < 91u; w++)
-            org_winc_ram[t][w] = (uint32_t)(((uint64_t)ORG_WINC[t][w] * ratio) >> 31);
-}
 
 /* ---- the crosstalk model: setBfree's applyDefaultConfiguration + compilePlayMatrix, in integer ----
  * A key's taper (the entries of ORG_KCX: terminal, bus, level) gives the signal each of its buses takes from a terminal; the
@@ -864,15 +854,6 @@ static void org_adv_poll(void)
 {
     static const uint8_t ZERO[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     const uint8_t *p = org_patch;
-    if (p[OP_TUNING] != org_b_tun) {
-        org_b_tun = p[OP_TUNING];
-        if (org_b_tun) {
-            org_tuning_build(org_ci(OP_TUNING, org_b_tun));
-            org.wtab = org_winc_ram;
-        } else {
-            org.wtab = ORG_WINC;
-        }
-    }
     if (memcmp(p + OP_ATK_MODEL, org_b_env, 6) || org_b_env[6] != p[OP_CLICK_GAIN] || org_b_env[7] != p[OP_REL_GAIN]) {
         memcpy(org_b_env, p + OP_ATK_MODEL, 6);
         org_b_env[6] = p[OP_CLICK_GAIN];
@@ -918,7 +899,7 @@ static void org_block(struct track *t)          /* audio path, before the render
     org_pgen_seen = org_pgen;
     for (i = 0; i < ORG_NBUS; i++)
         org.bars[i] = org_patch[OP_UB + i];
-    org.temp = org_patch[OP_TEMP];
+    org.temp = 0u;                                          /* 0.9.7: the tuning is fixed (60 Hz gear, A 440); OP_TEMP and OP_TUNING are kept, not read */
     org.xtalk = org_patch[OP_XTALK];
     org.perc = org_patch[OP_PERC];
     org.psoft = org_patch[OP_PERC_SOFT];

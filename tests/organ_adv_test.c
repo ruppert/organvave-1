@@ -322,22 +322,20 @@ static void params(void)
     org_block(0);
     org.xtalk = 0;
     f0 = freq_of(33);                        /* A4 on the upper manual's 8' */
-    org_patch[OP_TUNING] = (uint8_t)org_bi(OP_TUNING, 64 + 20);             /* +10 Hz: 450 Hz */
+    /* 0.9.7: the tuning is fixed (A 440, the 60 Hz gear): the patch's TUNING and TEMPERAMENT bytes are kept but not read */
+    org_patch[OP_TUNING] = (uint8_t)org_bi(OP_TUNING, 64 + 20);             /* +10 Hz: 450 Hz, if it were read */
+    org_patch[OP_TEMP] = 2;                                                /* equal, if it were read */
     org_pgen++;
     org_adv_poll();
     org_block(0);
     org.xtalk = 0;
     f1 = freq_of(33);
-    printf("organ adv: A4 %.3f Hz at 440, %.3f at 450\n", f0, f1);
-    check("TUNING 450 Hz raises every wheel by 450 / 440", fabs(f1 / f0 - 450.0 / 440.0) < 0.002 && org.wtab == org_winc_ram);
+    printf("organ adv: A4 %.3f Hz at the stored tuning, %.3f at 440\n", f1, f0);
+    check("TUNING and TEMPERAMENT are fixed: the stored bytes are not read (A4 stays at 440, the 60 Hz gear)", fabs(f1 / f0 - 1.0) < 0.001 && org.wtab == ORG_WINC && org.temp == 0);
     org_patch[OP_TUNING] = 0;
+    org_patch[OP_TEMP] = 0;
     org_pgen++;
     org_adv_poll();
-    check("TUNING back to 440 Hz is the flash table again", org.wtab == ORG_WINC && org_b_tun == 0);
-    org_patch[OP_TUNING] = (uint8_t)org_bi(OP_TUNING, 0);                    /* 408 Hz */
-    org_pgen++;
-    org_adv_poll();
-    check("TUNING 408 Hz scales the increments by 408 / 440", fabs((double)org_winc_ram[0][40] / (double)ORG_WINC[0][40] - 408.0 / 440.0) < 1e-6);
     org_rst();
     org_patch[OP_PC_FAST] = (uint8_t)org_bi(OP_PC_FAST, 4);                 /* 0.5 s */
     org_patch[OP_PC_NORM] = (uint8_t)org_bi(OP_PC_NORM, 6);                 /* -6 dB */

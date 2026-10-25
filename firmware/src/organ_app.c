@@ -464,13 +464,20 @@ static void oa_gl_close(void)
     oa_cfg_save();
 }
 /* the next control of the MIDI CC list (OP_DRV_FAT is not one) */
-static uint8_t oa_cc_step(uint32_t at, int32_t s)
+static int32_t oa_cc_nb(uint32_t at, int32_t s)        /* the control after (s > 0) or before at, or -1 at the end of the list */
 {
-    uint32_t n = at;
-    do
-        n = (n + OA_NCTL + (s > 0 ? 1u : OA_NCTL - 1u)) % OA_NCTL;
-    while (n == OP_DRV_FAT);
-    return (uint8_t)n;
+    int32_t n = (int32_t)at;
+    do {
+        n += s > 0 ? 1 : -1;
+        if (n < 0 || n >= (int32_t)OA_NCTL)
+            return -1;
+    } while (n == OP_DRV_FAT);
+    return n;
+}
+static uint8_t oa_cc_step(uint32_t at, int32_t s)      /* (no wrap: at the end of the list it stays) */
+{
+    int32_t n = oa_cc_nb(at, s);
+    return (uint8_t)(n < 0 ? at : n);
 }
 /* the next CC a control may take: 0 (none), then 2..119 without the ones that have a meaning of their own */
 static uint8_t oa_cc_next(uint32_t cc, int32_t s)
@@ -512,6 +519,17 @@ static void oa_ctl_cc(uint32_t b, uint32_t v)
 
 /* ------------------------------------------------------------ scenes --- */
 /* a pop-up's frame: the orange border, the title */
+/* a list's scroll bar at x: the track, and the thumb where the first row on the screen is (the full length when all rows fit) */
+static void oa_scrollbar(uint32_t top, uint32_t vis, uint32_t n, int32_t x, int32_t y, int32_t h)
+{
+    int32_t th = n > vis ? (int32_t)(h * (int32_t)vis / (int32_t)n) : h, ty = y;
+    if (th < 10)
+        th = 10;
+    if (n > vis)
+        ty = y + (h - th) * (int32_t)top / (int32_t)(n - vis);
+    cv_rect(x, y, 4, h, C_PANEL2);
+    cv_rect(x, ty, 4, th, C_ORANGE);
+}
 static void oa_frame(const char *title)
 {
     cv_rect(10, 24, 220, 186, C_ORANGE);
@@ -523,9 +541,9 @@ static void oa_line(int32_t y, const char *lb, const char *val, int hot)
 {
     uint16_t bg = hot ? C_HOT : C_POP;
     if (hot)
-        cv_rect(16, y - 5, 208, 21, C_HOT);
+        cv_rect(16, y - 5, 200, 21, C_HOT);
     ltext(22, y, &AF_M, lb, hot ? C_AMBER : C_CREAM, bg);
-    rtext(218, y, &AF_M, val, hot ? C_AMBER : C_CREAM, bg);
+    rtext(210, y, &AF_M, val, hot ? C_AMBER : C_CREAM, bg);
 }
 
 static void oa_gl_dialog(void)
@@ -550,6 +568,7 @@ static void oa_gl_dialog(void)
     oa_line(130, "PEDAL CHANNEL", b, oa_gl_row == 3u);
     oa_line(154, "MIDI CC", ">", oa_gl_row == 4u);
     oa_line(178, "ABOUT", ">", oa_gl_row == 5u);
+    oa_scrollbar(oa_gl_row, 6u, OA_NROW, 222, 42, 150);
     ctext(120, 198, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
 }
 
@@ -623,9 +642,9 @@ static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on t
 /* Every FX page is a list of rows. SELECT picks a row (it is drawn lit), ALGORITHM changes the picked row's value (clockwise: more),
  * and the knobs 1 to 4 go straight to the first four rows. A list longer than the screen scrolls with the pick. The rows of a page
  * are what oa_val shows and oa_adj1 changes (one detent). */
-#define OA_VIS 8u                                       /* rows on the screen */
-static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 31};
-static const char *const OA_LB[9][31] = {
+#define OA_VIS 7u                                       /* rows on the screen (AF_M, 24 px apart) */
+static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 29};
+static const char *const OA_LB[9][29] = {
     {0},
     {0},
     {"PERCUSSION", "VOLUME", "DECAY", "HARMONIC", "VIBRATO"},
@@ -634,14 +653,14 @@ static const char *const OA_LB[9][31] = {
     {"SEND", "TYPE", "SIZE", "TONE"},
     {"SEND", "TYPE", "TIME", "FEEDBACK", "COLOUR", "MIX"},
     {"EQ", "LOW", "MID", "HIGH", "MID FREQ"},
-    {"TUNING", "TEMPERAMENT", "SPLIT", "SPLIT POINT", "ATTACK CLICK", "RELEASE CLICK", "ATTACK MODEL", "CLICK LEN MIN", "CLICK LEN MAX", "RELEASE MODEL",
+    {"SPLIT", "SPLIT POINT", "ATTACK CLICK", "RELEASE CLICK", "ATTACK MODEL", "CLICK LEN MIN", "CLICK LEN MAX", "RELEASE MODEL",
      "CROSSTALK", "COMPARTMENT", "TRANSFORMER", "TERMINAL STRIP", "WIRING", "XT FLOOR", "XT MIN",
      "PERC FAST", "PERC SLOW", "PERC NORMAL", "PERC SOFT", "PERC GAIN", "PERC BUS A", "PERC BUS B", "PERC TRIGGER",
      "SCAN RATE", "VIB1 DEPTH", "VIB2 DEPTH", "VIB3 DEPTH", "ATTACK GAIN", "RELEASE GAIN"},
 };
 /* ADVANCED EDIT: row -> the patch byte (eng_organ.c OP_*). The knobs 1-4 go to the first four rows */
-static const uint8_t OA_AOP[31] = {
-    OP_TUNING, OP_TEMP, OP_SPLIT, OP_SPLIT_PT, OP_ATK_LEVEL, OP_REL_LEVEL, OP_ATK_MODEL, OP_ATK_MIN, OP_ATK_MAX, OP_REL_MODEL,
+static const uint8_t OA_AOP[29] = {
+    OP_SPLIT, OP_SPLIT_PT, OP_ATK_LEVEL, OP_REL_LEVEL, OP_ATK_MODEL, OP_ATK_MIN, OP_ATK_MAX, OP_REL_MODEL,
     OP_XTALK, OP_XT_COMP, OP_XT_TRANS, OP_XT_TSTRIP, OP_XT_WIRE, OP_XT_FLOOR, OP_XT_MIN,
     OP_PC_FAST, OP_PC_SLOW, OP_PC_NORM, OP_PC_SOFT, OP_PC_GAIN, OP_PC_BUSA, OP_PC_BUSB, OP_PC_TRIG,
     OP_SC_HZ, OP_SC_V1, OP_SC_V2, OP_SC_V3, OP_CLICK_GAIN, OP_REL_GAIN,
@@ -718,12 +737,6 @@ static void oa_val_adv(uint32_t r, oa_val_t *v)
 {
     uint32_t op = OA_AOP[r];
     int32_t i;
-    if (op == OP_TEMP) {
-        i = oa_u(OP_TEMP, 2u);
-        oa_vt(v, i == 2 ? "EQUAL" : i == 1 ? "50 HZ GEAR" : "60 HZ GEAR");
-        v->on = 1;
-        return;
-    }
     if (op == OP_XTALK) {
         oa_vsw(v, OP_XTALK, "OFF", "ON");
         return;
@@ -735,7 +748,6 @@ static void oa_val_adv(uint32_t r, oa_val_t *v)
     i = oa_ai(op);
     v->on = 1;
     switch (op) {
-    case OP_TUNING:     oa_vnum(v, 4080 + 5 * i, 1, " HZ"); break;
     case OP_ATK_MODEL:
     case OP_REL_MODEL:  oa_vt(v, OA_ENVM[i & 3]); break;
     case OP_ATK_LEVEL:
@@ -910,9 +922,7 @@ static void oa_eqs(uint32_t op, int32_t d)
 static void oa_adj_adv(uint32_t r, int32_t d)
 {
     uint32_t op = OA_AOP[r];
-    if (op == OP_TEMP)
-        org_set(OP_TEMP, (uint32_t)clamp(oa_u(OP_TEMP, 2u) + d, 0, 2));
-    else if (op == OP_XTALK)
+    if (op == OP_XTALK)
         org_set(OP_XTALK, d > 0 ? 1u : 0u);
     else if (op == OP_SPLIT)
         org_set(OP_SPLIT, d > 0 ? 1u : 0u);
@@ -1019,23 +1029,21 @@ static void oa_rows(uint32_t pg, const char *state)
     for (i = 0; i < OA_VIS && top + i < n; i++) {
         oa_val_t v;
         uint32_t r = top + i;
-        int32_t y = 33 + (int32_t)i * 23;
+        int32_t y = 34 + (int32_t)i * 24;
         int hot = r == sel;
         uint16_t bg = hot ? C_HOT : C_PANEL;
         oa_val(pg, r, &v);
         if (hot) {
-            rrect(6, y - 5, 226, 21, 3, C_ORANGE);
-            rrect(7, y - 4, 224, 19, 3, C_HOT);
+            rrect(6, y - 5, 216, 21, 3, C_ORANGE);
+            rrect(7, y - 4, 214, 19, 3, C_HOT);
         }
-        ltext(14, y, &AF_X, OA_LB[pg][r], hot ? C_AMBER : C_CREAM, bg);
-        if (v.mn)
-            meter(86, y - 1, v.mn, v.mv);
-        rtext(228, y, &AF_X, v.t, v.on ? C_AMBER : C_DIM, bg);
+        ltext(14, y, &AF_M, OA_LB[pg][r], hot ? C_AMBER : C_CREAM, bg);
+        if (v.mn)                                       /* the level under the label: a thin bar */
+            for (int32_t c = 0; c < v.mn; c++)
+                rrect(14 + c * 8, y + 14, 6, 4, 1, c < v.mv ? C_AMBER : RGB565(0x3a, 0x26, 0x14));
+        rtext(214, y, &AF_M, v.t, v.on ? C_AMBER : C_DIM, bg);
     }
-    if (n > OA_VIS) {                                   /* the scroll bar */
-        cv_rect(235, 30, 3, 184, C_PANEL2);
-        cv_rect(235, 30 + (int32_t)(184u * top / n), 3, (int32_t)(184u * OA_VIS / n), C_ORANGE);
-    }
+    oa_scrollbar(top, OA_VIS, n, 230, 30, 186);
     footer("SELECT: ITEM    ALGORITHM: VALUE");
 }
 
@@ -1055,7 +1063,7 @@ static void scr_home(void)
     lamp(22, 198, VIB_SHORT[org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u], org_patch[OP_VIB] != 0);
     lamp(130, 182, !org_patch[OP_ROT] ? "ROTOR" : org_patch[OP_ROT_SPEED] == 2u ? "ROTOR FAST" : org_patch[OP_ROT_SPEED] == 1u ? "ROTOR SLOW" : "ROTOR STOP", org_patch[OP_ROT] != 0);
     lamp(22, 214, "DRIVE", org_patch[OP_DRV] != 0);
-    lamp(130, 198, org_patch[OP_TEMP] == 2u ? "EQUAL" : org_patch[OP_TEMP] == 1u ? "50 HZ" : "60 HZ", 1);
+    lamp(130, 198, "60 HZ", 1);
     footer("PRESETS: CHOOSE   OCT- / OCT+: OCTAVE");
 }
 
@@ -1130,9 +1138,16 @@ static void oa_cc_dialog(void)
     oa_frame("MIDI CC");
     for (k = -2; k <= 2; k++) {                           /* five controls around the highlighted one */
         char nm[16], v[8];
+        int32_t m = (int32_t)at;
+        int ok = 1;
         n = at;
-        for (i = 0; i < (uint32_t)(k < 0 ? -k : k); i++)
-            n = oa_cc_step(n, k);
+        for (i = 0; i < (uint32_t)(k < 0 ? -k : k) && ok; i++) {
+            m = oa_cc_nb((uint32_t)m, k);
+            ok = m >= 0;
+        }
+        if (!ok)
+            continue;                                    /* past the end of the list: no line */
+        n = (uint32_t)m;
         oa_ctl_name(nm, n);
         if (oa_ccmap[n]) {
             str_cpy(v, "CC ", 4);
@@ -1141,6 +1156,7 @@ static void oa_cc_dialog(void)
             str_cpy(v, "OFF", 4);
         oa_line(70 + (k + 2) * 24, nm, v, k == 0);
     }
+    oa_scrollbar(at, 1u, OA_NCTL, 222, 42, 150);
     ctext(120, 187, &AF_X, "MOVE A CC TO LEARN IT", C_DIM, C_POP);
     ctext(120, 199, &AF_S, "SELECT  ALGO  GLO = BACK", C_DIM, C_POP);
 }
@@ -1367,7 +1383,7 @@ static void oa_input(void)
         (void)panel_enc(EN_PRESET);
         if (oa_gl == 1u) {
             if ((s = panel_enc(EN_SELECT)) != 0)
-                oa_gl_row = (uint8_t)((oa_gl_row + OA_NROW + (s > 0 ? 1u : OA_NROW - 1u)) % OA_NROW);
+                oa_gl_row = (uint8_t)clamp((int32_t)oa_gl_row + (s > 0 ? 1 : -1), 0, (int32_t)OA_NROW - 1);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 int32_t d = s > 0 ? 1 : -1;
                 if (oa_gl_row == 0u) {
@@ -1412,7 +1428,7 @@ static void oa_input(void)
     if (oa_page >= 2u && oa_page <= 8u) {                 /* the FX pages and ADVANCED EDIT: SELECT picks a row, ALGORITHM changes it, the knobs 1-4 go to rows 1-4 */
         uint32_t pg = oa_page, n = OA_NR[pg];
         if ((s = panel_enc(EN_SELECT)) != 0)
-            oa_row[pg] = (uint8_t)((oa_row[pg] + n + (s > 0 ? 1u : n - 1u)) % n);
+            oa_row[pg] = (uint8_t)clamp((int32_t)oa_row[pg] + (s > 0 ? 1 : -1), 0, (int32_t)n - 1);
         if ((s = panel_enc(EN_ALGO)) != 0)
             oa_adj(pg, oa_row[pg], s);
         for (k = 0; k < 4u && k < n; k++)

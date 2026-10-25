@@ -231,7 +231,10 @@ int main(int argc, char **argv)
         turn(EN_ALGO, 9);
         bad += check("  .. the selector stops at CHO 3", org_patch[OP_VIB] == 6);
         turn(EN_SELECT, 1);
-        bad += check("  .. SELECT past the last row wraps to the first (the page stays)", oa_row[2] == 0 && oa_page == 2);
+        bad += check("  .. SELECT past the last row stays on it (the page stays)", oa_row[2] == 4 && oa_page == 2);
+        for (i = 0; i < 4u; i++)
+            turn(EN_SELECT, -1);
+        bad += check("  .. and back to the first row", oa_row[2] == 0);
         turn(EN_ALGO, 1);
         bad += check("  .. ALGORITHM on the first row: the percussion on", org_patch[OP_PERC] == 1);
         turn(EN_ALGO, -1);
@@ -318,7 +321,7 @@ int main(int argc, char **argv)
             bad += check("  .. the list scrolled to keep the pick in view", oa_top[3] + OA_VIS > oa_row[3] && oa_top[3] <= oa_row[3] && oa_top[3] > 0);
             turn(EN_SELECT, 1);
             (void)frame_hash();
-            bad += check("  .. past the last row it wraps to the first", oa_row[3] == 0 && oa_top[3] == 0);
+            bad += check("  .. past the last row it stays on it (the list does not wrap)", oa_row[3] == 11 && oa_top[3] == 12 - OA_VIS);
         }
         bad += check("  .. a different picture from the first", frame_hash() != h_r);
         press(B_FX);
@@ -388,7 +391,8 @@ int main(int argc, char **argv)
             bad += check("  .. and from HOME it opens the upper manual", oa_man == 0 && oa_page == 1);
             org_set(OP_PB + 0, 0); org_set(OP_PB + 2, 0); org_set(OP_LB + 0, 0); org_set(OP_LB + 8, 0);
         }
-        /* ADVANCED EDIT (0.9.4): EDIT, EDIT, EDIT; SELECT picks a row, ALGORITHM changes it by one step, the knobs 1-4 go to rows 1-4 */
+        /* ADVANCED EDIT (0.9.4, 0.9.7): EDIT, EDIT, EDIT; SELECT picks a row, ALGORITHM changes it by one step, the knobs 1-4 go to rows 1-4.
+         * 0.9.7: no TUNING and no TEMPERAMENT rows (60 Hz gear and A 440 are fixed): the first row is SPLIT */
         {
             uint32_t h_a, r;
             memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
@@ -396,44 +400,37 @@ int main(int argc, char **argv)
             press(B_EDIT); press(B_EDIT); press(B_EDIT);
             bad += check("ADVANCED EDIT: the page after DRAWBARS' lower manual", oa_page == 8);
             h_a = frame_hash();
-            bad += check("  .. 31 rows, the first picked", OA_NR[8] == 31 && oa_row[8] == 0);
+            bad += check("  .. 29 rows, the first picked (SPLIT: no TUNING, no TEMPERAMENT row)", OA_NR[8] == 29 && oa_row[8] == 0 && !strcmp(OA_LB[8][0], "SPLIT"));
             turn(EN_ALGO, 1);
-            bad += check("  .. ALGORITHM raises TUNING by one step: 440.5 Hz", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 65 && frame_hash() != h_a);
-            turn(EN_ALGO, -2);
-            bad += check("  .. and lowers it: 439.5 Hz", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 63);
-            for (i = 0; i < 300u; i++)
-                turn(EN_ALGO, -1);
-            bad += check("  .. down to 408 Hz and stops", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 0 && org_patch[OP_TUNING] == 64);
-            for (i = 0; i < 300u; i++)
-                turn(EN_ALGO, 1);
-            bad += check("  .. up to 471.5 Hz and stops", org_ci(OP_TUNING, org_patch[OP_TUNING]) == 127 && org_patch[OP_TUNING] == 63);
-            org_set(OP_TUNING, 0);
+            bad += check("  .. ALGORITHM on the first row switches SPLIT on", org_patch[OP_SPLIT] == 1 && frame_hash() != h_a);
+            turn(EN_ALGO, -1);
+            bad += check("  .. and off again", org_patch[OP_SPLIT] == 0);
             turn(EN_SELECT, 1);
             bad += check("  .. SELECT picks the next row", oa_row[8] == 1);
-            turn(EN_ALGO, 1);
-            turn(EN_ALGO, 1);
-            turn(EN_ALGO, 1);
-            bad += check("  .. TEMPERAMENT: 60 Hz gear, 50 Hz gear, equal (and stops)", org_patch[OP_TEMP] == 2);
-            org_set(OP_TEMP, 0);
-            turn(EN_K3, 1);
-            bad += check("  .. knob 3 is SPLIT: OFF -> ON", org_patch[OP_SPLIT] == 1);
-            turn(EN_K4, 3);
-            bad += check("  .. knob 4 is SPLIT POINT: G3 -> G#3 .. (3 steps up: B3)", org_ci(OP_SPLIT_PT, org_patch[OP_SPLIT_PT]) == 22);
-            turn(EN_K3, -1);
-            turn(EN_K4, 3);
+            turn(EN_SELECT, -1);
+            bad += check("  .. the tuning is fixed: the patch's TUNING byte is not read (60 Hz gear, A 440)", org_ci(OP_TUNING, 0) == 64 && !org.temp && org.wtab == ORG_WINC);
+            turn(EN_K1, 1);
+            bad += check("  .. knob 1 is SPLIT: OFF -> ON", org_patch[OP_SPLIT] == 1);
+            turn(EN_K2, 3);
+            bad += check("  .. knob 2 is SPLIT POINT: G3 -> G#3 .. (3 steps up: B3)", org_ci(OP_SPLIT_PT, org_patch[OP_SPLIT_PT]) == 22);
+            turn(EN_K1, -1);
+            turn(EN_K2, 3);
             bad += check("  .. SPLIT POINT waits while the split is off", org_ci(OP_SPLIT_PT, org_patch[OP_SPLIT_PT]) == 22);
             org_set(OP_SPLIT_PT, 0);
             for (i = 0; i < 40u; i++)
                 turn(EN_SELECT, 1);
-            bad += check("  .. SELECT wraps around the 31 rows", oa_row[8] == (1 + 40) % 31);
-            for (r = 0; r < 31u; r++) {
+            bad += check("  .. SELECT stops at the last row (no wrap)", oa_row[8] == 28);
+            for (i = 0; i < 40u; i++)
+                turn(EN_SELECT, -1);
+            bad += check("  .. and at the first", oa_row[8] == 0);
+            for (r = 0; r < 29u; r++) {
                 uint32_t op = OA_AOP[r], rows_ok;
                 uint8_t before = org_patch[op];
                 oa_row[8] = (uint8_t)r;
                 oa_top[8] = 0;
                 turn(EN_ALGO, 1);
                 turn(EN_ALGO, -1);
-                rows_ok = op == OP_XTALK || op == OP_SPLIT ? org_patch[op] == 0u : op == OP_TEMP ? org_patch[op] == 0u : org_ci(op, org_patch[op]) == org_ci(op, before) || org_ci(op, before) == org_pmax(op);   /* (at the top the step up stays, the one down moves) */
+                rows_ok = op == OP_XTALK || op == OP_SPLIT ? org_patch[op] == 0u : org_ci(op, org_patch[op]) == org_ci(op, before) || org_ci(op, before) == org_pmax(op);   /* (at the top the step up stays, the one down moves) */
                 if (!rows_ok) printf("row %u op %u before %u after %u\n", r, op, before, org_patch[op]);
                 bad += check("  .. every row: a step up and down is a round trip (or the end stop)", rows_ok);
                 bad += org_patch[op] <= org_pmax(op) ? 0 : check("  .. every row stays in range", 0);
@@ -441,50 +438,48 @@ int main(int argc, char **argv)
             {
                 oa_val_t v;
                 memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
-                oa_val(8u, 0u, &v);
-                bad += check("  .. the defaults read 440.0 HZ", !strcmp(v.t, "440.0 HZ"));
-                oa_val(8u, 24u, &v);
+                oa_val(8u, 22u, &v);
                 bad += check("  .. PERC TRIGGER 1'", !strcmp(v.t, "1'"));
-                oa_val(8u, 25u, &v);
+                oa_val(8u, 23u, &v);
                 bad += check("  .. SCAN RATE 7.25 HZ", !strcmp(v.t, "7.25 HZ"));
-                oa_val(8u, 14u, &v);
+                oa_val(8u, 12u, &v);
                 bad += check("  .. WIRING -40 DB", !strcmp(v.t, "-40 DB"));
-                oa_val(8u, 15u, &v);
+                oa_val(8u, 13u, &v);
                 bad += check("  .. XT FLOOR -96 DB", !strcmp(v.t, "-96 DB"));
-                oa_val(8u, 11u, &v);
-                bad += check("  .. COMPARTMENT -40 DB", !strcmp(v.t, "-40 DB"));
-                oa_val(8u, 16u, &v);
-                bad += check("  .. XT MIN OFF", !strcmp(v.t, "OFF"));
-                oa_val(8u, 17u, &v);
-                bad += check("  .. PERC FAST 1.0 S", !strcmp(v.t, "1.0 S"));
-                oa_val(8u, 21u, &v);
-                bad += check("  .. PERC GAIN 11.0", !strcmp(v.t, "11.0"));
                 oa_val(8u, 9u, &v);
+                bad += check("  .. COMPARTMENT -40 DB", !strcmp(v.t, "-40 DB"));
+                oa_val(8u, 14u, &v);
+                bad += check("  .. XT MIN OFF", !strcmp(v.t, "OFF"));
+                oa_val(8u, 15u, &v);
+                bad += check("  .. PERC FAST 1.0 S", !strcmp(v.t, "1.0 S"));
+                oa_val(8u, 19u, &v);
+                bad += check("  .. PERC GAIN 11.0", !strcmp(v.t, "11.0"));
+                oa_val(8u, 7u, &v);
                 bad += check("  .. RELEASE MODEL CLICK (the default since 0.9.5)", !strcmp(v.t, "CLICK"));
-                oa_val(8u, 4u, &v);
+                oa_val(8u, 2u, &v);
                 bad += check("  .. ATTACK CLICK 100 % by default (0.9.5)", !strcmp(v.t, "100 %"));
-                oa_val(8u, 5u, &v);
+                oa_val(8u, 3u, &v);
                 bad += check("  .. RELEASE CLICK 50.0 % by default (0.9.5)", !strcmp(v.t, "50.0 %"));
                 org_set(OP_ATK_LEVEL, org_bi(OP_ATK_LEVEL, 40));
-                oa_val(8u, 4u, &v);
-                bad += check("  .. ATTACK CLICK up to 200 %", !strcmp(v.t, "200 %"));
                 oa_val(8u, 2u, &v);
+                bad += check("  .. ATTACK CLICK up to 200 %", !strcmp(v.t, "200 %"));
+                oa_val(8u, 0u, &v);
                 bad += check("  .. SPLIT OFF by default", !strcmp(v.t, "OFF") && !v.on);
-                oa_val(8u, 3u, &v);
+                oa_val(8u, 1u, &v);
                 bad += check("  .. SPLIT POINT G3 by default, dim while the split is off", !strcmp(v.t, "G3") && !v.on);
                 org_set(OP_SPLIT, 1);
-                oa_val(8u, 3u, &v);
+                oa_val(8u, 1u, &v);
                 bad += check("  .. SPLIT POINT lit with the split on", v.on);
                 org_set(OP_SPLIT_PT, org_bi(OP_SPLIT_PT, 60));
-                oa_val(8u, 3u, &v);
+                oa_val(8u, 1u, &v);
                 bad += check("  .. SPLIT POINT tops at C7 (96)", !strcmp(v.t, "C7"));
                 org_set(OP_SPLIT_PT, org_bi(OP_SPLIT_PT, 1));
-                oa_val(8u, 3u, &v);
+                oa_val(8u, 1u, &v);
                 bad += check("  .. and the bottom C#2 (37) is the second", !strcmp(v.t, "C#2"));
                 org_set(OP_XTALK, 0);
-                oa_val(8u, 11u, &v);
+                oa_val(8u, 9u, &v);
                 bad += check("  .. the crosstalk rows are dim with CROSSTALK off", !v.on);
-                oa_row[8] = 11;
+                oa_row[8] = 9;
                 turn(EN_ALGO, 1);
                 bad += check("  .. and changing one switches CROSSTALK on", org_patch[OP_XTALK] == 1);
             }
