@@ -82,21 +82,19 @@ int main(void)
         idle(AS_GAP_MS);
         bad += check("  .. then is written", host_erases == e0 + 2u);
         power_on(1);
-        bad += check("power-on after a clean boot: the organ patch, LEVEL, the tempo and the preset back",
-                     org_patch[OP_TEMP] == 1 && TSEL->p[P_LEVEL] == 70 && song.g[G_BPM] == 133 && TSEL->preset == 2);
-        bad += check("  .. with the ADVANCED EDIT bytes (past the old 64)", org_patch[OP_TUNING] == 70 && org_patch[OP_XT_WIRE] == 9 && org_patch[OP_SC_V3] == 5);
-        {   /* a 0.9.3 record (64 patch bytes, no ADVANCED EDIT ones): still loads, the new bytes are the defaults */
+        bad += check("power-on after a clean boot: the first factory preset (0.9.9: the autosave is not restored)",
+                     TSEL->preset == 0 && !memcmp(org_patch, ORG_FACTORY[0], ORG_PSIZE) && TSEL->p[P_LEVEL] == ORG_LEVEL[0] && song.g[G_BPM] != 133);
+        {   /* the autosave is still written, and a shorter (0.9.3) record is harmless: the boot starts from the first preset too */
             as_rec_t a;
             as_capture(&a);
             memset(a.patch + OP_TUNING, 0, AS_PATCH0 - OP_TUNING);        /* (those bytes were reserved: 0) */
             st_save(OBJ_AUTOSAVE, &a, AS_OLD_SIZE);
             org_set_patch(pk);
             power_on(1);
-            bad += check("a 0.9.3 autosave (shorter): loads, the ADVANCED EDIT bytes read as the defaults",
-                         org_patch[OP_TEMP] == 1 && TSEL->preset == 2 && org_patch[OP_TUNING] == 0 && org_patch[OP_XT_WIRE] == 0 && org_patch[OP_SC_V3] == 0);
+            bad += check("a 0.9.3 autosave (shorter): the boot still starts from the first factory preset", TSEL->preset == 0);
             st_save(OBJ_AUTOSAVE, &a, sizeof a);
             power_on(1);
-            bad += check("  .. the full one again", org_patch[OP_TEMP] == 1);
+            bad += check("  .. the full one again: the same", TSEL->preset == 0);
         }
         power_on(0);
         bad += check("power-on after a crash: the defaults (the autosave is not loaded)",

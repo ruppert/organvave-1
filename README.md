@@ -36,6 +36,7 @@ after the real console's panel), the presets, the tests and the milestones:
 | 0.9.7 | the tuning and the temperament are fixed (A 440, 60 Hz gear): their rows are gone from ADVANCED EDIT; the screens use the larger text of GLOBAL, with a scroll bar, and the lists stop at the ends (no wrap) |
 | 0.9.8 | HOME: larger drawbars and text, no temperament and no hint line; GLOBAL a full screen like the FX pages |
 | 0.9.9 | the first factory preset JAZZ B3 (888, Leslie slow, percussion third, ROOM reverb); FULL ORGAN second with less reverb; each preset sets its reverb type and size |
+| 0.9.10 | power-on always starts from the first factory preset (the autosave is written but not restored) |
 | 1.0.0 | after it has been tested on the hardware |
 
 ## Building and developing

@@ -8,8 +8,8 @@
  * fields this firmware does not use are written back as they were read.
  *
  * The autosave (OBJ_AUTOSAVE, magic "OVA2"): the instrument as it is (a user preset record: the part's values, the
- * octave, the FX settings; and the organ patch, the preset it came from), put back at power-on
- * (not after a crash, a hang or a failed boot: main.c). A flash erase stops the audio for its ~40 ms, so a write only
+ * octave, the FX settings; and the organ patch, the preset it came from). Since 0.9.9 it is written but not put back at
+ * power-on: the instrument starts from the first factory preset. A flash erase stops the audio for its ~40 ms, so a write only
  * when the record changed and has stayed the same for AS_IDLE_MS with the transport stopped, nothing sounding and no
  * key or button down, and at least AS_GAP_MS after the one before (AS_RETRY_MS after a failed write). The settings are
  * written under the same quiet rule. FMini-1's autosave and 0.0.x's ("OVA1", an FMUG patch) read as none. */
@@ -141,45 +141,15 @@ static uint32_t autosave_sig(void)             /* FNV-1a of what the record hold
     return h;
 }
 
-/* power-on, after the defaults: the last session's instrument when `allowed` (no crash, hang or failed boot before);
- * an autosave that does not load (none, torn, damaged, another firmware's) is ignored. 1 = restored */
+/* power-on (0.9.9): the instrument always starts from the first factory preset (JAZZ B3), not from the last session's: the
+ * autosave is not restored. It goes on being written (autosave_poll), and its baseline is set here so that the boot is not
+ * saved as a change. Returns 0 (nothing restored) */
 static int autosave_boot(int allowed)
 {
-    as_rec_t a;
-    uint8_t full[ORG_PSIZE];
-    int rc = 0, n;
-    memset(&a, 0, sizeof a);
-    n = flash_ok && allowed ? st_load(OBJ_AUTOSAVE, &a, sizeof a) : -1;
-    if ((n == (int)sizeof a || n == (int)AS_OLD_SIZE) && a.magic == AS_MAGIC &&
-        up_valid(&a.r) && eng_ok(a.r.engine)) {
-        track_t *t = TSEL;
-        int16_t v[P_COUNT];
-        uint32_t i;
-        up_values(&a.r, v);
-        fm1_irq_off();
-        t->eng_req = a.r.engine;
-        for (i = 0; i < P_COUNT; i++)
-            t->p[i] = v[i];
-        for (i = 0; i < 16u && i < NSTEP; i++) {   /* the steps (a note each, as the SEQ pop-up records them) */
-            step_t *st = &t->step[i];
-            st->n = a.r.note[i] ? 1u : 0u;
-            st->note[0] = a.r.note[i];
-            st->time = (uint8_t)(a.r.flags[i] & 4u ? ST_TIE : a.r.note[i] ? ST_NOTE : ST_REST);
-            st->flags = (uint8_t)(a.r.flags[i] & (SF_ACCENT | SF_SLIDE));
-            st->vel = st->n ? 100u : 0u;
-        }
-        t->preset = a.preset;
-        t->user = a.user <= UP_SLOTS ? a.user : 0u;
-        fm1_irq_on();
-        memcpy(full, a.patch, AS_PATCH0);
-        memcpy(full + AS_PATCH0, a.patch_ext, ORG_PSIZE - AS_PATCH0);
-        org_set_patch(full);
-        up_extras(&a.r);
-        rc = 1;
-    }
+    (void)allowed;
     as.saved = as.seen = autosave_sig();
     as.t = fm1_ms;
-    return rc;
+    return 0;
 }
 
 static void autosave_poll(void)                /* main loop, every pass (after settings_poll) */
