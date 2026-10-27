@@ -83,10 +83,11 @@ static void ed_shadow(void)                              /* the editor is in syn
 }
 /* the editor's own sound load (PRESET, SET of G_ENGSEL): the editor re-reads DUMP after the reply, so the shadow takes
  * the load and no RELOAD echoes back (INFO 53 01 bit 1). A RELOAD already due before it still goes out */
-typedef struct { int16_t p[P_COUNT]; uint8_t eng, preset, due; } ed_load_t;
+typedef struct { int16_t p[P_COUNT], g[G_COUNT]; uint8_t eng, preset, due; } ed_load_t;   /* (g: the song's globals a preset sets, 0.9.8: the reverb) */
 static void ed_load_before(ed_load_t *b)
 {
     memcpy(b->p, TSEL->p, sizeof b->p);
+    memcpy(b->g, song.g, sizeof b->g);
     b->eng = (uint8_t)ed_eng(TSEL);
     b->preset = TSEL->preset;
     b->due = sync_reload || b->eng != ed_w.eng || b->preset != ed_w.preset;
@@ -102,6 +103,9 @@ static void ed_load_after(const ed_load_t *b)
     for (i = 0; i < P_COUNT; i++)                        /* the load's values; a pending push of another stays */
         if (TSEL->p[i] != b->p[i])
             ed_w.v[i] = TSEL->p[i];
+    for (i = 0; i < G_COUNT; i++)                        /* (the globals a load sets: the reverb of an organ preset) */
+        if (song.g[i] != b->g[i])
+            ed_w.v[P_COUNT + i] = song.g[i];
 }
 static int ed_room(void) { return so_w - so_r + 8u <= SXQ / 2u; }
 

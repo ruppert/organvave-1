@@ -187,6 +187,7 @@ int main(void)
         P[OP_PB + 0] = 0;
         org_set_patch(P);
     }
+    (void)rms_run(3000);                             /* (the room reverb's tail of the notes before: 0.9.8's presets) */
     on(1, 60); on(2, 36);
     a = rms_run(120);
     check("with their drawbars at 0 the lower manual and the pedals are silent (but the key click, twice setBfree's since 0.9.5)", a < 8.0);

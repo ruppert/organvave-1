@@ -97,6 +97,8 @@ static void apply_preset_to(track_t *t, uint32_t pi)
     if (t->eng_req == ENGI_ORGAN) {                   /* the organ: the preset's patch and its level */
         org_set_patch(ORG_FACTORY[pi % ORG_NFACTORY]);
         t->p[P_LEVEL] = ORG_LEVEL[pi % ORG_NFACTORY];
+        song.g[G_RTYPE] = (int16_t)ORG_RVB[pi % ORG_NFACTORY][0];      /* 0.9.8: the reverb's type and size are the preset's */
+        song.g[G_RSIZE] = (int16_t)ORG_RVB[pi % ORG_NFACTORY][1];
     }
 }
 

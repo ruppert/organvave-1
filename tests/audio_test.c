@@ -155,7 +155,7 @@ static void usb_level(void)
     printf("audio: USB / DAC rms: MASTER full %.0f / %.0f, 1/4 %.0f / %.0f, 0 %.0f / %.0f; FIXED 1/4 %.0f / %.0f, 0 %.0f / %.0f\n",
            u_full, d_full, u_quiet, d_quiet, u_off, d_off, u_fixed, d_fixed, u_fixed0, d_fixed0);
     acheck("USB LEVEL MASTER (default): USB is the DAC's signal and follows the knob (0: silent)",
-          ok_full && ok_quiet && ok_off && u_full > 300.0 && u_quiet < u_full * 0.5 && u_off == 0.0);
+          ok_full && ok_quiet && ok_off && u_full > 200.0 /* (the first preset, JAZZ B3: 888 only) */ && u_quiet < u_full * 0.5 && u_off == 0.0);
     acheck("USB LEVEL FIXED: USB at the full level whatever MASTER is (within 0.1 dB), MASTER 0 too",
           fabs(20.0 * log10(u_fixed / u_full)) < 0.1 && fabs(20.0 * log10(u_fixed0 / u_full)) < 0.1);
     acheck("USB LEVEL FIXED: the DAC gets exactly USB scaled by MASTER (MASTER 0: silent, 1/4: -12 dB)",

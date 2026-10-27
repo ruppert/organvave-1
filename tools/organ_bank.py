@@ -11,6 +11,8 @@ written here: the generator sets it so that every preset's C major chord (C4 E4 
 From 0.3.0 a preset may carry a last field, a dict of effects (absent: both off):
   "rot": (model, speed, horn, width, horn_db)   model "classic" | "light"; speed "stop" | "slow" | "fast"; horn "normal" |
          "sharp"; width in degrees (180 widest .. 0 narrowest, 30 a step); horn_db the horn's level against the drum (1.5 dB steps)
+  "perc": (harmonic, soft, decay)   harmonic "4'" | "third" (2 2/3'); soft "normal" | "soft"; decay "slow" (4 s) | "fast" (1 s); the percussion is on
+  "rvb": (type, size_pct)   the reverb's TYPE "room" | "hall" | "plate" | "spring" | "cloud" and SIZE in percent (0..100): the preset sets them (absent: hall, 90 %)
   "drv": (gain_db, type, tone, out_db)   gain_db re setBfree's default (2 dB steps, -12 .. +12); type "distortion" (setBfree's
          preamp) | "tube" (a valve's soft saturation); tone -4 (dark) .. +4 (bright), 0 flat; out_db -8 .. +8 in 2 dB steps
 The rotary or the drive switched on in the panel starts from the neutral values the generator writes for a preset without it
@@ -20,7 +22,9 @@ LIGHT the cheap one, so most presets use LIGHT until the instrument's CPU meter 
 
 BANK = [
     # name,          upper,         lower,         pedal,      tuning,   crosstalk, reverb, effects (optional)
-    ("FULL ORGAN",   "88 8888 888", "00 8888 000", "80 8000 000", "gear60", True, 30, {"rot": ("classic", "slow", "normal", 180, 0)}),
+    ("JAZZ B3",      "888000000",   "000000000",   "000000000",   "gear60", True, 10,
+                     {"rot": ("classic", "slow", "normal", 180, 0), "perc": ("third", "normal", "slow"), "rvb": ("room", 40)}),
+    ("FULL ORGAN",   "88 8888 888", "00 8888 000", "80 8000 000", "gear60", True, 13, {"rot": ("classic", "slow", "normal", 180, 0), "rvb": ("room", 40)}),
     ("GOSPEL",       "88 8800 000", "00 8880 000", "80 6000 000", "gear60", True, 30, {"rot": ("classic", "fast", "normal", 180, 0), "drv": (0, "tube", 0, 0)}),
     ("JAZZ",         "88 8000 000", "00 8800 000", "60 4000 000", "gear60", True, 24, {"rot": ("light", "slow", "normal", 180, 0)}),
     ("BALLAD",       "68 8600 000", "00 6600 000", "60 4000 000", "gear60", True, 36, {"rot": ("light", "slow", "normal", 120, 0)}),

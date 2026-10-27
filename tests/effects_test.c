@@ -62,6 +62,7 @@ static void boot(void)
     pos = 0;
     host_preset(&trk[0], ENGI_ORGAN, 0);
     trk[0].p[P_AMODE] = 0;
+    trk[0].p[P_LEVEL] = 101;             /* (the level the sections were measured at: 0.9.8's first preset is louder) */
     trk[0].p[P_DIST] = trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = 0;     /* (no reverb tail: the effects alone) */
     memset(P, 0, sizeof P);
     P[OP_UB + 2] = 8;                    /* 8' */

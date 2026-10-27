@@ -25,6 +25,8 @@ OP_UB, OP_LB, OP_PB, OP_TEMP, OP_XTALK = 0, 9, 18, 27, 28
 OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC, OP_ROT_BAL = 34, 35, 36, 37, 38, 39
 OP_DRV, OP_DRV_GAIN = 40, 41
 OP_DRV_TYPE, OP_DRV_TONE, OP_DRV_OUT = 48, 49, 50     # 0.9.2: the type, the tone and the output (9 steps, "zero is the default")
+OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL = 29, 30, 31, 32   # the percussion (0.2.0)
+RTYPES = {"room": 0, "hall": 1, "plate": 2, "spring": 3, "cloud": 4}   # params.c N_RTYPE
 TEMPS = {"gear60": 0, "gear50": 1, "equal": 2}
 
 
@@ -51,6 +53,13 @@ def effects(p, fx):
         p[OP_DRV_TYPE] = 0 if typ == "distortion" else 1
         p[OP_DRV_TONE] = (tone + 4 + 5) % 9              # the byte for the index (the default 4 is byte 0)
         p[OP_DRV_OUT] = (odb // 2 + 4 + 5) % 9
+    if "perc" in fx:                                      # 0.9.8: the percussion (OP_PERC 29, SEL 32, SOFT 30, FAST 31)
+        harm, soft, decay = fx["perc"]
+        assert harm in ("4'", "third") and soft in ("normal", "soft") and decay in ("slow", "fast")
+        p[OP_PERC] = 1
+        p[OP_PERC_SEL] = 1 if harm == "third" else 0
+        p[OP_PERC_SOFT] = 1 if soft == "soft" else 0
+        p[OP_PERC_FAST] = 1 if decay == "fast" else 0
 
 
 def bars(s):
@@ -87,6 +96,7 @@ def main():
          "/* the organ patch of each factory preset (eng_organ.c OP_*) */",
          "static const uint8_t ORG_FACTORY[ORG_NFACTORY][ORG_PSIZE] = {"]
     levels = []
+    rvb = []
     for name, up, lo, pe, tun, xt, rev, *fx in BANK:
         fx = fx[0] if fx else {}
         assert len(name) <= 12 and name == name.upper(), name
@@ -100,11 +110,17 @@ def main():
         db = 20 * math.log10(ref / chord_rms(contrib, bars(up), xt))
         lv = max(1, min(127, 112 + int(round(2 * db))))
         levels.append((name, db, lv))
+        rt, rs = fx.get("rvb", ("hall", 90))
+        assert rt in RTYPES and 0 <= rs <= 100
+        rvb.append((RTYPES[rt], int(round(rs * 127 / 100.0))))
         L.append("    {%s},   /* %s */" % (", ".join(str(x) for x in p), name))
     L.append("};")
     L.append("")
     L.append("/* level (P_LEVEL, 112 = 0 dB) of each factory preset: the C major chord as loud as JAZZ's */")
     L.append("static const uint8_t ORG_LEVEL[ORG_NFACTORY] = {%s};" % ", ".join(str(lv) for _, _, lv in levels))
+    L.append("")
+    L.append("/* the reverb's TYPE and SIZE (0..127) of each factory preset: the preset sets them (0.9.8) */")
+    L.append("static const uint8_t ORG_RVB[ORG_NFACTORY][2] = {%s};" % ", ".join("{%d, %d}" % t for t in rvb))
     L.append("")
     L.append("/* the engine's presets: the name and the reverb send (FX(dist, chorus, delay, reverb)) */")
     L.append("static const preset_t ORG_PRESETS[ORG_NFACTORY] = {")

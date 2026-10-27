@@ -242,6 +242,7 @@ designed one; the static budget of the new functions.
 | 0.9.6 | the release model CLICK by default (setBfree's is LINEAR: the release level was not heard before), ATTACK GAIN (byte 84) and RELEASE GAIN (byte 85), 0 .. 200 % each, the CLICK models, the envelopes Q14 (16384 = 1.0, so the gain reaches 2.0) (not yet on an FM-1) |
 | 0.9.7 | TUNING and TEMPERAMENT fixed (A 440, 60 Hz gear; their bytes not read); the screens' text larger, a scroll bar, lists without wrap |
 | 0.9.8 | HOME larger (drawbars, text), no temperament or hint line; GLOBAL a full screen |
+| 0.9.9 | factory: JAZZ B3 first (888 upper, Leslie slow, percussion third), FULL ORGAN second; the reverb's type and size per preset |
 | 0.9.5 | the key click twice setBfree's by default (attack level step 20 = 1.0, release 0.5; the envelopes signed so ADVANCED EDIT reaches 2.0), GLO with an upper (ALL), a lower and a pedal MIDI channel and MIDI CC / MIDI Learn (86 controls, the CCs in `set_bytes` rows 8..10), ADVANCED EDIT SPLIT / SPLIT POINT (patch bytes 82, 83), the crosstalk rows switch CROSSTALK on; the crosstalk engine was checked again (audible at the extremes, tests/organ_adv_test.c section 6) (not yet on an FM-1) |
 | 0.9.x | further betas |
 | 1.0.0 | after the owner tests it on the hardware |
