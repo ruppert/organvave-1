@@ -1138,6 +1138,7 @@ static void scr_home(void)
     char num[8], nm[16];
     int32_t i, j, pos, vib, sel, lx, ly, lit;
     uint32_t v;
+    int32_t pl = oa_page == 9u;                            /* the LFO screen: HOME's copy, the drawbars are the pedal's and the lower's */
     oa_preset_label(num, nm);
     cv_rect(0, 0, 240, 240, RGB565(0x0b, 0x0b, 0x0b));
     /* the wood rails and the frame */
@@ -1156,7 +1157,29 @@ static void scr_home(void)
     /* the wood under the header; the upper drawbars on black */
     wood(HU(20), HU(64), HU(537), HU(29));
     cv_rect(HU(20), HU(93), HU(537), HU(270), BLACK);
-    for (i = 0; i < 9; i++) {
+    if (pl) {                                              /* the LFO screen: the pedal's 16' and 8' (PB 0, 2), a gap, the lower manual's nine (0.10.4) */
+        static const uint8_t PB_BAR[2] = {0, 2};
+        int32_t n;
+        for (n = 0; n < 11; n++) {
+            int32_t c = n < 2 ? 20 + 18 * n : 68 + 18 * (n - 2), top10 = 930, dv;
+            v = n < 2 ? org_patch[OP_PB + PB_BAR[n]] : org_patch[OP_LB + (uint32_t)(n - 2)];
+            if (v > 8u)
+                v = 8u;
+            {
+                int32_t headtop = HU10(top10 + 217 * (int32_t)v), top = HU10(top10);
+                if (headtop > top) {
+                    cv_rect(c - 5, top, 10, headtop - top, RGB565(0x2a, 0x2a, 0x2a));
+                    cv_rect(c - 4, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
+                    cv_rect(c + 2, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
+                }
+                for (dv = 0; dv < (int32_t)v; dv++)        /* a dot per step, in place of the number */
+                    cv_rect(c - 1, top + HU10(217) * dv + HU10(217) / 2 - 1, 2, 2, RGB565(0xff, 0xff, 0xff));
+                cv_rect(c - 6, headtop, 12, 7, RGB565(0xf4, 0xf1, 0xea));
+                cv_rect(c - 6, headtop + 6, 12, 1, RGB565(0x9a, 0x94, 0x88));
+            }
+        }
+    }
+    for (i = 0; i < (pl ? 0 : 9); i++) {
         int32_t cx10 = 677 + 552 * i;                          /* the bar's centre, tenths of a unit */
         int32_t sx = HU10(cx10 - 155), sw = HU10(309), cx = HU10(cx10);
         int32_t top = HU10(930 + 217 * 0);                     /* the stem's top (the panel's) */
@@ -1179,7 +1202,7 @@ static void scr_home(void)
     }
     {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
         static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
-        if (oa_home_reg < 3u) {
+        if (oa_home_reg < 3u && !pl) {
             int32_t l = HU10(677 + 552 * (int32_t)FIRST[oa_home_reg] - 155) - 6;     /* 5 px past each stem's edge */
             int32_t r = HU10(677 + 552 * (int32_t)LAST[oa_home_reg] - 155) + HU10(309) + 6;
             cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);     /* on the wood above, touching the stems */
@@ -1187,11 +1210,18 @@ static void scr_home(void)
     }
     /* the UPPER label on its rule, between the drawbars and the tabs */
     cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
+    if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
+        cv_rect(8, HU(331), 46, 20, BLACK);                 /* between the rails */
+        ctext(31, HU(331), &AF_X, "---Pedal---", RGB565(0xff, 0xff, 0xff), BLACK);
+        cv_rect(92, HU(331), 96, 20, BLACK);
+        ctext(140, HU(331), &AF_X, "------ Lower -----", RGB565(0xff, 0xff, 0xff), BLACK);
+    } else {
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
     if (cpu_high)
         ctext(HU(281), HU(331), &AF_X, "CPU HIGH", RGB565(0xff, 0x50, 0x38), BLACK);
     else
         ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
+    }
     wood(HU(20), HU(358), HU(537), HU(12));
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
     cv_rect(HU(20), HU(370), HU(537), HU(94), BLACK);
@@ -1505,8 +1535,10 @@ static void oa_buttons(uint32_t pressed)
     }
     if ((pressed >> panel.btn[B_ENV]) & 1u)               /* ENV: the percussion on or off */
         org_set(OP_PERC, !org_patch[OP_PERC]);
-    if ((pressed >> panel.btn[B_LFO]) & 1u)               /* LFO: the vibrato's selector, on to the next */
-        org_set(OP_VIB, (org_patch[OP_VIB] + 1u) % 7u);
+    if ((pressed >> panel.btn[B_LFO]) & 1u) {             /* LFO: HOME's copy with the pedal's and the lower's drawbars; again: HOME */
+        oa_close_all();
+        oa_page = oa_page == 9u ? 0u : 9u;
+    }
     if ((pressed >> panel.btn[B_OCTDN]) & 1u)
         song.octave = song.octave > -2 ? song.octave - 1 : song.octave;
     if ((pressed >> panel.btn[B_OCTUP]) & 1u)
@@ -1672,6 +1704,12 @@ static void oa_input(void)
     oa_buttons(pressed);
     if (oa_track_preset())                                /* a new preset (the knob, a Program Change, a saved one) */
         oa_sv = 0;
+    if (oa_page == 9u && !oa_gl) {                        /* the LFO screen: no controls yet; its knobs and SELECT are read and do nothing */
+        for (k = 0; k < 4u; k++)
+            (void)panel_enc(EN_K1 + k);
+        (void)panel_enc(EN_SELECT);
+        (void)panel_enc(EN_ALGO);
+    }
     if (oa_gl) {                                          /* the GLO pop-up (the knobs wait) */
         for (k = 0; k < 4u; k++)
             (void)panel_enc(EN_K1 + k);
@@ -1776,7 +1814,7 @@ static void oa_leds(void)
     led_put(nl, panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
     led_put(nl, panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
-    led_put(nl, panel.btn[B_LFO], vib_on() != 0);
+    led_put(nl, panel.btn[B_LFO], oa_page == 9u);
     led_put(nl, panel.btn[B_SAVE], oa_sv);
     led_put(nl, panel.btn[B_GLO], oa_gl != 0u);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);

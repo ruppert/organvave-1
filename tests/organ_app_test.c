@@ -335,10 +335,14 @@ int main(int argc, char **argv)
         bad += check("FX again: HOME", oa_page == 0);
         press(B_ENV);
         bad += check("ENV on HOME: the percussion on", org_patch[OP_PERC] == 1);
-        press(B_LFO);
-        bad += check("LFO: the vibrato to CHO 3 and round to off", org_patch[OP_VIB] == 0);
-        press(B_LFO);
-        bad += check("  .. and to VIB 1", org_patch[OP_VIB] == 1);
+        {   /* LFO (0.10.4): opens the pedal and lower screen (HOME's copy); again: HOME; the vibrato is not touched */
+            uint8_t vb = org_patch[OP_VIB];
+            press(B_LFO);
+            bad += check("LFO: the pedal and lower screen opens", oa_page == 9);
+            press(B_LFO);
+            bad += check("  .. LFO again: HOME", oa_page == 0);
+            bad += check("  .. the vibrato is not changed by LFO", org_patch[OP_VIB] == vb);
+        }
         press(B_ENV);
         bad += check("ENV again: the percussion off", org_patch[OP_PERC] == 0);
     }
