@@ -1162,7 +1162,7 @@ static void scr_home(void)
             }
             art_blit(cx - HOME_HEAD_W / 2, headtop, HOME_HEAD_W, HOME_HEAD_H, HOME_HEAD[i]);
             if (oa_home_reg == 2u ? i == 8 : (oa_home_reg < 2u && i / 4 == (int32_t)oa_home_reg && i < 8))
-                rrect(cx - HOME_HEAD_W / 2 - 1, headtop + HOME_HEAD_H + 3, HOME_HEAD_W + 2, 2, 1, C_ORANGE);   /* the region's mark, as on the EDIT page */
+                cv_rect(sx - 1, top, sw + 2, 2, C_ORANGE);       /* the region's mark: on the top of the drawbar */
         }
     }
     /* the UPPER label on its rule, between the drawbars and the tabs */
@@ -1703,9 +1703,10 @@ static void oa_input(void)
     }
     if (oa_page == 0u) {                                  /* HOME: SELECT picks the region (cyclic), ALGORITHM the Leslie, the knobs the region */
         if ((s = panel_enc(EN_SELECT)) != 0) {
-            int32_t n = s < 0 ? -s : s;
+            int32_t n = s < 0 ? -s : s, r = oa_home_reg;
             while (n-- > 0)
-                oa_home_reg = (uint8_t)((oa_home_reg + (s > 0 ? 1u : 5u)) % 6u);
+                r = clamp(r + (s > 0 ? 1 : -1), 0, 5);             /* not cyclic: the six regions, end to end */
+            oa_home_reg = (uint8_t)r;
         }
         if ((s = panel_enc(EN_ALGO)) != 0)
             home_rotor(s);

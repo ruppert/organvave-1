@@ -71,7 +71,7 @@ int main(int argc, char **argv)
     for (i = 0; i < 3u; i++) { press(B_HOME); press(B_EDIT); }
     bad += check("HOME, EDIT: the page changes back and again", oa_page == 1);
 
-    /* HOME: SELECT picks the region (cyclic), the knobs work on it and stay on HOME; ALGORITHM is the Leslie (not cyclic) */
+    /* HOME: SELECT picks the region (not cyclic), the knobs work on it and stay on HOME; ALGORITHM is the Leslie (not cyclic) */
     {
         uint32_t v0, v4;
         press(B_HOME);
@@ -90,11 +90,11 @@ int main(int argc, char **argv)
         turn(EN_SELECT, 4);
         bad += check("  .. SELECT +4 goes on, 6 regions: region 6 (the knobs)", oa_home_reg == 5);
         turn(EN_SELECT, 1);
-        bad += check("  .. and wraps to region 1", oa_home_reg == 0);
+        bad += check("  .. SELECT +1 at the end: it stays on the knobs (not cyclic)", oa_home_reg == 5);
         turn(EN_SELECT, -1);
-        bad += check("  .. and back the other way to the knobs", oa_home_reg == 5);
-        turn(EN_SELECT, -2);
-        bad += check("  .. SELECT -2: region 4 (vibrato), no bar moved", oa_home_reg == 3);
+        bad += check("  .. SELECT -1: region 5 (percussion's neighbour)", oa_home_reg == 4);
+        turn(EN_SELECT, -1);
+        bad += check("  .. SELECT -1: region 4 (vibrato), no bar moved", oa_home_reg == 3);
         org_set(OP_VIB, 0u);
         turn(EN_K1 + 1, 1);
         bad += check("  .. vibrato: K2 (LO) on: V3", org_patch[OP_VIB] == 3);
