@@ -1242,7 +1242,7 @@ static void scr_home(void)
         home_knob(HU(291), HU(506), dg);
         home_knob(HU(365), HU(506), rv);
         home_knob(HU(439), HU(506), cl);
-        home_knob(HU(513), HU(506), 0);                      /* EXPR: no patch byte yet (its pointer stays at noon) */
+        home_knob(HU(513), HU(506), 135 - (int32_t)org_patch[OP_EXPR] * 270 / 60);   /* EXPR: the output volume; full clockwise at 0 */
     }
     ctext(HU(291), HU(542), &AF_X, "DRIVE", RGB565(0xff, 0xff, 0xff), BLACK);
     ctext(HU(365), HU(542), &AF_X, "REV", RGB565(0xff, 0xff, 0xff), BLACK);
@@ -1642,7 +1642,7 @@ static void home_knobs(void)
             if ((s = panel_enc(EN_K1 + k)) != 0)
                 oa_adj(2u, k, s);                         /* PERC, SOFT, FAST, 3RD */
         break;
-    default:                                              /* DRIVE, REVERB, CLICK; EXPR has no byte yet */
+    default:                                              /* DRIVE, REVERB, CLICK, EXPR */
         if ((s = panel_enc(EN_K1)) != 0) {
             oa_adj(4u, 2u, s);
             org_set(OP_DRV, org_patch[OP_DRV_GAIN] > 0u ? 1u : 0u);
@@ -1651,7 +1651,8 @@ static void home_knobs(void)
             oa_adj(5u, 0u, s);
         if ((s = panel_enc(EN_K1 + 2)) != 0)
             oa_op_step(OP_CLICK_GAIN, s);
-        (void)panel_enc(EN_K1 + 3);
+        if ((s = panel_enc(EN_K1 + 3)) != 0)                  /* EXPR: the output volume; clockwise is louder (0 full, 60 dB down) */
+            org_set(OP_EXPR, (uint32_t)clamp((int32_t)org_patch[OP_EXPR] - s, 0, 60));
         break;
     }
 }

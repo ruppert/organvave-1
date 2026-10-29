@@ -1358,3 +1358,5 @@ device gone at ~0.3 s, the MIDI port gone at ~0.57 s and back at ~1.15 s; ON -> 
 at ~0.6 s while the MIDI port was not seen to disappear at all (so do not wait for a disconnect event: after
 a real change, wait ~1.5 s and open again). What the editor sends in that window is lost, `WATCH` ends with the
 bus reset (send `INFO` and `WATCH` again after reconnecting), and a backup in progress answers rc 5 (stale).
+
+Version 0.10.3 gave meaning to byte 89, `OP_EXPR`: the output volume (HOME's EXPR knob): 0 full (what older patches sound at), i = i dB down, 0..60. It scales the organ before the effects (in the swell's target, so it glides). Nothing is migrated.

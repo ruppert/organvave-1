@@ -121,6 +121,12 @@ int main(int argc, char **argv)
         v0 = org_patch[OP_DRV_GAIN];
         turn(EN_K1, 1);
         bad += check("  .. the knobs: K1 is DRIVE, and turns it on", org_patch[OP_DRV_GAIN] == v0 + 1 && org_patch[OP_DRV] == 1 && oa_page == 0);
+        turn(EN_K1 + 3, 1);
+        bad += check("  .. EXPR (K4): clockwise at full stays at full (0 dB down)", org_patch[OP_EXPR] == 0);
+        turn(EN_K1 + 3, -2);
+        bad += check("  .. EXPR: counter-clockwise two steps: 2 dB down", org_patch[OP_EXPR] == 2);
+        turn(EN_K1 + 3, 2);
+        bad += check("  .. EXPR back to full", org_patch[OP_EXPR] == 0);
         turn(EN_SELECT, -4);
         bad += check("  .. SELECT -4: region 2 (bar 9)", oa_home_reg == 1);
         turn(EN_SELECT, 1);

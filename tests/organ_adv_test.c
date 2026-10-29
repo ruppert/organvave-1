@@ -367,7 +367,7 @@ static void params(void)
             const org_adv_t *a = org_adv_of(i);
             ok &= a != 0 && v[i] == a->n - 1u && org_bi(i, org_ci(i, 5u % a->n)) == 5u % a->n && org_ci(i, 0) == a->d;
         }
-        for (i = OP_VIB_ROUTE + 1; i < ORG_PSIZE; i++)
+        for (i = OP_EXPR + 1; i < ORG_PSIZE; i++)
             ok &= v[i] == 0;
         check("every ADVANCED EDIT byte: its range is N - 1, byte 0 is the default index, the coding round-trips; the reserved bytes are 0", ok);
     }

@@ -86,6 +86,7 @@ typedef struct {
     const int16_t (*rel)[128];
     const uint32_t (*wtab)[91];         /* the wheels' increments by temperament (flash, or scaled by the tuning) */
     uint16_t swell;                     /* the swell pedal, Q15 (32768 = 1.0) */
+    uint32_t mg;                        /* the output volume (OP_EXPR), Q15: 10^(-i/20) (0.10.3) */
     /* state (the audio path) */
     org_wheel_t w[ORG_NWHEEL];
     uint8_t acl[ORG_NWHEEL];            /* the active list (activeOscList) */
@@ -150,6 +151,7 @@ static void org_init(void)
     org.wtab = ORG_WINC;
     org.pbus_cur = 3u | (4u << 4) | (9u << 8);
     org.swell = 32768;
+    org.mg = 32768;                                         /* the output volume: full (OP_EXPR 0) */
     org.kc = (int32_t)ORG_KEYCOMP[0] << 8;
     org.sw = 32768 << 9;
     org.pdg = 32768;
@@ -503,7 +505,7 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
         for (i = 0; i < n; i++)
             q[i] = 0;
     }
-    swt = (int32_t)((((uint32_t)org.swell * (uint32_t)org.pdg) >> 15) << 9);
+    swt = (int32_t)(((((uint32_t)org.swell * (uint32_t)org.pdg) >> 15) * org.mg >> 15) << 9);   /* the output volume (EXPR) in the swell's target */
     for (i = 0; i < n; i++) {
         int32_t m;
         org.sw += mulq16(swt - org.sw, ORG_SWELL_TC);
@@ -512,6 +514,9 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
         out[i] += mulq16(vv[i] + q[i], (uint32_t)m);
     }
 }
+
+/* the output volume (OP_EXPR): 10^(-i/20) in Q15, i = 0..60 dB down (0.10.3) */
+static const uint32_t ORG_EXPR_Q15[61] = {32768, 29205, 26029, 23198, 20675, 18427, 16423, 14637, 13045, 11627, 10362, 9235, 8231, 7336, 6538, 5827, 5193, 4629, 4125, 3677, 3277, 2920, 2603, 2320, 2068, 1843, 1642, 1464, 1305, 1163, 1036, 924, 823, 734, 654, 583, 519, 463, 413, 368, 328, 292, 260, 232, 207, 184, 164, 146, 130, 116, 104, 92, 82, 73, 65, 58, 52, 46, 41, 37, 33};
 
 /* ------------------------------------------------------------------ the patch --- */
 /* The organ's own settings, a record of ORG_PSIZE 7-bit values (stored in the autosave and in user presets: their
@@ -587,7 +592,8 @@ enum {
     OP_VIB_UP = 86,            /* (0.10.2) the upper manual through the scanner: 0 no, 1 yes; read only when OP_VIB_ROUTE is 1 */
     OP_VIB_LO = 87,            /* (0.10.2) the lower manual through the scanner: 0 no, 1 yes; read only when OP_VIB_ROUTE is 1 */
     OP_VIB_ROUTE = 88,         /* (0.10.2) 1: OP_VIB_UP and OP_VIB_LO are set; 0 (older patches): both manuals, as before. The pedals never */
-    OP_NUM                      /* (89..95: reserved: 0 until then) */
+    OP_EXPR = 89,              /* (0.10.3) the output volume, HOME's EXPR knob: 0 full, i = i dB down (0..60); 0 in older patches */
+    OP_NUM                      /* (90..95: reserved: 0 until then) */
 };
 /* ADVANCED EDIT's bytes: steps N and the default index D (the index is (byte + D) % N); the temperament and the crosstalk switch
  * are the older bytes 27 and 28 (N 3, D 0 and N 2, D 1: they keep their coding) */
@@ -642,6 +648,8 @@ static uint32_t org_pmax(uint32_t i)
         return 6u;
     if (i == OP_VIB_UP || i == OP_VIB_LO || i == OP_VIB_ROUTE)
         return 1u;
+    if (i == OP_EXPR)
+        return 60u;
     if (i == OP_ROT || i == OP_ROT_MODEL || i == OP_ROT_HORN || i == OP_DRV)
         return 1u;
     if (i == OP_ROT_SPEED)
@@ -962,6 +970,7 @@ static void org_block(struct track *t)          /* audio path, before the render
     org.pfast = org_patch[OP_PERC_FAST];
     org.psel = org_patch[OP_PERC_SEL];
     org.vibm = org_patch[OP_VIB];
+    org.mg = ORG_EXPR_Q15[org_patch[OP_EXPR] <= 60u ? org_patch[OP_EXPR] : 0u];
     org.vup = org_patch[OP_VIB_ROUTE] ? (org_patch[OP_VIB_UP] & 1u) : 1u;   /* older patches (route 0): both manuals, as 0.10.1 */
     org.vlo = org_patch[OP_VIB_ROUTE] ? (org_patch[OP_VIB_LO] & 1u) : 1u;
     {   /* ADVANCED EDIT: the percussion and the scanner (the tables are built in the main loop: org_adv_poll) */

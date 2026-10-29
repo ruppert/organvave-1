@@ -32,6 +32,7 @@ static void check(const char *what, int ok)
 
 #define NS (CTL * 96u)
 static float A[NS], B[NS];
+static uint32_t g_mg = 32768;                 /* the output volume (OP_EXPR's gain, Q15) the next play() takes */
 
 /* a fresh engine: every drawbar at 8 (upper, lower, pedals), the scanner VIB 3, the routing as given; the keys held */
 static void play(uint32_t vib, uint32_t up, uint32_t lo, int upk, int lok, int pedk, float *y)
@@ -44,6 +45,7 @@ static void play(uint32_t vib, uint32_t up, uint32_t lo, int upk, int lok, int p
     org.vibm = (uint8_t)vib;
     org.vup = (uint8_t)up;
     org.vlo = (uint8_t)lo;
+    org.mg = g_mg;
     if (upk)
         org_key(24, 1);
     if (lok)
@@ -113,6 +115,20 @@ int main(void)
     play(3, 1, 1, 1, 1, 0, B);
     check("4. both manuals routed: the scanner's sound differs from the dry one", differs(A, B));
     check("4. ... and it is no louder than 2x the dry sound (the wet replaces, the chorus is not used here)", rms(B) < 2.0 * rms(A) + 1e-6);
+    /* 5. the output volume (OP_EXPR 6 = 6 dB down): the level is half, and the full one is unchanged */
+    play(0, 0, 0, 1, 1, 0, A);
+    g_mg = ORG_EXPR_Q15[6];
+    play(0, 0, 0, 1, 1, 0, B);
+    g_mg = 32768;
+    {   /* the swell glides to its target: the second half is settled */
+        double a = 0, b = 0;
+        uint32_t k;
+        for (k = NS / 2; k < NS; k++) {
+            a += (double)A[k] * A[k];
+            b += (double)B[k] * B[k];
+        }
+        check("5. the output volume at 6 dB down: the level is half (within 1 %)", fabs(sqrt(b / a) - 0.5012) < 0.005);
+    }
     printf("organ route: %s\n", bad ? "FAILED" : "all ok");
     return bad ? 1 : 0;
 }
