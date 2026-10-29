@@ -1238,7 +1238,7 @@ static void scr_home(void)
     {
         int32_t dg = org_patch[OP_DRV] ? -135 + (int32_t)org_patch[OP_DRV_GAIN] * 270 / 12 : -135;
         int32_t rv = -135 + (int32_t)TSEL->p[P_REV] * 270 / 100;
-        int32_t cl = -135 + (int32_t)org_patch[OP_CLICK_GAIN] * 270 / 40;
+        int32_t cl = -135 + oa_ai(OP_CLICK_GAIN) * 270 / 40;   /* the step the knob moves (ADVANCED coding: byte 0 is the 100 % index 20) */
         home_knob(HU(291), HU(506), dg);
         home_knob(HU(365), HU(506), rv);
         home_knob(HU(439), HU(506), cl);

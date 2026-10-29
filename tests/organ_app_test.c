@@ -127,6 +127,15 @@ int main(int argc, char **argv)
         bad += check("  .. EXPR: counter-clockwise two steps: 2 dB down", org_patch[OP_EXPR] == 2);
         turn(EN_K1 + 3, 2);
         bad += check("  .. EXPR back to full", org_patch[OP_EXPR] == 0);
+        {   /* CLICK: its knob runs between the two marks (the index 0 .. 40) and stops there, the byte does not wrap */
+            uint32_t b0 = org_patch[OP_CLICK_GAIN];
+            turn(EN_K1 + 2, 60);
+            bad += check("  .. CLICK: turned past the top mark it stops at the top (index 40)", oa_ai(OP_CLICK_GAIN) == 40);
+            turn(EN_K1 + 2, -60);
+            turn(EN_K1 + 2, -60);
+            bad += check("  .. CLICK: and past the bottom mark it stops at the bottom (index 0), no wrap", oa_ai(OP_CLICK_GAIN) == 0);
+            org_set(OP_CLICK_GAIN, b0);
+        }
         turn(EN_SELECT, -4);
         bad += check("  .. SELECT -4: region 2 (bar 9)", oa_home_reg == 1);
         turn(EN_SELECT, 1);
