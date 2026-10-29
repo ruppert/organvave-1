@@ -1592,11 +1592,11 @@ static void home_knobs(void)
     case 1u:
         for (k = 0; k < 4u; k++)
             if ((s = panel_enc(EN_K1 + k)) != 0)
-                home_bar(oa_home_reg * 4u + k, s);
+                home_bar(oa_home_reg * 4u + k, -s);             /* a drawbar: the knobs turn it the other way (left: up) */
         break;
     case 2u:
         if ((s = panel_enc(EN_K1)) != 0)
-            home_bar(8u, s);
+            home_bar(8u, -s);
         for (k = 1; k < 4u; k++)
             (void)panel_enc(EN_K1 + k);
         break;
@@ -1724,7 +1724,7 @@ static void oa_input(void)
         if ((s = panel_enc(EN_K1 + k)) != 0) {
             oa_man = oa_page == 1u ? oa_man : 0u;
             oa_page = 1;                                  /* (on HOME: the knob opens DRAWBARS and moves its bar) */
-            oa_bar(oa_sel + k, s);
+            oa_bar(oa_sel + k, -s);                       /* a drawbar: the knobs turn it the other way (left: up) */
         }
 }
 

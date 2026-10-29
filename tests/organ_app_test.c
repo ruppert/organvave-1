@@ -43,12 +43,12 @@ int main(int argc, char **argv)
 
     /* drawbars: SELECT picks a bar, ALGORITHM pulls it, the knobs 1-4 pull the picked bar and the three after it, the range 0..8 */
     v0 = org_patch[OP_UB + oa_sel];
-    turn(EN_K1, v0 < 8 ? 1 : -1);
+    turn(EN_K1, v0 < 8 ? -1 : 1);                          /* left turns a drawbar up */
     bad += check("K1 moves the picked bar by one step",
                  org_patch[OP_UB + oa_sel] == (v0 < 8 ? v0 + 1 : v0 - 1));
-    turn(EN_K1, 20);
-    bad += check("  .. a big turn clamps at 8", org_patch[OP_UB + oa_sel] == 8);
     turn(EN_K1, -20);
+    bad += check("  .. a big turn clamps at 8", org_patch[OP_UB + oa_sel] == 8);
+    turn(EN_K1, 20);
     bad += check("  .. and at 0", org_patch[OP_UB + oa_sel] == 0);
     k = oa_sel;
     turn(EN_SELECT, 1);
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     bad += check("  .. and stops at 0", org_patch[OP_UB + 0] == 0);
     org_set(OP_UB + 0u, 3u);
     org_set(OP_UB + 1u, 8u);
-    turn(EN_K2, -1);
+    turn(EN_K2, 1);
     bad += check("K2 is the bar after the picked one", org_patch[OP_UB + 1] == 7 && org_patch[OP_UB + 0] == 3);
     for (i = 0; i < 3u; i++) { press(B_HOME); press(B_EDIT); }
     bad += check("HOME, EDIT: the page changes back and again", oa_page == 1);
@@ -77,7 +77,7 @@ int main(int argc, char **argv)
         press(B_HOME);
         bad += check("HOME: the first page", oa_page == 0);
         org_set(OP_UB + 0u, 3u);
-        turn(EN_K1, 1);
+        turn(EN_K1, -1);
         bad += check("HOME: region 1 (bars 1-4): K1 moves bar 1, the page stays HOME", oa_page == 0 && org_patch[OP_UB + 0] == 4);
         {
             uint32_t sg = oa_signature();
@@ -85,7 +85,7 @@ int main(int argc, char **argv)
             bad += check("  .. a new region is a new picture (the redraw follows SELECT)", oa_signature() != sg);
         }
         org_set(OP_UB + 4u, 4u);
-        turn(EN_K1, -1);
+        turn(EN_K1, 1);
         bad += check("HOME: SELECT +1, region 2 (bars 5-8): K1 moves bar 5", oa_page == 0 && org_patch[OP_UB + 4] == 3);
         turn(EN_SELECT, 4);
         bad += check("  .. SELECT +4 goes on, 6 regions: region 6 (the knobs)", oa_home_reg == 5);
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
         turn(EN_SELECT, 1);
         bad += check("  .. SELECT +1: region 3 (bar 9 only)", oa_home_reg == 2);
         v4 = org_patch[OP_UB + 8];
-        turn(EN_K1, 1);
+        turn(EN_K1, -1);
         bad += check("  .. bar 9: K1 moves it, K2 to K4 nothing", org_patch[OP_UB + 8] == (v4 < 8 ? v4 + 1 : 8));
         org_set(OP_ROT, 0u);
         turn(EN_ALGO, 1);
@@ -421,9 +421,9 @@ int main(int argc, char **argv)
             org_set(OP_PB + 2, 3);
             org_set(OP_LB + 0, 3);
             org_set(OP_UB + 0, 8);
-            turn(EN_K1, 1);
-            turn(EN_K2, 1);
-            turn(EN_K3, 1);
+            turn(EN_K1, -1);                              /* (a drawbar: a knob turned left pulls it up) */
+            turn(EN_K2, -1);
+            turn(EN_K3, -1);
             bad += check("  .. the knobs pull the pedal's 16' and 8', then the lower's 16'",
                          org_patch[OP_PB + 0] == 4 && org_patch[OP_PB + 2] == 4 && org_patch[OP_LB + 0] == 4 && org_patch[OP_UB + 0] == 8);
             bad += check("  .. the other pedal bytes are not touched", org_patch[OP_PB + 1] == 0 && org_patch[OP_PB + 3] == 0 && org_patch[OP_PB + 8] == 0);
