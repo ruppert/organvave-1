@@ -18,9 +18,9 @@
  *     starting level (normal 11.0, soft 5.5132) and resets when no key is down. On: the whole mix steps to the
  *     swell x 0.60512 (normal; soft 1.0) and the 1' is muted, as setBfree does.
  *   - the scanner vibrato / chorus (setBfree's vibrato.c): a 1024-sample delay line read at 1 + amp + amp * sin
- *     samples, amp 3 / 6 / 9, the scanner at 7.25 Hz; the chorus mixes it with the dry at 0.7071. It is applied to
- *     the whole organ: setBfree applies it to the upper manual only, and the upper manual is the only one played
- *     until 0.4.0 (then the lower and the pedals will be routed past it, as in setBfree).
+ *     samples, amp 3 / 6 / 9, the scanner at 7.25 Hz; the chorus mixes it with the dry at 0.7071. As setBfree
+ *     (0.10.2): one scanner, fed by the upper and / or the lower manual by their own switches (OP_VIB_UP, OP_VIB_LO);
+ *     the pedals and the percussion stay dry. The rest of the organ is dry; a patch with OP_VIB_ROUTE 0 routes both.
  * Keys use setBfree's numbers: 0..60 the upper manual (C..C), 64..124 the lower, 128..159 the pedals; buses 0..8
  * upper (16' 5 1/3' 8' 4' 2 2/3' 2' 1 3/5' 1 1/3' 1'), 9..17 lower, 18..26 pedals.
  * The output is in setBfree's units: 1.0 (one wheel at full level) = 32768.
@@ -58,6 +58,7 @@ typedef struct {
     int32_t pn;                         /* the percussion's contact gain: the perc bus's level, Q12, 0 while off */
     int32_t gs, gd;                     /* this fragment: the start gain and the step the envelope scales, Q12 */
     int32_t pgs, pgd;                   /* the same for the percussion's contact gain */
+    int32_t ssum, sgs, sgd;             /* the part of sum that goes to the scanner (the manuals routed through it), and its start / step */
     const int16_t *env;                 /* this fragment's envelope (attack or release), or 0 */
     uint32_t ph;
     int16_t refc;                       /* contributions holding it (aot refCount) */
@@ -72,6 +73,7 @@ typedef struct {
     uint8_t xtalk;                      /* 1 setBfree's crosstalk model, 0 none */
     uint8_t perc, psoft, pfast, psel;   /* percussion: on, soft, fast, the 3rd harmonic (2 2/3') */
     uint8_t vibm;                       /* vibrato: 0 off, 1..3 VIB1..3, 4..6 CHO1..3 */
+    uint8_t vup, vlo;                   /* the upper / the lower manual routed through the scanner (setBfree's RT_UPPRVIB / RT_LOWRVIB); the pedals never */
     uint8_t xt_use;                     /* the table a new key takes when the crosstalk is on: 1 setBfree's default (flash), 2 the RAM one */
     uint8_t nram;                       /* keys down (or with a release not yet applied) on the RAM table: it is rebuilt only at 0 */
     int8_t ptrig;                       /* the drawbar the percussion mutes (setBfree's osc.perc.bus.trig; -1 none) */
@@ -97,6 +99,7 @@ typedef struct {
     uint8_t adown;                      /* keys down on the audio side (the fragment's messages applied) */
     uint8_t bars_cur[ORG_NBUS], temp_cur;
     uint8_t perc_cur, psoft_cur, pfast_cur, psel_cur, vibm_cur;
+    uint8_t vup_cur, vlo_cur, vrt_cur;  /* the routing as the fragment saw it; vrt: the scanner is in use (a type on and a manual routed) */
     uint16_t pbus_cur;                  /* the percussion's buses as the fragment saw them */
     uint8_t q[ORG_QLEN], nq;            /* key messages: bit 0 on, bits 1..2 the table (0 none, 1 default crosstalk, 2 RAM crosstalk; the key's own) */
     uint8_t qk[ORG_QLEN];
@@ -273,8 +276,16 @@ static __attribute__((noinline)) void org_fragment(void)
     org.psoft_cur = org.psoft ? 1u : 0u;
     org.pfast_cur = org.pfast ? 1u : 0u;
     org.pdg = (pc && !org.psoft_cur) ? ORG_PERC_GAIN : 32768;
-    if (vm != org.vibm_cur && !vm)
-        memset(org.vb, 0, sizeof org.vb);                            /* off: the delay line starts clean */
+    {
+        uint8_t vu = org.vup ? 1u : 0u, vl = org.vlo ? 1u : 0u, vr = (vm && (vu || vl)) ? 1u : 0u;
+        if (vu != org.vup_cur || vl != org.vlo_cur)
+            chg = 1;                                                 /* the routing moved: every wheel's scanner share is new */
+        if (vr != org.vrt_cur && !vr)
+            memset(org.vb, 0, sizeof org.vb);                        /* the scanner is off: the delay line starts clean */
+        org.vup_cur = vu;
+        org.vlo_cur = vl;
+        org.vrt_cur = vr;
+    }
     org.vibm_cur = vm;
     org.temp_cur = org.temp < 3u ? org.temp : 0u;
     org.nins = 0;
@@ -289,32 +300,42 @@ static __attribute__((noinline)) void org_fragment(void)
             w->gd = -w->sum;
             w->pgs = w->pn;
             w->pgd = -w->pn;
+            w->sgs = w->ssum;
+            w->sgd = -w->ssum;
         } else {
             int32_t old = w->rflags & ORG_ADD ? 0 : w->sum;
             int32_t oldp = w->rflags & ORG_ADD ? 0 : w->pn;
+            int32_t olds = w->rflags & ORG_ADD ? 0 : w->ssum;
             if ((w->rflags & ORG_MOD) || chg || (w->rflags & ORG_ADD)) {
-                int32_t s = 0, pn;
+                int32_t s = 0, sc = 0, pn;
                 for (d = 0; d < ORG_NBUS; d++) {
                     int32_t bb = org.bars_cur[d];
                     if (org.perc_cur && (int32_t)d == org.ptrig)
                         bb = 0;                                       /* the 1' (setBfree's trigger bus) is muted while the percussion is on */
                     s += w->lvl[d] * bb;                              /* Q18 * 0..8: under 2^31 for any 3 manuals */
+                    if ((d < 9u && org.vup_cur) || (d >= 9u && d < 18u && org.vlo_cur))
+                        sc += w->lvl[d] * bb;                         /* the upper (0..8) or the lower (9..17) manual, if routed through the scanner */
                 }
                 s = (s + (1 << 8)) >> 9;                              /* / 8 (the drawbar law), Q18 -> Q12 */
                 w->sum = s < 0 ? 0 : s > ORG_GMAX ? ORG_GMAX : s;
+                sc = (sc + (1 << 8)) >> 9;
+                w->ssum = sc < 0 ? 0 : sc > w->sum ? w->sum : sc;     /* the same law: with both manuals routed, ssum == sum */
                 pn = org.perc_cur ? w->lvl[org.psel_cur ? org.pbusb : org.pbusa] >> 6 : 0;   /* the perc bus, whatever its drawbar */
                 w->pn = pn < 0 ? 0 : pn > ORG_GMAX ? ORG_GMAX : pn;
             }
             w->gs = old;
             w->pgs = oldp;
+            w->sgs = olds;
             if (w->rflags & ORG_ADD) {
                 w->env = org.atk[i & 7u];
                 w->gd = w->sum;
                 w->pgd = w->pn;
+                w->sgd = w->ssum;
             } else {
                 w->env = 0;
                 w->gd = 0;
                 w->pgd = 0;
+                w->sgd = 0;
             }
         }
         w->rflags = 0;
@@ -389,14 +410,37 @@ static __attribute__((noinline)) void org_wheel_pc(org_wheel_t *w, uint32_t inc,
     w->ph = ph;
 }
 
+/* a wheel's share of the scanner's input (the manuals routed through it): the same sine and gains as its share of y,
+ * added to ys; ph is the wheel's phase at the block's start (the caller advances the wheel). Not inlined */
+static __attribute__((noinline)) void org_wheel_scan(const org_wheel_t *w, uint32_t ph, uint32_t inc, uint32_t off, uint32_t n, int32_t *ys)
+{
+    uint32_t i;
+    int32_t g = w->sgs;
+    if (w->env) {
+        const int16_t *e = w->env + off;
+        int32_t gd = w->sgd;
+        for (i = 0; i < n; i++) {
+            int32_t gg = g + (((int32_t)e[i] * gd) >> 14);
+            ys[i] += (sine_i(ph) * gg) >> 12;
+            ph += inc;
+        }
+    } else {
+        for (i = 0; i < n; i++) {
+            ys[i] += (sine_i(ph) * g) >> 12;
+            ph += inc;
+        }
+    }
+}
+
 /* add n (= CTL) samples to out[] (not inlined: tests/target_budget.py counts it) */
 static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
 {
-    int32_t y[CTL], p[CTL], q[CTL], v[CTL];
+    int32_t y[CTL], p[CTL], q[CTL], v[CTL], ys[CTL];
     const int32_t *vv = y;
     uint32_t i, k, off;
     const uint32_t *winc;
     int32_t swt;
+    uint8_t vr = org.vrt_cur;                                         /* the scanner is in use: ys takes the manuals routed through it */
     if (org.sub == 0u)
         org_fragment();
     off = org.sub * CTL;
@@ -406,11 +450,16 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
         y[i] = 0;
         p[i] = 0;
     }
+    if (vr)
+        for (i = 0; i < n; i++)
+            ys[i] = 0;
     for (k = 0; k < org.nins; k++) {
         uint32_t wn = org.ins[k];
         org_wheel_t *w = &org.w[wn];
         uint32_t ph = w->ph, inc = winc[wn - 1u];
         int32_t g = w->gs;
+        if (vr && (w->sgs | w->sgd))                                  /* the scanner's share, from the same phase */
+            org_wheel_scan(w, ph, inc, off, n, ys);
         if (w->pgs | w->pgd) {                                        /* on the percussion's bus: the sine once, both sums */
             org_wheel_pc(w, inc, off, n, y, p);
             continue;
@@ -434,8 +483,10 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
         }
         w->ph = ph;
     }
-    if (org.vibm_cur) {                                               /* the scanner: the organ's sound, replaced by its wet */
-        org_vib(y, v, n);
+    if (vr) {                                                         /* the scanner: its manuals' sound, replaced by its wet; the rest stays dry */
+        org_vib(ys, v, n);
+        for (i = 0; i < n; i++)
+            v[i] += y[i] - ys[i];
         vv = v;
     }
     if (org.perc_cur) {                                               /* setBfree's first difference, then the envelope */
@@ -533,7 +584,10 @@ enum {
     OP_SPLIT_PT = 83,           /* the split point: the lowest note of the upper manual, MIDI 36 .. 96, G3 (55) the default */
     OP_CLICK_GAIN = 84,        /* the attack click's gain (0.9.6, the CLICK model): its burst's samples, 0 .. 200 % in 5 % steps, 100 % the default */
     OP_REL_GAIN = 85,          /* the release click's gain (0.9.6, the CLICK model): the same, for the release's burst */
-    OP_NUM                      /* (86..95: reserved: 0 until then) */
+    OP_VIB_UP = 86,            /* (0.10.2) the upper manual through the scanner: 0 no, 1 yes; read only when OP_VIB_ROUTE is 1 */
+    OP_VIB_LO = 87,            /* (0.10.2) the lower manual through the scanner: 0 no, 1 yes; read only when OP_VIB_ROUTE is 1 */
+    OP_VIB_ROUTE = 88,         /* (0.10.2) 1: OP_VIB_UP and OP_VIB_LO are set; 0 (older patches): both manuals, as before. The pedals never */
+    OP_NUM                      /* (89..95: reserved: 0 until then) */
 };
 /* ADVANCED EDIT's bytes: steps N and the default index D (the index is (byte + D) % N); the temperament and the crosstalk switch
  * are the older bytes 27 and 28 (N 3, D 0 and N 2, D 1: they keep their coding) */
@@ -586,6 +640,8 @@ static uint32_t org_pmax(uint32_t i)
         return 1u;
     if (i == OP_VIB || i == OP_ROT_MIC)
         return 6u;
+    if (i == OP_VIB_UP || i == OP_VIB_LO || i == OP_VIB_ROUTE)
+        return 1u;
     if (i == OP_ROT || i == OP_ROT_MODEL || i == OP_ROT_HORN || i == OP_DRV)
         return 1u;
     if (i == OP_ROT_SPEED)
@@ -602,7 +658,7 @@ static uint32_t org_pmax(uint32_t i)
         return 24u;
     if (i == OP_EQ_FREQ)
         return 11u;
-    if (i >= OP_TUNING && i < OP_NUM)
+    if (i >= OP_TUNING && i < OP_VIB_UP)
         return org_adv_of(i)->n - 1u;
     return 0u;
 }
@@ -906,6 +962,8 @@ static void org_block(struct track *t)          /* audio path, before the render
     org.pfast = org_patch[OP_PERC_FAST];
     org.psel = org_patch[OP_PERC_SEL];
     org.vibm = org_patch[OP_VIB];
+    org.vup = org_patch[OP_VIB_ROUTE] ? (org_patch[OP_VIB_UP] & 1u) : 1u;   /* older patches (route 0): both manuals, as 0.10.1 */
+    org.vlo = org_patch[OP_VIB_ROUTE] ? (org_patch[OP_VIB_LO] & 1u) : 1u;
     {   /* ADVANCED EDIT: the percussion and the scanner (the tables are built in the main loop: org_adv_poll) */
         uint32_t sc = org_ci(OP_PC_GAIN, org_patch[OP_PC_GAIN]), ni = org_ci(OP_PC_NORM, org_patch[OP_PC_NORM]);
         uint32_t si = org_ci(OP_PC_SOFT, org_patch[OP_PC_SOFT]);

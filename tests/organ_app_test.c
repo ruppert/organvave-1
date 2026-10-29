@@ -103,7 +103,14 @@ int main(int argc, char **argv)
         turn(EN_K1 + 2, 9);
         bad += check("  .. and stops at C2, the last position", org_patch[OP_VIB] == 5);
         turn(EN_K1 + 1, -1);
-        bad += check("  .. K2 down: off", org_patch[OP_VIB] == 0);
+        bad += check("  .. K2 down: the lower manual is off the scanner; the upper is still on it", org_patch[OP_VIB_LO] == 0 && vib_up() == 1 && vib_on() == 1);
+        turn(EN_K1, -1);
+        bad += check("  .. K1 (UP) down: the scanner is off (no manual routed through it)", org_patch[OP_VIB_UP] == 0 && vib_on() == 0);
+        turn(EN_K1, 1);
+        bad += check("  .. K1 (UP) up: the scanner is on again", org_patch[OP_VIB_UP] == 1 && vib_on() == 1);
+        turn(EN_K1 + 1, 1);
+        bad += check("  .. K2 up: the lower manual joins it (the routing bytes are written)", org_patch[OP_VIB_LO] == 1 && org_patch[OP_VIB_ROUTE] == 1);
+        turn(EN_K1 + 1, -1);
         turn(EN_SELECT, 1);
         bad += check("  .. SELECT +1: region 5 (percussion)", oa_home_reg == 4);
         org_set(OP_PERC, 0u);

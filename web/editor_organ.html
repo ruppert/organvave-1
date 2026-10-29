@@ -96,6 +96,9 @@
           <option value="6">Chorus 3</option>
         </select>
       </label>
+      <label><input type="checkbox" id="vibUp" checked> upper manual through it</label>
+      <label><input type="checkbox" id="vibLo" checked> lower manual through it</label>
+      <span class="note">one scanner for both manuals, as setBfree; the pedals never</span>
     </div>
 
     <div class="set"><h3>Rotary speaker (0.3.0)</h3></div>
@@ -193,7 +196,7 @@
 // ---- the protocol (web/EDITOR_PROTOCOL.md): F0 7D 46 4C <cmd> <args> F7
 const CMD = { INFO: 1, ORG_GET: 85, ORG_PUT: 86 };
 const ORG_PSIZE = 96, ORG_PSIZE_OLD = 64, OP_LB = 9, OP_PB = 18, OP_TEMP = 27, OP_XTALK = 28, OP_PERC = 29, OP_PERC_SOFT = 30,
-      OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, OP_ROT = 34, OP_ROT_MODEL = 35, OP_ROT_SPEED = 36,
+      OP_PERC_FAST = 31, OP_PERC_SEL = 32, OP_VIB = 33, OP_VIB_UP = 86, OP_VIB_LO = 87, OP_VIB_ROUTE = 88, OP_ROT = 34, OP_ROT_MODEL = 35, OP_ROT_SPEED = 36,
       OP_ROT_HORN = 37, OP_ROT_MIC = 38, OP_ROT_BAL = 39, OP_DRV = 40, OP_DRV_GAIN = 41, OP_EQ = 43, OP_EQ_LOW = 44, OP_EQ_MID = 45, OP_EQ_FREQ = 46, OP_EQ_HIGH = 47,
       OP_DRV_TYPE = 48, OP_DRV_TONE = 49, OP_DRV_OUT = 50, OP_ROT_HSLOW = 51, OP_ROT_HFAST = 52, OP_ROT_DSLOW = 53, OP_ROT_DFAST = 54,
       OP_ROT_HRAMP = 55, OP_ROT_DRAMP = 56, OP_TUNING = 57, OP_SC_V3 = 81, OP_SPLIT_PT = 83, OP_CLICK_GAIN = 84, OP_REL_GAIN = 85, PUT_MAX = 48;
@@ -425,6 +428,8 @@ function showPatch() {
   $("pfast").checked = !!patch[OP_PERC_FAST];
   $("psel").checked = !!patch[OP_PERC_SEL];
   $("vib").value = String(patch[OP_VIB] ?? 0);
+  $("vibUp").checked = patch[OP_VIB_ROUTE] ? !!patch[OP_VIB_UP] : true;   /* a patch of 0.10.1 (route 0): both manuals */
+  $("vibLo").checked = patch[OP_VIB_ROUTE] ? !!patch[OP_VIB_LO] : true;
   $("rot").checked = !!patch[OP_ROT];
   $("rmodel").value = String(patch[OP_ROT_MODEL] ?? 0);
   $("rspeed").value = String(patch[OP_ROT_SPEED] ?? 0);
@@ -471,6 +476,9 @@ function fromControls() {
   patch[OP_PERC_FAST] = $("pfast").checked ? 1 : 0;
   patch[OP_PERC_SEL] = $("psel").checked ? 1 : 0;
   patch[OP_VIB] = Number($("vib").value);
+  patch[OP_VIB_UP] = $("vibUp").checked ? 1 : 0;
+  patch[OP_VIB_LO] = $("vibLo").checked ? 1 : 0;
+  patch[OP_VIB_ROUTE] = 1;
   patch[OP_ROT] = $("rot").checked ? 1 : 0;
   patch[OP_ROT_MODEL] = Number($("rmodel").value);
   patch[OP_ROT_SPEED] = Number($("rspeed").value);
@@ -519,7 +527,7 @@ $("send").onclick = sendPatch;
 $("source").onchange = readPatch;
 $("temp").onchange = () => { fromControls(); };
 $("xtalk").onchange = () => { fromControls(); };
-for (const id of ["perc", "psoft", "pfast", "psel", "vib", "rot", "rmodel", "rspeed", "rhorn", "rmic", "drv", "dtype", "eq", "eqfreq"]) $(id).onchange = () => { fromControls(); };
+for (const id of ["perc", "psoft", "pfast", "psel", "vib", "vibUp", "vibLo", "rot", "rmodel", "rspeed", "rhorn", "rmic", "drv", "dtype", "eq", "eqfreq"]) $(id).onchange = () => { fromControls(); };
 for (const id of ["rbal", "dgain", "dtone", "dout", "rhs", "rhf", "rds", "rdf", "rhr", "rdr", "eqlow", "eqmid", "eqhigh"]) $(id).oninput = () => { fromControls(); };
 if (!navigator.requestMIDIAccess) say("This browser has no Web MIDI. Use Chrome or Edge.", "bad");
 </script>

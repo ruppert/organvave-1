@@ -508,7 +508,7 @@ static void oa_ctl_cc(uint32_t b, uint32_t v)
     uint32_t mx = org_pmax(b), idx = (v * mx + 63u) / 127u;
     if (b == OP_DRV_FAT)
         return;
-    if (b >= OP_TUNING && b < OP_NUM)
+    if (b >= OP_TUNING && b < OP_VIB_UP)
         org_set(b, org_bi(b, idx));
     else if (b >= OP_DRV_TONE && b <= OP_ROT_DRAMP)
         org_set(b, org_b9(idx));
@@ -1094,6 +1094,20 @@ static void art_blit(int32_t x, int32_t y, int32_t w, int32_t h, const uint16_t 
             cv_pset(x + i, y + j, d[j * w + i]);
 }
 
+/* the scanner's routing (0.10.2): the upper and the lower manual through it; a patch with OP_VIB_ROUTE 0 (older) has both */
+static uint32_t vib_up(void)
+{
+    return org_patch[OP_VIB_ROUTE] ? (org_patch[OP_VIB_UP] & 1u) : 1u;
+}
+static uint32_t vib_lo(void)
+{
+    return org_patch[OP_VIB_ROUTE] ? (org_patch[OP_VIB_LO] & 1u) : 1u;
+}
+static uint32_t vib_on(void)                              /* the scanner is in use: a type, and a manual routed through it */
+{
+    return org_patch[OP_VIB] != 0u && (vib_up() || vib_lo());
+}
+
 /* a percussion or vibrato tab: lit (cream, dark letters) or unlit (grey, light letters) */
 static void home_tab(int32_t x, int32_t y, int32_t w, int32_t h, const char *s, int on)
 {
@@ -1122,7 +1136,7 @@ static void scr_home(void)
     static const char *const ROT_POS[6] = {"V3", "C3", "V1", "C1", "V2", "C2"};   /* the selector: from noon, clockwise, 60 degrees */
     static const uint8_t VIB_POS[7] = {0, 2, 4, 0, 3, 5, 1};                     /* OP_VIB 0 off .. 6 C3 -> position */
     char num[8], nm[16];
-    int32_t i, j, pos, vib, sel, lx, ly;
+    int32_t i, j, pos, vib, sel, lx, ly, lit;
     uint32_t v;
     oa_preset_label(num, nm);
     cv_rect(0, 0, 240, 240, RGB565(0x0b, 0x0b, 0x0b));
@@ -1181,9 +1195,10 @@ static void scr_home(void)
     wood(HU(20), HU(358), HU(537), HU(12));
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
     cv_rect(HU(20), HU(370), HU(537), HU(94), BLACK);
-    home_tab(HU10(385), HU(378), HU(51), HU(74), "UP", 0);
     vib = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0;
-    home_tab(HU10(945), HU(378), HU(51), HU(74), "LO", vib != 0);
+    lit = vib && vib_on();
+    home_tab(HU10(385), HU(378), HU(51), HU(74), "UP", vib != 0 && vib_up());
+    home_tab(HU10(945), HU(378), HU(51), HU(74), "LO", vib != 0 && vib_lo());
     cv_rect(HU(154), HU(372), HU(95), HU(90), RGB565(0x2a, 0x2a, 0x2a));
     cv_frame(HU(154), HU(372), HU(95), HU(90), RGB565(0x11, 0x11, 0x11));
     pos = vib ? VIB_POS[vib] : 0;
@@ -1191,12 +1206,12 @@ static void scr_home(void)
         int32_t a = j * 60;
         lx = HU10(2015) + home_sin(a) * 14 / 1000 - 6;
         ly = HU(417) - home_cos(a) * 14 / 1000 - 4;
-        ctext(lx + 6, ly, &AF_X, ROT_POS[j], j == (int32_t)pos && vib ? C_AMBER : RGB565(0xff, 0xff, 0xff), RGB565(0x2a, 0x2a, 0x2a));
+        ctext(lx + 6, ly, &AF_X, ROT_POS[j], j == (int32_t)pos && lit ? C_AMBER : RGB565(0xff, 0xff, 0xff), RGB565(0x2a, 0x2a, 0x2a));
     }
     disc(HU10(2015), HU(417), 8, RGB565(0x11, 0x11, 0x11));
     disc(HU10(2015), HU(417), 7, RGB565(0x33, 0x33, 0x33));
     cv_line_t(HU10(2015), HU(417), HU10(2015) + home_sin(pos * 60) * 6 / 1000, HU(417) - home_cos(pos * 60) * 6 / 1000,
-              vib ? C_AMBER : C_DIM, 2);
+              lit ? C_AMBER : C_DIM, 2);
     /* PERC, rotated, and the percussion tabs */
     art_blit(HU(310) - 1 - HOME_PERC_W / 2, HU(415) - HOME_PERC_H / 2, HOME_PERC_W, HOME_PERC_H, HOME_PERC);
     home_tab(HU10(3235) - 1, HU(378), HU(51), HU(74), "ON", org_patch[OP_PERC] != 0);
@@ -1545,12 +1560,20 @@ static void home_bar(uint32_t b, int32_t s)               /* a drawbar of the up
 {
     org_set(OP_UB + b, (uint32_t)clamp((int32_t)org_patch[OP_UB + b] + s, 0, 8));
 }
-static void home_lo(int32_t s)                            /* the LO tab: on (s up: V3 if it was off) or off */
+static void home_route(uint32_t lo, int32_t s)            /* the UP (lo 0) or LO (lo 1) tab: on (s up; the scanner's type is V3 if it was off) or off */
 {
-    if (s > 0)
-        org_set(OP_VIB, org_patch[OP_VIB] ? org_patch[OP_VIB] : 3u);
-    else if (s < 0)
-        org_set(OP_VIB, 0u);
+    uint32_t up = vib_up(), dn = vib_lo();
+    if (s == 0)
+        return;
+    if (lo)
+        dn = s > 0 ? 1u : 0u;
+    else
+        up = s > 0 ? 1u : 0u;
+    org_set(OP_VIB_UP, up);                               /* the routing bytes are written together, so the patch is 0.10.2's */
+    org_set(OP_VIB_LO, dn);
+    org_set(OP_VIB_ROUTE, 1u);
+    if (s > 0 && org_patch[OP_VIB] == 0u)
+        org_set(OP_VIB, 3u);
 }
 static void home_sel(int32_t s)                           /* the chorus selector: clockwise (s up) through its six positions, not cyclic; off: nothing */
 {
@@ -1605,10 +1628,11 @@ static void home_knobs(void)
             if ((s = panel_enc(EN_K1 + k)) != 0)
                 home_bar(5u + k, -s);
         break;
-    case 3u:                                              /* UP: no patch byte of its own yet (nothing); LO; the selector */
-        (void)panel_enc(EN_K1);
+    case 3u:                                              /* UP and LO: the manuals through the scanner; the selector; K4 nothing */
+        if ((s = panel_enc(EN_K1)) != 0)
+            home_route(0u, s);
         if ((s = panel_enc(EN_K1 + 1)) != 0)
-            home_lo(s);
+            home_route(1u, s);
         if ((s = panel_enc(EN_K1 + 2)) != 0)
             home_sel(s);
         (void)panel_enc(EN_K1 + 3);
@@ -1751,7 +1775,7 @@ static void oa_leds(void)
     led_put(nl, panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
     led_put(nl, panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
-    led_put(nl, panel.btn[B_LFO], org_patch[OP_VIB] != 0);
+    led_put(nl, panel.btn[B_LFO], vib_on() != 0);
     led_put(nl, panel.btn[B_SAVE], oa_sv);
     led_put(nl, panel.btn[B_GLO], oa_gl != 0u);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);

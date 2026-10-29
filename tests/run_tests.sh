@@ -70,6 +70,8 @@ $HC -O2 -o "$OUT/organ_test" tests/organ_test.c -lm
 run "the organ's tone generator against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases' levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence" "$OUT/organ_test"
 $HC -O2 -o "$OUT/organ_adv_test" tests/organ_adv_test.c -lm
 run "ADVANCED EDIT: the builders against setBfree (the default tables, crosstalk settings, click envelopes), the RAM table's key accounting, tuning, percussion and scanner bytes" "$OUT/organ_adv_test"
+$HC -O2 -o "$OUT/organ_route_test" tests/organ_route_test.c -lm
+run "the scanner routing (0.10.2): the upper and the lower manual through the one scanner by their own switch, the pedals dry, exact against the scanner off" "$OUT/organ_route_test"
 $HC -O2 -o "$OUT/rotary_test" tests/rotary_test.c -lm
 run "the rotary CLASSIC against setBfree's: the sidebands, stopped rotors, the speed ramp reaching its targets, bounds at full scale and at the filters' resonances, silence" "$OUT/rotary_test"
 $HC -O2 -o "$OUT/drive_test" tests/drive_test.c -lm

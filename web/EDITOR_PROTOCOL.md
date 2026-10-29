@@ -1104,6 +1104,11 @@ Version 0.2.0 gave meaning to bytes 29..33, which 0.1.0 kept at 0: a patch from 
 factory patch) reads them as 0, so it sounds as it did (the percussion and the vibrato off). Version 0.3.0 gave meaning to
 bytes 34..42 the same way: a patch from 0.1.0 or 0.2.0 reads them as 0, the rotary and the drive off, and sounds as it did.
 Version 0.5.0 did it for 43..47: an older patch reads the equaliser as off, and flat if it is switched on.
+Version 0.10.2 gave meaning to bytes 86..88, which were 0: `OP_VIB_UP` 86 and `OP_VIB_LO` 87 route the upper and the lower
+manual through the scanner (1 yes, 0 no; the pedals never go through it, and the percussion is mixed after it), as setBfree's
+RT_UPPRVIB and RT_LOWRVIB. `OP_VIB_ROUTE` 88 says the two are set: a patch with 88 at 0 (every patch of 0.10.1 or older) routes
+both manuals, as it sounded. The scanner works when `OP_VIB` is not 0 and a manual is routed; with both manuals routed it sounds
+as before. The scanner's type and depths are shared by both manuals, as in setBfree (one scanner). Nothing is migrated.
 (A patch that turns the rotary on sets `OP_ROT_BAL` to 4 itself; a 0 there is the horn 6 dB down.) Nothing is migrated. The patch is the instrument's own: it travels
 with user presets and the autosave, not with the track's parameters.
 
