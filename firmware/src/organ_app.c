@@ -1233,7 +1233,7 @@ static void scr_home(void)
     } else if (oa_home_reg == 4u) {
         cv_frame(HU10(3235) - 2, HU(372), HU10(4915) + 2 + HU(51) + 2 - (HU10(3235) - 2), HU(90), C_ORANGE);
     } else if (oa_home_reg == 5u) {
-        cv_frame(HU(268), HU(468), HU(537) - HU(268), HU(562) - HU(468), C_ORANGE);
+        cv_frame(HU(268) - 3, HU(468), HU(537) - HU(268) + 6, HU(562) - HU(468), C_ORANGE);   /* 3 px wider each side */
     }
     wood(HU(20), HU(565), HU(537), 240 - HU(565));
 }
