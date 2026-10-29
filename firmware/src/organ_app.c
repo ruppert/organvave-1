@@ -1161,8 +1161,14 @@ static void scr_home(void)
                 ctext(cx, top + HU10(217) * j + 1, &AF_X, dgt, RGB565(0xff, 0xff, 0xff), RGB565(0x2a, 0x2a, 0x2a));
             }
             art_blit(cx - HOME_HEAD_W / 2, headtop, HOME_HEAD_W, HOME_HEAD_H, HOME_HEAD[i]);
-            if (oa_home_reg == 2u ? i == 8 : (oa_home_reg < 2u && i / 4 == (int32_t)oa_home_reg && i < 8))
-                cv_rect(sx - 1, top, sw + 2, 2, C_ORANGE);       /* the region's mark: on the top of the drawbar */
+        }
+    }
+    {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
+        static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
+        if (oa_home_reg < 3u) {
+            int32_t l = HU10(677 + 552 * (int32_t)FIRST[oa_home_reg] - 155) - 1;
+            int32_t r = HU10(677 + 552 * (int32_t)LAST[oa_home_reg] - 155) + HU10(309) + 1;
+            cv_rect(l, HU10(930), r - l, 2, C_ORANGE);
         }
     }
     /* the UPPER label on its rule, between the drawbars and the tabs */
@@ -1594,11 +1600,10 @@ static void home_knobs(void)
             if ((s = panel_enc(EN_K1 + k)) != 0)
                 home_bar(oa_home_reg * 4u + k, -s);             /* a drawbar: the knobs turn it the other way (left: up) */
         break;
-    case 2u:
-        if ((s = panel_enc(EN_K1)) != 0)
-            home_bar(8u, -s);
-        for (k = 1; k < 4u; k++)
-            (void)panel_enc(EN_K1 + k);
+    case 2u:                                              /* bars 6..9 */
+        for (k = 0; k < 4u; k++)
+            if ((s = panel_enc(EN_K1 + k)) != 0)
+                home_bar(5u + k, -s);
         break;
     case 3u:                                              /* UP: no patch byte of its own yet (nothing); LO; the selector */
         (void)panel_enc(EN_K1);

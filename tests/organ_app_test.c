@@ -117,10 +117,13 @@ int main(int argc, char **argv)
         turn(EN_SELECT, -4);
         bad += check("  .. SELECT -4: region 2 (bar 9)", oa_home_reg == 1);
         turn(EN_SELECT, 1);
-        bad += check("  .. SELECT +1: region 3 (bar 9 only)", oa_home_reg == 2);
-        v4 = org_patch[OP_UB + 8];
+        bad += check("  .. SELECT +1: region 3 (bars 6-9)", oa_home_reg == 2);
+        v4 = org_patch[OP_UB + 5];
         turn(EN_K1, -1);
-        bad += check("  .. bar 9: K1 moves it, K2 to K4 nothing", org_patch[OP_UB + 8] == (v4 < 8 ? v4 + 1 : 8));
+        bad += check("  .. bars 6-9: K1 moves bar 6", org_patch[OP_UB + 5] == (v4 < 8 ? v4 + 1 : 8));
+        v4 = org_patch[OP_UB + 8];
+        turn(EN_K4, -1);
+        bad += check("  .. and K4 moves bar 9", org_patch[OP_UB + 8] == (v4 < 8 ? v4 + 1 : 8));
         org_set(OP_ROT, 0u);
         turn(EN_ALGO, 1);
         bad += check("  .. ALGORITHM is the Leslie: from STOP to FAST", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 2);
