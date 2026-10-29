@@ -1199,12 +1199,13 @@ static void scr_home(void)
     cv_rect(HU(20), HU(466), HU(537), HU(103), BLACK);
     cv_rect(HU(40), HU(470), HU(208), HU(86), RGB565(0x26, 0x26, 0x26));
     cv_frame(HU(40), HU(470), HU(208), HU(86), RGB565(0x2a, 0x2a, 0x2a));
-    ltext(HU(56), HU(481), &AF_X, "SLOW", RGB565(0xff, 0xff, 0xff), RGB565(0x26, 0x26, 0x26));
-    ltext(HU(124), HU(481), &AF_X, "STOP", RGB565(0xff, 0xff, 0xff), RGB565(0x26, 0x26, 0x26));
-    ltext(HU(186), HU(481), &AF_X, "FAST", RGB565(0xff, 0xff, 0xff), RGB565(0x26, 0x26, 0x26));
+    sel = !org_patch[OP_ROT] ? 0 : org_patch[OP_ROT_SPEED] == 2u ? 2 : org_patch[OP_ROT_SPEED] == 1u ? 1 : 0;
+    /* the selected position's word is white, the others medium grey */
+    ltext(HU(56), HU(481), &AF_X, "SLOW", sel == 1 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x26, 0x26, 0x26));
+    ltext(HU(124), HU(481), &AF_X, "STOP", sel == 0 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x26, 0x26, 0x26));
+    ltext(HU(186), HU(481), &AF_X, "FAST", sel == 2 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x26, 0x26, 0x26));
     cv_rect(40, 218, 40, 3, RGB565(0xbb, 0xbb, 0xbb));
     cv_rect(41, 221, 40, 1, BLACK);
-    sel = !org_patch[OP_ROT] ? 0 : org_patch[OP_ROT_SPEED] == 2u ? 2 : org_patch[OP_ROT_SPEED] == 1u ? 1 : 0;
     lx = sel == 1 ? 41 : sel == 2 ? 79 : 60;                 /* SLOW at the left, STOP in the middle, FAST at the right */
     disc(lx, 219, 9, RGB565(0x0a, 0x0a, 0x0a));              /* the lever's knob: a dark rim, a grey face lit from the upper left */
     disc(lx, 219, 8, RGB565(0x3a, 0x3a, 0x3a));
