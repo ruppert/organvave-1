@@ -1166,8 +1166,8 @@ static void scr_home(void)
     {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
         static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
         if (oa_home_reg < 3u) {
-            int32_t l = HU10(677 + 552 * (int32_t)FIRST[oa_home_reg] - 155) - 4;     /* 3 px past each stem's edge */
-            int32_t r = HU10(677 + 552 * (int32_t)LAST[oa_home_reg] - 155) + HU10(309) + 4;
+            int32_t l = HU10(677 + 552 * (int32_t)FIRST[oa_home_reg] - 155) - 6;     /* 5 px past each stem's edge */
+            int32_t r = HU10(677 + 552 * (int32_t)LAST[oa_home_reg] - 155) + HU10(309) + 6;
             cv_rect(l, HU10(930), r - l, 2, C_ORANGE);
         }
     }
