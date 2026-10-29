@@ -85,7 +85,7 @@ a.ex.web_midi(0x80, 64, 0);
 a.render(300);
 check(`a MIDI note in (USB-MIDI's queue) sounds (peak ${a.peak.toFixed(3)})`, a.peak > 0.01);
 const draws = a.ex.web_screen_draws();
-a.turn(EN.K1, 3);
+a.turn(EN.K1, -3);                                             // HOME: K1 moves bar 1 (region 1), down from the factory 8
 check("KNOB 1 redraws the screen", a.ex.web_screen_draws() > draws);
 a.render(1000);
 a.render(300);

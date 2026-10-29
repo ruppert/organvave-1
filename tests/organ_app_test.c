@@ -71,11 +71,63 @@ int main(int argc, char **argv)
     for (i = 0; i < 3u; i++) { press(B_HOME); press(B_EDIT); }
     bad += check("HOME, EDIT: the page changes back and again", oa_page == 1);
 
-    /* HOME: a knob opens DRAWBARS; PRESET steps through the factory patches and wraps */
-    press(B_HOME);
-    bad += check("HOME: the first page", oa_page == 0);
-    turn(EN_K1, 1);
-    bad += check("  .. a knob there opens DRAWBARS and moves its bar", oa_page == 1 && org_patch[OP_UB + oa_sel] > 0);
+    /* HOME: SELECT picks the region (cyclic), the knobs work on it and stay on HOME; ALGORITHM is the Leslie (not cyclic) */
+    {
+        uint32_t v0, v4;
+        press(B_HOME);
+        bad += check("HOME: the first page", oa_page == 0);
+        org_set(OP_UB + 0u, 3u);
+        turn(EN_K1, 1);
+        bad += check("HOME: region 1 (bars 1-4): K1 moves bar 1, the page stays HOME", oa_page == 0 && org_patch[OP_UB + 0] == 4);
+        turn(EN_SELECT, 1);
+        org_set(OP_UB + 4u, 4u);
+        turn(EN_K1, -1);
+        bad += check("HOME: SELECT +1, region 2 (bars 5-8): K1 moves bar 5", oa_page == 0 && org_patch[OP_UB + 4] == 3);
+        turn(EN_SELECT, 4);
+        bad += check("  .. SELECT +4 goes on, 6 regions: region 6 (the knobs)", oa_home_reg == 5);
+        turn(EN_SELECT, 1);
+        bad += check("  .. and wraps to region 1", oa_home_reg == 0);
+        turn(EN_SELECT, -1);
+        bad += check("  .. and back the other way to the knobs", oa_home_reg == 5);
+        turn(EN_SELECT, -2);
+        bad += check("  .. SELECT -2: region 4 (vibrato), no bar moved", oa_home_reg == 3);
+        org_set(OP_VIB, 0u);
+        turn(EN_K1 + 1, 1);
+        bad += check("  .. vibrato: K2 (LO) on: V3", org_patch[OP_VIB] == 3);
+        turn(EN_K1 + 2, 1);
+        bad += check("  .. K3 turns the selector clockwise: C3", org_patch[OP_VIB] == 6);
+        turn(EN_K1 + 2, 9);
+        bad += check("  .. and stops at C2, the last position", org_patch[OP_VIB] == 5);
+        turn(EN_K1 + 1, -1);
+        bad += check("  .. K2 down: off", org_patch[OP_VIB] == 0);
+        turn(EN_SELECT, 1);
+        bad += check("  .. SELECT +1: region 5 (percussion)", oa_home_reg == 4);
+        org_set(OP_PERC, 0u);
+        turn(EN_K1, 1);
+        bad += check("  .. percussion: K1 turns ON", org_patch[OP_PERC] == 1);
+        turn(EN_SELECT, 1);
+        bad += check("  .. SELECT +1: the four knobs", oa_home_reg == 5);
+        v0 = org_patch[OP_DRV_GAIN];
+        turn(EN_K1, 1);
+        bad += check("  .. the knobs: K1 is DRIVE, and turns it on", org_patch[OP_DRV_GAIN] == v0 + 1 && org_patch[OP_DRV] == 1 && oa_page == 0);
+        turn(EN_SELECT, -4);
+        bad += check("  .. SELECT -4: region 2 (bar 9)", oa_home_reg == 1);
+        turn(EN_SELECT, 1);
+        bad += check("  .. SELECT +1: region 3 (bar 9 only)", oa_home_reg == 2);
+        v4 = org_patch[OP_UB + 8];
+        turn(EN_K1, 1);
+        bad += check("  .. bar 9: K1 moves it, K2 to K4 nothing", org_patch[OP_UB + 8] == (v4 < 8 ? v4 + 1 : 8));
+        org_set(OP_ROT, 0u);
+        turn(EN_ALGO, 1);
+        bad += check("  .. ALGORITHM is the Leslie: from STOP to FAST", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 2);
+        turn(EN_ALGO, 3);
+        bad += check("  .. and stops at FAST (not cyclic)", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 2);
+        turn(EN_ALGO, -5);
+        bad += check("  .. down to SLOW and stops there", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 1);
+        turn(EN_ALGO, 1);
+        bad += check("  .. up once: STOP", org_patch[OP_ROT] == 0);
+    }
+    /* PRESET steps through the factory patches and wraps */
     press(B_HOME);
     turn(EN_PRESET, 1);
     bad += check("PRESET +1: the second factory patch, its LEVEL",

@@ -36,6 +36,7 @@
 
 static uint8_t oa_page;                                  /* 0 HOME, 1 DRAWBARS, 2 PERC & VIB, 3 ROTARY, 4 DRIVE, 5 REVERB, 6 DELAY, 7 EQ (FX walks these), 8 ADVANCED EDIT (EDIT walks DRAWBARS and it) */
 static uint8_t oa_man;                                   /* the manual the DRAWBARS page edits: 0 UPPER, 1 LOWER with the PEDAL's two bars (MIDI channels 2 and 3) */
+static uint8_t oa_home_reg;                              /* HOME: the region SELECT picks, the knobs work on it: 0 bars 1-4, 1 bars 5-8, 2 bar 9, 3 vibrato, 4 percussion, 5 the four knobs */
 static uint8_t oa_sel;                                   /* the bar SELECT has picked on DRAWBARS: UPPER 0..8; LOWER / PEDAL 0..10 (0, 1 the pedal's 16' and 8', then the lower's nine) */
 static uint8_t oa_row[9];                                /* each FX page: the row SELECT has picked */
 static uint8_t oa_top[9];                                /* ... and the first row on the screen */
@@ -1160,6 +1161,8 @@ static void scr_home(void)
                 ctext(cx, top + HU10(217) * j + 1, &AF_X, dgt, RGB565(0xff, 0xff, 0xff), RGB565(0x2a, 0x2a, 0x2a));
             }
             art_blit(cx - HOME_HEAD_W / 2, headtop, HOME_HEAD_W, HOME_HEAD_H, HOME_HEAD[i]);
+            if (oa_home_reg == 2u ? i == 8 : (oa_home_reg < 2u && i / 4 == (int32_t)oa_home_reg && i < 8))
+                rrect(cx - HOME_HEAD_W / 2 - 1, headtop + HOME_HEAD_H + 3, HOME_HEAD_W + 2, 2, 1, C_ORANGE);   /* the region's mark, as on the EDIT page */
         }
     }
     /* the UPPER label on its rule, between the drawbars and the tabs */
@@ -1224,6 +1227,14 @@ static void scr_home(void)
     ctext(HU(365), HU(542), &AF_X, "REV", RGB565(0xff, 0xff, 0xff), BLACK);
     ctext(HU(439), HU(542), &AF_X, "CLICK", RGB565(0xff, 0xff, 0xff), BLACK);
     ctext(HU(513), HU(542), &AF_X, "EXPR", RGB565(0xff, 0xff, 0xff), BLACK);
+    /* the region SELECT picked: an orange frame round the vibrato's row, the percussion tabs, the four knobs */
+    if (oa_home_reg == 3u) {
+        cv_frame(HU10(385) - 2, HU(372), HU(154) + HU(95) + 2 - (HU10(385) - 2), HU(90), C_ORANGE);
+    } else if (oa_home_reg == 4u) {
+        cv_frame(HU10(3235) - 2, HU(372), HU10(4915) + 2 + HU(51) + 2 - (HU10(3235) - 2), HU(90), C_ORANGE);
+    } else if (oa_home_reg == 5u) {
+        cv_frame(HU(268), HU(468), HU(537) - HU(268), HU(562) - HU(468), C_ORANGE);
+    }
     wood(HU(20), HU(565), HU(537), 240 - HU(565));
 }
 
@@ -1522,6 +1533,99 @@ static void oa_cc_poll(void)
     }
 }
 
+/* ---- HOME (0.10.1): SELECT picks a region (cyclic), the knobs work on it; ALGORITHM is the Leslie's switch (not cyclic) */
+static void home_bar(uint32_t b, int32_t s)               /* a drawbar of the upper manual, s steps */
+{
+    org_set(OP_UB + b, (uint32_t)clamp((int32_t)org_patch[OP_UB + b] + s, 0, 8));
+}
+static void home_lo(int32_t s)                            /* the LO tab: on (s up: V3 if it was off) or off */
+{
+    if (s > 0)
+        org_set(OP_VIB, org_patch[OP_VIB] ? org_patch[OP_VIB] : 3u);
+    else if (s < 0)
+        org_set(OP_VIB, 0u);
+}
+static void home_sel(int32_t s)                           /* the chorus selector: clockwise (s up) through its six positions, not cyclic; off: nothing */
+{
+    static const uint8_t AT[6] = {3, 6, 1, 4, 2, 5};     /* position (from noon, clockwise: V3 C3 V1 C1 V2 C2) -> OP_VIB */
+    uint32_t v = org_patch[OP_VIB], p;
+    int32_t n = s < 0 ? -s : s, d = s < 0 ? -1 : 1;
+    if (v == 0u || v > 6u)
+        return;
+    for (p = 0; p < 6u && AT[p] != v; p++)
+        ;
+    while (n-- > 0 && (d > 0 ? p < 5u : p > 0u))
+        p = (uint32_t)((int32_t)p + d);
+    org_set(OP_VIB, AT[p]);
+}
+static void home_rotor(int32_t s)                         /* the Leslie: SLOW, STOP, FAST from left to right; ALGORITHM moves it one place, not cyclic */
+{
+    int32_t p = org_patch[OP_ROT] ? (org_patch[OP_ROT_SPEED] == 2u ? 2 : org_patch[OP_ROT_SPEED] == 1u ? 0 : 1) : 1, n = s < 0 ? -s : s;
+    while (n-- > 0)
+        p = clamp(p + (s > 0 ? 1 : -1), 0, 2);
+    if (p == 0) {
+        org_set(OP_ROT, 1u);
+        org_set(OP_ROT_SPEED, 1u);
+    } else if (p == 1) {
+        org_set(OP_ROT, 0u);
+    } else {
+        org_set(OP_ROT, 1u);
+        org_set(OP_ROT_SPEED, 2u);
+    }
+}
+static void oa_op_step(uint32_t op, int32_t s)            /* an ADVANCED-style byte, s detents */
+{
+    int32_t n = s < 0 ? -s : s, d = s < 0 ? -1 : 1;
+    if (n > 24)
+        n = 24;
+    while (n--)
+        org_set(op, org_bi(op, (uint32_t)clamp(oa_ai(op) + d, 0, (int32_t)org_pmax(op))));
+}
+/* HOME's four knobs: they act on the region SELECT picked; a knob with nothing under it is read and does nothing */
+static void home_knobs(void)
+{
+    int32_t s;
+    uint32_t k;
+    switch (oa_home_reg) {
+    case 0u:
+    case 1u:
+        for (k = 0; k < 4u; k++)
+            if ((s = panel_enc(EN_K1 + k)) != 0)
+                home_bar(oa_home_reg * 4u + k, s);
+        break;
+    case 2u:
+        if ((s = panel_enc(EN_K1)) != 0)
+            home_bar(8u, s);
+        for (k = 1; k < 4u; k++)
+            (void)panel_enc(EN_K1 + k);
+        break;
+    case 3u:                                              /* UP: no patch byte of its own yet (nothing); LO; the selector */
+        (void)panel_enc(EN_K1);
+        if ((s = panel_enc(EN_K1 + 1)) != 0)
+            home_lo(s);
+        if ((s = panel_enc(EN_K1 + 2)) != 0)
+            home_sel(s);
+        (void)panel_enc(EN_K1 + 3);
+        break;
+    case 4u:
+        for (k = 0; k < 4u; k++)
+            if ((s = panel_enc(EN_K1 + k)) != 0)
+                oa_adj(2u, k, s);                         /* PERC, SOFT, FAST, 3RD */
+        break;
+    default:                                              /* DRIVE, REVERB, CLICK; EXPR has no byte yet */
+        if ((s = panel_enc(EN_K1)) != 0) {
+            oa_adj(4u, 2u, s);
+            org_set(OP_DRV, org_patch[OP_DRV_GAIN] > 0u ? 1u : 0u);
+        }
+        if ((s = panel_enc(EN_K1 + 1)) != 0)
+            oa_adj(5u, 0u, s);
+        if ((s = panel_enc(EN_K1 + 2)) != 0)
+            oa_op_step(OP_CLICK_GAIN, s);
+        (void)panel_enc(EN_K1 + 3);
+        break;
+    }
+}
+
 static void oa_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), k;
@@ -1594,6 +1698,17 @@ static void oa_input(void)
         for (k = 0; k < 4u && k < n; k++)
             if ((s = panel_enc(EN_K1 + k)) != 0)
                 oa_adj(pg, k, s);
+        return;
+    }
+    if (oa_page == 0u) {                                  /* HOME: SELECT picks the region (cyclic), ALGORITHM the Leslie, the knobs the region */
+        if ((s = panel_enc(EN_SELECT)) != 0) {
+            int32_t n = s < 0 ? -s : s;
+            while (n-- > 0)
+                oa_home_reg = (uint8_t)((oa_home_reg + (s > 0 ? 1u : 5u)) % 6u);
+        }
+        if ((s = panel_enc(EN_ALGO)) != 0)
+            home_rotor(s);
+        home_knobs();
         return;
     }
     if ((s = panel_enc(EN_SELECT)) != 0) {                /* SELECT picks a bar (on HOME: opens the upper manual's) */
