@@ -339,6 +339,40 @@ int main(int argc, char **argv)
         bad += check("LFO: the vibrato to CHO 3 and round to off", org_patch[OP_VIB] == 0);
         press(B_LFO);
         bad += check("  .. and to VIB 1", org_patch[OP_VIB] == 1);
+        {   /* HOME again (page 9): SELECT as HOME's; region 0 is the pedal (K1, K2: 16', 8'), then the lower's three */
+            uint8_t pb0 = org_patch[OP_PB], pb2 = org_patch[OP_PB + 2], lb0 = org_patch[OP_LB], lb4 = org_patch[OP_LB + 4], lb5 = org_patch[OP_LB + 5];
+            press(B_HOME);
+            org_set(OP_PB, 4u);
+            org_set(OP_PB + 2, 4u);
+            org_set(OP_LB, 4u);
+            org_set(OP_LB + 4, 4u);
+            turn(EN_SELECT, -3);
+            bad += check("HOME 2: SELECT -3 from region 3 is the pedal (region 0), and it stops there", oa_home_reg == 0 && oa_page == 9);
+            turn(EN_K1, -1);
+            bad += check("  .. the pedal: K1 turns the 16' up (left: up)", org_patch[OP_PB] == 5);
+            turn(EN_K1 + 1, -1);
+            bad += check("  .. K2 turns the 8'", org_patch[OP_PB + 2] == 5);
+            turn(EN_K1 + 2, -1);
+            bad += check("  .. K3 does nothing on the pedal", org_patch[OP_PB + 2] == 5 && oa_page == 9);
+            turn(EN_SELECT, 1);
+            bad += check("  .. SELECT +1: region 1, the lower's bars 1-4", oa_home_reg == 1);
+            turn(EN_K1, -1);
+            bad += check("  .. K1 turns the lower's bar 1 up", org_patch[OP_LB] == 5);
+            turn(EN_SELECT, 2);
+            bad += check("  .. SELECT +2: region 3, the lower's bars 6-9", oa_home_reg == 3);
+            org_set(OP_LB + 5, 4u);
+            turn(EN_K1, -1);
+            bad += check("  .. K1 turns the lower's bar 6 up", org_patch[OP_LB + 5] == 5);
+            turn(EN_SELECT, 9);
+            bad += check("  .. SELECT goes on to the vibrato, the percussion, the knobs (7 regions, not cyclic)", oa_home_reg == 6);
+            press(B_HOME);
+            bad += check("  .. HOME again: HOME", oa_page == 0);
+            org_set(OP_PB, pb0);
+            org_set(OP_PB + 2, pb2);
+            org_set(OP_LB, lb0);
+            org_set(OP_LB + 4, lb4);
+            org_set(OP_LB + 5, lb5);
+        }
         press(B_ENV);
         bad += check("ENV again: the percussion off", org_patch[OP_PERC] == 0);
     }

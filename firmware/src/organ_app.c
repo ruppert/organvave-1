@@ -1138,6 +1138,7 @@ static void scr_home(void)
     char num[8], nm[16];
     int32_t i, j, pos, vib, sel, lx, ly, lit;
     uint32_t v;
+    int32_t pl = oa_page == 9u;                            /* HOME again: the drawbars are the pedal's and the lower's */
     oa_preset_label(num, nm);
     cv_rect(0, 0, 240, 240, RGB565(0x0b, 0x0b, 0x0b));
     /* the wood rails and the frame */
@@ -1156,7 +1157,29 @@ static void scr_home(void)
     /* the wood under the header; the upper drawbars on black */
     wood(HU(20), HU(64), HU(537), HU(29));
     cv_rect(HU(20), HU(93), HU(537), HU(270), BLACK);
-    for (i = 0; i < 9; i++) {
+    if (pl) {                                              /* HOME again: the pedal's 16' and 8' (PB 0, 2), a gap, the lower manual's nine (0.10.4) */
+        static const uint8_t PB_BAR[2] = {0, 2};
+        int32_t n;
+        for (n = 0; n < 11; n++) {
+            int32_t c = n < 2 ? 20 + 18 * n : 68 + 18 * (n - 2), top10 = 930, dv;
+            v = n < 2 ? org_patch[OP_PB + PB_BAR[n]] : org_patch[OP_LB + (uint32_t)(n - 2)];
+            if (v > 8u)
+                v = 8u;
+            {
+                int32_t headtop = HU10(top10 + 217 * (int32_t)v), top = HU10(top10);
+                if (headtop > top) {
+                    cv_rect(c - 5, top, 10, headtop - top, RGB565(0x2a, 0x2a, 0x2a));
+                    cv_rect(c - 4, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
+                    cv_rect(c + 2, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
+                }
+                for (dv = 0; dv < (int32_t)v; dv++)        /* a dot per step, in place of the number */
+                    cv_rect(c - 1, top + HU10(217) * dv + HU10(217) / 2 - 1, 2, 2, RGB565(0xff, 0xff, 0xff));
+                cv_rect(c - 6, headtop, 12, 7, RGB565(0xf4, 0xf1, 0xea));
+                cv_rect(c - 6, headtop + 6, 12, 1, RGB565(0x9a, 0x94, 0x88));
+            }
+        }
+    }
+    for (i = 0; i < (pl ? 0 : 9); i++) {
         int32_t cx10 = 677 + 552 * i;                          /* the bar's centre, tenths of a unit */
         int32_t sx = HU10(cx10 - 155), sw = HU10(309), cx = HU10(cx10);
         int32_t top = HU10(930 + 217 * 0);                     /* the stem's top (the panel's) */
@@ -1179,7 +1202,14 @@ static void scr_home(void)
     }
     {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
         static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
-        if (oa_home_reg < 3u) {
+        if (pl && oa_home_reg == 0u) {                    /* HOME 2: the pedal's two stems, 16' and 8' */
+            cv_rect(20 - 5 - 6, HU10(930) - 2, (38 + 5 + 6) - (20 - 5 - 6), 2, C_ORANGE);
+        } else if (pl && oa_home_reg <= 3u) {             /* HOME 2: the lower's regions: 1-4, 5-8, 6-9 */
+            static const uint8_t LFIRST[4] = {0, 0, 4, 5}, LLAST[4] = {0, 3, 7, 8};
+            int32_t l = 68 + 18 * (int32_t)LFIRST[oa_home_reg] - 6, r = 68 + 18 * (int32_t)LLAST[oa_home_reg] + 6;
+            cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);
+        }
+        if (oa_home_reg < 3u && !pl) {
             int32_t l = HU10(677 + 552 * (int32_t)FIRST[oa_home_reg] - 155) - 6;     /* 5 px past each stem's edge */
             int32_t r = HU10(677 + 552 * (int32_t)LAST[oa_home_reg] - 155) + HU10(309) + 6;
             cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);     /* on the wood above, touching the stems */
@@ -1187,11 +1217,18 @@ static void scr_home(void)
     }
     /* the UPPER label on its rule, between the drawbars and the tabs */
     cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
+    if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
+        cv_rect(10, HU(331), 38, 20, BLACK);                /* each label's black box breaks the rule, as UPPER's */
+        ctext(29, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
+        cv_rect(118, HU(331), 44, 20, BLACK);
+        ctext(140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
+    } else {
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
     if (cpu_high)
         ctext(HU(281), HU(331), &AF_X, "CPU HIGH", RGB565(0xff, 0x50, 0x38), BLACK);
     else
         ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
+    }
     wood(HU(20), HU(358), HU(537), HU(12));
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
     cv_rect(HU(20), HU(370), HU(537), HU(94), BLACK);
@@ -1249,12 +1286,15 @@ static void scr_home(void)
     ctext(HU(439), HU(542), &AF_X, "CLICK", RGB565(0xff, 0xff, 0xff), BLACK);
     ctext(HU(513), HU(542), &AF_X, "EXPR", RGB565(0xff, 0xff, 0xff), BLACK);
     /* the region SELECT picked: an orange frame round the vibrato's row, the percussion tabs, the four knobs */
-    if (oa_home_reg == 3u) {
+    {
+    int32_t rv = pl ? (int32_t)oa_home_reg - 1 : (int32_t)oa_home_reg;   /* HOME 2's 4..6 are HOME's 3..5 */
+    if (rv == 3) {
         cv_frame(HU10(385) - 2, HU(372), HU(154) + HU(95) + 2 - (HU10(385) - 2), HU(90), C_ORANGE);
-    } else if (oa_home_reg == 4u) {
+    } else if (rv == 4) {
         cv_frame(HU10(3235) - 2, HU(372), HU10(4915) + 2 + HU(51) + 2 - (HU10(3235) - 2), HU(90), C_ORANGE);
-    } else if (oa_home_reg == 5u) {
+    } else if (rv == 5) {
         cv_frame(HU(268) - 3, HU(468), HU(537) - HU(268) + 6, HU(562) - HU(468), C_ORANGE);   /* 3 px wider each side */
+    }
     }
     wood(HU(20), HU(565), HU(537), 240 - HU(565));
 }
@@ -1455,9 +1495,9 @@ static void oa_bar(uint32_t i, int32_t s)                 /* bar i (of the page'
 
 static void oa_buttons(uint32_t pressed)
 {
-    if ((pressed >> panel.btn[B_HOME]) & 1u) {            /* HOME: the first screen; the pop-ups close */
+    if ((pressed >> panel.btn[B_HOME]) & 1u) {            /* HOME: the first screen; the pop-ups close. HOME again on HOME: the pedal's and the lower's drawbars (0.10.4); again: HOME */
         oa_close_all();
-        oa_page = 0;
+        oa_page = oa_page == 0u ? 9u : 0u;
         return;
     }
     if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars (upper); again: the lower manual's with the pedal's two; again: ADVANCED EDIT; again: the upper's */
@@ -1612,16 +1652,38 @@ static void oa_op_step(uint32_t op, int32_t s)            /* an ADVANCED-style b
         org_set(op, org_bi(op, (uint32_t)clamp(oa_ai(op) + d, 0, (int32_t)org_pmax(op))));
 }
 /* HOME's four knobs: they act on the region SELECT picked; a knob with nothing under it is read and does nothing */
+static void home_drw(uint32_t op, int32_t s)              /* a drawbar of HOME 2 (the pedal's or the lower's): s steps, the other way (left: up) */
+{
+    org_set(op, (uint32_t)clamp((int32_t)org_patch[op] + s, 0, 8));
+}
 static void home_knobs(void)
 {
     int32_t s;
-    uint32_t k;
-    switch (oa_home_reg) {
+    uint32_t k, r = oa_home_reg;
+    if (oa_page == 9u) {                                  /* HOME 2: the pedal (K1, K2: 16', 8'); the lower's regions as HOME's upper; then HOME's rest */
+        static const uint8_t LF[3] = {0, 4, 5};           /* the lower's bars 1-4, 5-8, 6-9 */
+        if (r == 0u) {
+            for (k = 0; k < 2u; k++)
+                if ((s = panel_enc(EN_K1 + k)) != 0)
+                    home_drw(OP_PB + 2u * k, -s);
+            (void)panel_enc(EN_K1 + 2);
+            (void)panel_enc(EN_K1 + 3);
+            return;
+        }
+        if (r <= 3u) {
+            for (k = 0; k < 4u; k++)
+                if ((s = panel_enc(EN_K1 + k)) != 0)
+                    home_drw(OP_LB + LF[r - 1u] + k, -s);
+            return;
+        }
+        r -= 1u;                                          /* 4 vibrato, 5 percussion, 6 the knobs: HOME's 3, 4, 5 */
+    }
+    switch (r) {
     case 0u:
     case 1u:
         for (k = 0; k < 4u; k++)
             if ((s = panel_enc(EN_K1 + k)) != 0)
-                home_bar(oa_home_reg * 4u + k, -s);             /* a drawbar: the knobs turn it the other way (left: up) */
+                home_bar(r * 4u + k, -s);                   /* a drawbar: the knobs turn it the other way (left: up) */
         break;
     case 2u:                                              /* bars 6..9 */
         for (k = 0; k < 4u; k++)
@@ -1636,7 +1698,7 @@ static void home_knobs(void)
         if ((s = panel_enc(EN_K1 + 2)) != 0)
             home_sel(s);
         (void)panel_enc(EN_K1 + 3);
-        break;
+        return;
     case 4u:
         for (k = 0; k < 4u; k++)
             if ((s = panel_enc(EN_K1 + k)) != 0)
@@ -1731,11 +1793,11 @@ static void oa_input(void)
                 oa_adj(pg, k, s);
         return;
     }
-    if (oa_page == 0u) {                                  /* HOME: SELECT picks the region (cyclic), ALGORITHM the Leslie, the knobs the region */
+    if (oa_page == 0u || oa_page == 9u) {                 /* HOME (and HOME 2): SELECT picks the region (not cyclic), ALGORITHM the Leslie, the knobs the region */
         if ((s = panel_enc(EN_SELECT)) != 0) {
-            int32_t n = s < 0 ? -s : s, r = oa_home_reg;
+            int32_t n = s < 0 ? -s : s, r = oa_home_reg, last = oa_page == 9u ? 6 : 5;
             while (n-- > 0)
-                r = clamp(r + (s > 0 ? 1 : -1), 0, 5);             /* not cyclic: the six regions, end to end */
+                r = clamp(r + (s > 0 ? 1 : -1), 0, last);          /* not cyclic: the regions, end to end */
             oa_home_reg = (uint8_t)r;
         }
         if ((s = panel_enc(EN_ALGO)) != 0)
