@@ -1130,14 +1130,14 @@ static void scr_home(void)
     wood(HU(557), HU(64), 240 - HU(557), 240 - HU(64));
     /* the header: the number and the name, the battery */
     cv_rect(HU(20), 0, HU(537), HU(62), HEADBG);
-    ltext(HU(20), HU(12), &AF_N, num, CREAM_W, HEADBG);
-    ltext(HU(77), HU(13), text_w(&AF_M, nm) > 160 ? &AF_S : &AF_M, nm, CREAM_W, HEADBG);
-    cv_frame(200, 10, 22, 9, CREAM_W);
-    cv_rect(222, 12, 2, 4, CREAM_W);
-    cv_rect(201, 12, 4, 5, CREAM_W);
-    cv_rect(207, 12, 4, 5, CREAM_W);
-    cv_rect(212, 12, 4, 5, CREAM_W);
-    cv_rect(217, 12, 3, 5, CREAM_W);
+    ltext(HU(20), HU(12), &AF_N, num, CREAM_W, HEADBG);                 /* the number and the name: one size, a gap between */
+    ltext(HU(20) + text_w(&AF_N, num) + 6, HU(12), text_w(&AF_N, nm) + HU(20) + text_w(&AF_N, num) + 6 > 224 ? &AF_M : &AF_N, nm, CREAM_W, HEADBG);
+    cv_frame(201, 9, 22, 9, CREAM_W);                                   /* the battery: a pixel right and up */
+    cv_rect(223, 11, 2, 4, CREAM_W);
+    cv_rect(202, 11, 4, 5, CREAM_W);
+    cv_rect(208, 11, 4, 5, CREAM_W);
+    cv_rect(213, 11, 4, 5, CREAM_W);
+    cv_rect(218, 11, 3, 5, CREAM_W);
     /* the wood under the header; the upper drawbars on black */
     wood(HU(20), HU(64), HU(537), HU(29));
     cv_rect(HU(20), HU(93), HU(537), HU(270), BLACK);
@@ -1220,7 +1220,7 @@ static void scr_home(void)
         home_knob(HU(513), HU(506), 0);                      /* EXPR: no patch byte yet (its pointer stays at noon) */
     }
     ctext(HU(291), HU(542), &AF_X, "DRIVE", RGB565(0xff, 0xff, 0xff), BLACK);
-    ctext(HU(365), HU(542), &AF_X, "REVERB", RGB565(0xff, 0xff, 0xff), BLACK);
+    ctext(HU(365), HU(542), &AF_X, "REV", RGB565(0xff, 0xff, 0xff), BLACK);
     ctext(HU(439), HU(542), &AF_X, "CLICK", RGB565(0xff, 0xff, 0xff), BLACK);
     ctext(HU(513), HU(542), &AF_X, "EXPR", RGB565(0xff, 0xff, 0xff), BLACK);
     wood(HU(20), HU(565), HU(537), 240 - HU(565));
