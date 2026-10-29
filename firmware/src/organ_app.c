@@ -1189,11 +1189,11 @@ static void scr_home(void)
     cv_line_t(HU10(2015), HU(417), HU10(2015) + home_sin(pos * 60) * 6 / 1000, HU(417) - home_cos(pos * 60) * 6 / 1000,
               vib ? C_AMBER : C_DIM, 2);
     /* PERC, rotated, and the percussion tabs */
-    art_blit(HU(310) - HOME_PERC_W / 2, HU(415) - HOME_PERC_H / 2, HOME_PERC_W, HOME_PERC_H, HOME_PERC);
-    home_tab(HU10(3235), HU(378), HU(51), HU(74), "ON", org_patch[OP_PERC] != 0);
+    art_blit(HU(310) - 1 - HOME_PERC_W / 2, HU(415) - HOME_PERC_H / 2, HOME_PERC_W, HOME_PERC_H, HOME_PERC);
+    home_tab(HU10(3235) - 1, HU(378), HU(51), HU(74), "ON", org_patch[OP_PERC] != 0);
     home_tab(HU10(3795), HU(378), HU(51), HU(74), "SOFT", org_patch[OP_PERC_SOFT] != 0);
-    home_tab(HU10(4355), HU(378), HU(51), HU(74), "FAST", org_patch[OP_PERC_FAST] != 0);
-    home_tab(HU10(4915), HU(378), HU(51), HU(74), "3RD", org_patch[OP_PERC_SEL] != 0);
+    home_tab(HU10(4355) + 1, HU(378), HU(51), HU(74), "FAST", org_patch[OP_PERC_FAST] != 0);
+    home_tab(HU10(4915) + 2, HU(378), HU(51), HU(74), "3RD", org_patch[OP_PERC_SEL] != 0);
     /* row 2: the rotor switch (SLOW, STOP, FAST: the lever's knob), the four knobs */
     cv_rect(HU(20), HU(464), HU(537), 1, RGB565(0x55, 0x55, 0x55));
     cv_rect(HU(20), HU(466), HU(537), HU(103), BLACK);
