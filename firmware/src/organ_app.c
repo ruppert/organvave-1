@@ -1168,7 +1168,7 @@ static void scr_home(void)
         if (oa_home_reg < 3u) {
             int32_t l = HU10(677 + 552 * (int32_t)FIRST[oa_home_reg] - 155) - 6;     /* 5 px past each stem's edge */
             int32_t r = HU10(677 + 552 * (int32_t)LAST[oa_home_reg] - 155) + HU10(309) + 6;
-            cv_rect(l, HU10(930), r - l, 2, C_ORANGE);
+            cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);     /* on the wood above, touching the stems */
         }
     }
     /* the UPPER label on its rule, between the drawbars and the tabs */
