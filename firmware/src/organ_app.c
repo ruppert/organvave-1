@@ -1132,7 +1132,7 @@ static void home_knob(int32_t cx, int32_t cy, int32_t a)
 
 static void scr_home(void)
 {
-    static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x0a, 0x0a, 0x0a);
+    static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x00, 0x00, 0x00);
     static const char *const ROT_POS[6] = {"V3", "C3", "V1", "C1", "V2", "C2"};   /* the selector: from noon, clockwise, 60 degrees */
     static const uint8_t VIB_POS[7] = {0, 2, 4, 0, 3, 5, 1};                     /* OP_VIB 0 off .. 6 C3 -> position */
     char num[8], nm[16];
@@ -1236,14 +1236,14 @@ static void scr_home(void)
     lit = vib && vib_on();
     home_tab(HU10(385), HU(378), HU(51), HU(74), "UP", vib != 0 && vib_up());
     home_tab(HU10(945), HU(378), HU(51), HU(74), "LO", vib != 0 && vib_lo());
-    cv_rect(HU(154), HU(372), HU(95), HU(90), RGB565(0x18, 0x18, 0x18));   /* the vibrato's dial box: the same grey */
+    cv_rect(HU(154), HU(372), HU(95), HU(90), RGB565(0x10, 0x10, 0x10));   /* the vibrato's dial box: the same grey */
     cv_frame(HU(154), HU(372), HU(95), HU(90), RGB565(0x11, 0x11, 0x11));
     pos = vib ? VIB_POS[vib] : 0;
     for (j = 0; j < 6; j++) {
         int32_t a = j * 60;
         lx = HU10(2015) + home_sin(a) * 14 / 1000 - 6;
         ly = HU(417) - home_cos(a) * 14 / 1000 - 4;
-        ctext(lx + 6, ly, &AF_X, ROT_POS[j], j == (int32_t)pos && lit ? C_AMBER : RGB565(0xff, 0xff, 0xff), RGB565(0x18, 0x18, 0x18));
+        ctext(lx + 6, ly, &AF_X, ROT_POS[j], j == (int32_t)pos && lit ? C_AMBER : RGB565(0xff, 0xff, 0xff), RGB565(0x10, 0x10, 0x10));
     }
     disc(HU10(2015), HU(417), 8, RGB565(0x11, 0x11, 0x11));
     disc(HU10(2015), HU(417), 7, RGB565(0x33, 0x33, 0x33));
@@ -1258,13 +1258,13 @@ static void scr_home(void)
     /* row 2: the rotor switch (SLOW, STOP, FAST: the lever's knob), the four knobs */
     cv_rect(HU(20), HU(464), HU(537), 1, RGB565(0x55, 0x55, 0x55));
     cv_rect(HU(20), HU(466), HU(537), HU(103), BLACK);
-    cv_rect(HU(40), HU(470), HU(208), HU(86), RGB565(0x18, 0x18, 0x18));   /* the Leslie's box: a darker grey (0.10.5) */
+    cv_rect(HU(40), HU(470), HU(208), HU(86), RGB565(0x10, 0x10, 0x10));   /* the Leslie's box: a darker grey (0.10.5) */
     cv_frame(HU(40), HU(470), HU(208), HU(86), RGB565(0x2a, 0x2a, 0x2a));
     sel = !org_patch[OP_ROT] ? 0 : org_patch[OP_ROT_SPEED] == 2u ? 2 : org_patch[OP_ROT_SPEED] == 1u ? 1 : 0;
     /* the selected position's word is white, the others medium grey */
-    ltext(HU(56), HU(481), &AF_X, "SLOW", sel == 1 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x26, 0x26, 0x26));
-    ltext(HU(124), HU(481), &AF_X, "STOP", sel == 0 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x26, 0x26, 0x26));
-    ltext(HU(186), HU(481), &AF_X, "FAST", sel == 2 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x26, 0x26, 0x26));
+    ltext(HU(56), HU(481), &AF_X, "SLOW", sel == 1 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
+    ltext(HU(124), HU(481), &AF_X, "STOP", sel == 0 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
+    ltext(HU(186), HU(481), &AF_X, "FAST", sel == 2 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
     cv_rect(40, 218, 40, 3, RGB565(0xbb, 0xbb, 0xbb));
     cv_rect(41, 221, 40, 1, BLACK);
     lx = sel == 1 ? 41 : sel == 2 ? 79 : 60;                 /* SLOW at the left, STOP in the middle, FAST at the right */
