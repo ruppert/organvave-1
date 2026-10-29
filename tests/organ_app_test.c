@@ -79,7 +79,11 @@ int main(int argc, char **argv)
         org_set(OP_UB + 0u, 3u);
         turn(EN_K1, 1);
         bad += check("HOME: region 1 (bars 1-4): K1 moves bar 1, the page stays HOME", oa_page == 0 && org_patch[OP_UB + 0] == 4);
-        turn(EN_SELECT, 1);
+        {
+            uint32_t sg = oa_signature();
+            turn(EN_SELECT, 1);
+            bad += check("  .. a new region is a new picture (the redraw follows SELECT)", oa_signature() != sg);
+        }
         org_set(OP_UB + 4u, 4u);
         turn(EN_K1, -1);
         bad += check("HOME: SELECT +1, region 2 (bars 5-8): K1 moves bar 5", oa_page == 0 && org_patch[OP_UB + 4] == 3);

@@ -1364,6 +1364,7 @@ static uint32_t oa_signature(void)
     uint32_t h = 2166136261u, i;
     for (i = 0; i < ORG_PSIZE; i++)
         h = (h ^ org_patch[i]) * 16777619u;
+    h = (h ^ (uint32_t)oa_home_reg << 24) * 16777619u;          /* HOME's region: the mark moves on the redraw */
     h = (h ^ oa_page ^ (uint32_t)oa_man << 11 ^ (uint32_t)oa_sel << 2 ^ (uint32_t)oa_row[oa_page % 9u] << 18 ^ (uint32_t)oa_top[oa_page % 9u] << 22 ^ (uint32_t)t->preset << 6 ^ (uint32_t)t->user << 14) * 16777619u;
     h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_ch_up << 6 ^ (uint32_t)fm_ch_lo << 11 ^ (uint32_t)fm_ch_pd << 16) * 16777619u;
     h = (h ^ oa_cc_row ^ (uint32_t)oa_ccmap[oa_cc_row % OA_NCTL] << 8 ^ (uint32_t)oa_ccmap[oa_cc_step(oa_cc_row, 1)] << 15 ^ (uint32_t)oa_ccmap[oa_cc_step(oa_cc_row, -1)] << 20) * 16777619u;
