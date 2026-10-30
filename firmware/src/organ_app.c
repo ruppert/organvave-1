@@ -969,7 +969,7 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
         if (r == 0u)
             org_set(OP_ROT, on);
         else if (r == 1u)
-            org_set(OP_ROT_MODEL, (uint32_t)clamp(oa_u(OP_ROT_MODEL, 0u) + d, 0, 3));   /* CLASSIC, LIGHT, CLASSIC 2, CLASSIC 3 */
+            org_set(OP_ROT_MODEL, (uint32_t)clamp(oa_u(OP_ROT_MODEL, 3u) + d, 0, 3));   /* CLASSIC, LIGHT, CLASSIC 2, CLASSIC 3 */
         else if (r == 2u)
             org_set(OP_ROT_HORN, on);
         else if (r == 3u)
