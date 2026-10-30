@@ -61,6 +61,13 @@ static int16_t rot_fir_ram[2][ROT_NA][5] __attribute__((section(".pool")));
 #define ROT_D 12                       /* the taps' delays (ROT_DISP, ROT_SPACE) are Q12 samples */
 #define ROT_CTL 32u                    /* the speed ramp's block (setBfree's bufferLengthSamples) */
 #define ROT_FS 44100u
+/* the variants (rot_t.var, the classic engine's options; 0 is setBfree's CLASSIC, bit for bit):
+ *   ROT_V_NEAR  the horn taps' FIR read at the nearest table entry (no interpolation)
+ *   ROT_V_DRUM4 the drum taps' displacement refreshed every 4 samples
+ *   ROT_V_TAP4  the horn's last tap pair (4, 5) left out (four horn taps) */
+#define ROT_V_NEAR 1u
+#define ROT_V_DRUM4 2u
+#define ROT_V_TAP4 4u
 
 /* the taps' phases and spacings (setBfree's hornPhase / hornSpacing: horn 0..5, drum 6..11 in ROT_PHASE, ROT_SPACE) */
 
@@ -80,6 +87,9 @@ typedef struct {
     int32_t hh[3][4];                  /* the horn's history for the three tap pairs (adx0..2), newest first */
     int32_t HL[ROT_LINE], HR[ROT_LINE], DL[ROT_LINE], DR[ROT_LINE];
     uint32_t outpos;
+    uint8_t var;                       /* the variant (ROT_V_*), 0 CLASSIC */
+    int32_t vg;                        /* the variant's output gain, Q24: it matches CLASSIC's level (1.0 for 0) */
+    int32_t dc[6];                     /* the drum taps' displacements (every sample, or every 4 with ROT_V_DRUM4) */
 } rot_t;
 
 /* a * c for a Q24 coefficient c and a state or sample a (|a| < 2^19): split into c's high and low parts */
@@ -150,11 +160,17 @@ static inline int32_t tab_disp(const int32_t *d, uint32_t h, uint32_t f8)
     int32_t a = d[k & (ROT_NA - 1u)], b = d[(k + 1u) & (ROT_NA - 1u)];
     return a + (((b - a) * (int32_t)f8) >> 8);
 }
-static inline void tab_fir(const int16_t f[ROT_NA][5], uint32_t h, int32_t c[5])
+static inline void tab_fir(const int16_t f[ROT_NA][5], uint32_t h, int32_t c[5], uint32_t near)
 {
     uint32_t k = h >> 4, fr = h & 15u, j;
     uint32_t k1 = (k + 1u) & (ROT_NA - 1u);
     k &= ROT_NA - 1u;
+    if (near) {                                       /* ROT_V_NEAR: the entry nearest to the angle */
+        k = (k + (fr >> 3)) & (ROT_NA - 1u);
+        for (j = 0; j < 5; j++)
+            c[j] = f[k][j];
+        return;
+    }
     for (j = 0; j < 5; j++) {
         int32_t a = f[k][j], b = f[k1][j];
         c[j] = a + (((b - a) * (int32_t)fr) >> 4);
@@ -169,7 +185,7 @@ static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[P]) & 16383u;
     int32_t c[5], xa, t, q, f;
     uint32_t n;
-    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c);
+    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c, r->var & ROT_V_NEAR);
     {   /* the FIR's five products (Q15 coefficients) summed before one rounding, in the lines' format */
         int32_t hi = x * (c[0] >> 8) + hist[0] * (c[1] >> 8) + hist[1] * (c[2] >> 8) + hist[2] * (c[3] >> 8) + hist[3] * (c[4] >> 8);
         int32_t lo = x * (c[0] & 255) + hist[0] * (c[1] & 255) + hist[1] * (c[2] & 255) + hist[2] * (c[3] & 255) + hist[3] * (c[4] & 255);
@@ -184,13 +200,17 @@ static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
 }
 
 /* a drum tap (setBfree's DR_MOTION): no FIR, the same split write */
-static inline void drum_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *disp, int32_t x, int32_t *buf)
+static inline int32_t drum_disp(uint32_t ang, uint32_t P, const int32_t *disp)
 {
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[6u + P]) & 16383u;
+    return tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u));
+}
+static inline void drum_tap(rot_t *r, uint32_t P, int32_t td, int32_t x, int32_t *buf)
+{
     int32_t t, q, f;
     uint32_t n;
     x = x * (1 << ROT_G);
-    t = ROT_SPACE[6u + P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << ROT_D);
+    t = ROT_SPACE[6u + P] + td + (int32_t)(r->outpos << ROT_D);
     n = ((uint32_t)(t >> ROT_D)) & ROT_MASK;
     f = t & ((1 << ROT_D) - 1);
     q = rot_frac(x, f);
@@ -312,6 +332,7 @@ static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *out
 {
     uint32_t i;
     const int32_t *ca = ROT_CPL[r->hset ? 3 : 0], *cb = ROT_CPL[r->hset ? 4 : 1];     /* the horn character's two filters */
+    uint32_t k;
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
@@ -334,21 +355,25 @@ static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *out
         horn_tap(r, ang_hf, 2, RT_DISP[1], RT_FIR[0], x, r->hh[1], r->HL);
         horn_tap(r, ang_hb, 3, RT_DISP[0], RT_FIR[1], x, r->hh[1], r->HR);
         r->hh[1][3] = r->hh[1][2]; r->hh[1][2] = r->hh[1][1]; r->hh[1][1] = r->hh[1][0]; r->hh[1][0] = x;
-        x = rot_refl(&r->rf[1], x);
-
-        horn_tap(r, ang_hf, 4, RT_DISP[0], RT_FIR[1], x, r->hh[2], r->HL);
-        horn_tap(r, ang_hb, 5, RT_DISP[1], RT_FIR[0], x, r->hh[2], r->HR);
-        r->hh[2][3] = r->hh[2][2]; r->hh[2][2] = r->hh[2][1]; r->hh[2][1] = r->hh[2][0]; r->hh[2][0] = x;
+        if (!(r->var & ROT_V_TAP4)) {                 /* ROT_V_TAP4 leaves this last pair out */
+            x = rot_refl(&r->rf[1], x);
+            horn_tap(r, ang_hf, 4, RT_DISP[0], RT_FIR[1], x, r->hh[2], r->HL);
+            horn_tap(r, ang_hb, 5, RT_DISP[1], RT_FIR[0], x, r->hh[2], r->HR);
+            r->hh[2][3] = r->hh[2][2]; r->hh[2][2] = r->hh[2][1]; r->hh[2][1] = r->hh[2][0]; r->hh[2][0] = x;
+        }
 
         /* 3) the drum: the unfiltered input, the same two reflections, then its high-shelf per mic */
-        drum_tap(r, ang_d, 0, RT_DISP[2], xx, r->DL);
-        drum_tap(r, ang_d, 1, RT_DISP[3], xx, r->DR);
+        if (!(r->var & ROT_V_DRUM4) || (i & 3u) == 0)   /* the six drum displacements: every sample, or every 4 (ROT_V_DRUM4) */
+            for (k = 0; k < 6; k++)
+                r->dc[k] = drum_disp(ang_d, k, RT_DISP[(k == 0 || k == 3 || k == 4) ? 2 : 3]);
+        drum_tap(r, 0, r->dc[0], xx, r->DL);
+        drum_tap(r, 1, r->dc[1], xx, r->DR);
         x = rot_refl(&r->rf[2], xx);
-        drum_tap(r, ang_d, 2, RT_DISP[3], x, r->DL);
-        drum_tap(r, ang_d, 3, RT_DISP[2], x, r->DR);
+        drum_tap(r, 2, r->dc[2], x, r->DL);
+        drum_tap(r, 3, r->dc[3], x, r->DR);
         x = rot_refl(&r->rf[3], x);
-        drum_tap(r, ang_d, 4, RT_DISP[2], x, r->DL);
-        drum_tap(r, ang_d, 5, RT_DISP[3], x, r->DR);
+        drum_tap(r, 4, r->dc[4], x, r->DL);
+        drum_tap(r, 5, r->dc[5], x, r->DR);
 
         /* 4) the outputs: the drum's shelf and the horn, and the leakage on both */
         y = rot_cplw(r->dL, ROT_CPL[2], (r->DL[op] + (1 << (ROT_G - 1))) >> ROT_G);
@@ -364,6 +389,11 @@ static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *out
         r->ph_h += r->inc_h;
         r->ph_d += r->inc_d;
     }
+    if (r->var)                                       /* the variants: their level matches CLASSIC's (r->vg) */
+        for (i = 0; i < n; i++) {
+            outL[i] = mul24(outL[i], r->vg);
+            outR[i] = mul24(outR[i], r->vg);
+        }
 }
 /* one block of CTL samples (n <= ROT_CTL), the CLASSIC model alone: in (Q15 mono) to outL and outR (Q15) */
 static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)

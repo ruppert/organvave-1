@@ -139,25 +139,43 @@ typedef struct {
     uint8_t fade;                            /* blocks of the fade left (0: none) */
 } rotmix_t;
 
+/* the models: 0 CLASSIC, 1 LIGHT, 2 CLASSIC 2 (A+B), 3 CLASSIC 3 (D): the classic engine with a variant (rot_t.var) and
+ * its level (ROT_VG, Q24, matched to CLASSIC's in dB). Only a change to or from LIGHT crossfades; between the classic
+ * models the variant changes at once (the classic states carry over). */
+static const uint8_t ROT_VAR[4] = {0u, 0u, ROT_V_NEAR | ROT_V_DRUM4, ROT_V_TAP4};
+static const int32_t ROT_VG[4] = {1 << 24, 1 << 24, 1 << 24, 16944154};   /* CLASSIC 3: +0.09 dB (its level is -0.09 dB under CLASSIC) */
+static const int32_t LT_VG = 13922586;                                  /* LIGHT, Q24: -1.62 dB (it was +1.6 dB over CLASSIC) */
+static void lt_gain(int32_t *oL, int32_t *oR, uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        oL[i] = mul24(oL[i], LT_VG);
+        oR[i] = mul24(oR[i], LT_VG);
+    }
+}
 static void rotary_model(rotmix_t *m, rot_t *r, lt_t *t, uint32_t model)
 {
     if (model == m->model)
         return;
-    if (model)
+    if (model == 1u)
         lt_init(t, r);
-    else
+    else if (m->model == 1u)
         rot_flush(r);
+    r->var = ROT_VAR[model];
+    r->vg = ROT_VG[model];
+    if (model == 1u || m->model == 1u)
+        m->fade = ROT_FADE;
     m->model = (uint8_t)model;
-    m->fade = ROT_FADE;
 }
 
 static void rotary_run(rotmix_t *m, rot_t *r, lt_t *t, const int32_t *in, int32_t *oL, int32_t *oR, uint32_t n)
 {
     rot_speeds(r);
     if (!m->fade) {
-        if (m->model)
+        if (m->model == 1u) {
             lt_samples(r, t, in, oL, oR, n);
-        else
+            lt_gain(oL, oR, n);
+        } else
             rot_samples(r, in, oL, oR, n);
         return;
     }
@@ -169,9 +187,10 @@ static void rotary_run(rotmix_t *m, rot_t *r, lt_t *t, const int32_t *in, int32_
         r->ph_h = ph_h;
         r->ph_d = ph_d;
         lt_samples(r, t, in, bL, bR, n);
+        lt_gain(bL, bR, n);
         m->fade--;
-        w1 = (int32_t)(m->model ? ROT_FADE - m->fade : m->fade) * 32768 / (int32_t)ROT_FADE;
-        w0 = (int32_t)(m->model ? ROT_FADE - m->fade - 1u : m->fade + 1u) * 32768 / (int32_t)ROT_FADE;
+        w1 = (int32_t)(m->model == 1u ? ROT_FADE - m->fade : m->fade) * 32768 / (int32_t)ROT_FADE;
+        w0 = (int32_t)(m->model == 1u ? ROT_FADE - m->fade - 1u : m->fade + 1u) * 32768 / (int32_t)ROT_FADE;
         for (i = 0; i < n; i++) {
             int32_t w = (w0 + (w1 - w0) * (int32_t)i / (int32_t)n) >> 3;   /* Q12 */
             oL[i] = aL[i] + (((bL[i] - aL[i]) * w) >> 12);

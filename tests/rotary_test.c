@@ -21,6 +21,8 @@ static void check(const char *what, int ok)
     bad += !ok;
 }
 static uint32_t mic_deg = 180;                       /* render(): the horn mic angle */
+static uint8_t var_req = 0;                         /* render(): the classic variant (ROT_V_*, rotmix's table) */
+static int32_t vg_req = 1 << 24;                    /* render(): its level gain, Q24 */
 static uint32_t turn(double rpm) { return (uint32_t)(rpm / 60.0 / 44100.0 * 4294967296.0 + 0.5); }
 
 /* renders n samples of in[] (float, 1.0 = full scale) into L, R (float) */
@@ -30,6 +32,7 @@ static void render(const float *in, float *L, float *R, size_t n, double hrpm, d
     int32_t x[ROT_CTL], l[ROT_CTL], rr[ROT_CTL];
     size_t i, j;
     rot_init(r); r->k_ha = rot_k(161000u); r->k_hd = rot_k(321000u);   /* (setBfree's horn ramps: the reference's; the firmware's defaults are slower since 0.9.3) */
+    r->var = var_req; r->vg = vg_req;
     rot_mic(r, mic_deg);
     rot_target(r, turn(hrpm), turn(drpm));
     for (i = 0; i < n; i += ROT_CTL) {
@@ -130,5 +133,32 @@ int main(void)
     memset(in, 0, sizeof in);
     render(in, L, R, N, 400, 340);
     check("silence in, silence out", peak(L, N) == 0 && peak(R, N) == 0);
+    /* 5. the variants of the CLASSIC engine (the models CLASSIC 2 and 3): the same chord through each, the level in dB and the
+     *    difference to CLASSIC. CLASSIC 2 (the nearest FIR and the drum's displacement every 4 samples) sounds the same
+     *    (above 50 dB SNR); CLASSIC 3 (four horn taps) is another colour (about 17 dB SNR to CLASSIC), with the same level
+     *    in dB (within 0.05 dB, its gain ROT_VG[3]). */
+    {
+        static float V0[N], V1[N], V2[N];
+        double l0 = 0, l1 = 0, l2 = 0, s1v = 0, n1v = 0, n2v = 0;
+        size_t k;
+        for (i = 0; i < N; i++) in[i] = 0.25f * (float)(sin(2 * M_PI * 110 * i / 44100.0) + sin(2 * M_PI * 440 * i / 44100.0) + sin(2 * M_PI * 880 * i / 44100.0)) + 0.2f * (float)sin(2 * M_PI * 1760 * i / 44100.0);
+        var_req = 0; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V0, L, sizeof V0);
+        var_req = 3; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V1, L, sizeof V1);
+        var_req = 4; vg_req = 16944154; render(in, L, R, N, 400, 340); memcpy(V2, L, sizeof V2);
+        for (k = N / 2; k < N; k++) {
+            l0 += (double)V0[k] * V0[k];
+            l1 += (double)V1[k] * V1[k];
+            l2 += (double)V2[k] * V2[k];
+            s1v += (double)V0[k] * V0[k];
+            n1v += ((double)V0[k] - V1[k]) * ((double)V0[k] - V1[k]);
+            n2v += ((double)V0[k] - V2[k]) * ((double)V0[k] - V2[k]);
+        }
+        printf("rotary: variants: level CLASSIC 2 %.3f dB, CLASSIC 3 %.3f dB against CLASSIC; SNR CLASSIC 2 %.1f dB, CLASSIC 3 %.1f dB\n",
+               10 * log10(l1 / l0), 10 * log10(l2 / l0), 10 * log10(s1v / n1v), 10 * log10(s1v / n2v));
+        check("variants: CLASSIC 2 at CLASSIC's level (within 0.05 dB)", fabs(10 * log10(l1 / l0)) < 0.05);
+        check("variants: CLASSIC 3 at CLASSIC's level (within 0.05 dB)", fabs(10 * log10(l2 / l0)) < 0.05);
+        check("variants: CLASSIC 2 sounds as CLASSIC (above 50 dB SNR)", 10 * log10(s1v / n1v) > 50);
+        check("variants: CLASSIC 3 is another colour (SNR to CLASSIC between 10 and 25 dB)", 10 * log10(s1v / n2v) > 10 && 10 * log10(s1v / n2v) < 25);
+    }
     return bad ? 1 : 0;
 }

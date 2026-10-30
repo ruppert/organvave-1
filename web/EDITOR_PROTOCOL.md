@@ -1360,3 +1360,5 @@ a real change, wait ~1.5 s and open again). What the editor sends in that window
 bus reset (send `INFO` and `WATCH` again after reconnecting), and a backup in progress answers rc 5 (stale).
 
 Version 0.10.3 gave meaning to byte 89, `OP_EXPR`: the output volume (HOME's EXPR knob): 0 full (what older patches sound at), i = i dB down, 0..60. It scales the organ before the effects (in the swell's target, so it glides). Nothing is migrated.
+
+Version 0.9.16 gave byte 35, `OP_ROT_MODEL`, two new values: 2 CLASSIC 2 (the CLASSIC engine with the nearest FIR at the horn taps and the drum's displacement every 4 samples; the same sound as CLASSIC, 61 dB SNR) and 3 CLASSIC 3 (the CLASSIC engine with four horn taps instead of six; another colour, about 17 dB SNR to CLASSIC). The values 0 (CLASSIC) and 1 (LIGHT) keep their meaning. LIGHT's level went down 1.6 dB so that all four models sound at the same level in dB (CLASSIC's). Nothing is migrated: a patch that has 0 or 1 sounds as before, apart from the LIGHT level.

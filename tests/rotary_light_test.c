@@ -67,7 +67,7 @@ static void render(int model, const float *in, float *L, float *R, size_t n, uin
     for (i = 0; i < n; i += ROT_CTL) {
         size_t k = n - i < ROT_CTL ? n - i : ROT_CTL;
         for (j = 0; j < k; j++) x[j] = (int32_t)lrintf(in[i + j] * 32768.0f);
-        if (model) lt_samples(r, t, x, l, rr, (uint32_t)k); else rot_samples(r, x, l, rr, (uint32_t)k);
+        if (model) { lt_samples(r, t, x, l, rr, (uint32_t)k); lt_gain(l, rr, (uint32_t)k); } else rot_samples(r, x, l, rr, (uint32_t)k);
         for (j = 0; j < k; j++) { L[i + j] = l[j] / 32768.0f; R[i + j] = rr[j] / 32768.0f; }
     }
     free(r); free(t);
