@@ -1645,8 +1645,9 @@ static void home_rotor(int32_t s)                         /* the Leslie: SLOW, S
     if (p == 0) {
         org_set(OP_ROT, 1u);
         org_set(OP_ROT_SPEED, 1u);
-    } else if (p == 1) {
-        org_set(OP_ROT, 0u);
+    } else if (p == 1) {                                  /* STOP: the rotor stands, the rotary stays on (its speed is 0); off stays off */
+        if (org_patch[OP_ROT])
+            org_set(OP_ROT_SPEED, 0u);
     } else {
         org_set(OP_ROT, 1u);
         org_set(OP_ROT_SPEED, 2u);

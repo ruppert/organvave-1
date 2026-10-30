@@ -154,7 +154,12 @@ int main(int argc, char **argv)
         turn(EN_ALGO, -5);
         bad += check("  .. down to SLOW and stops there", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 1);
         turn(EN_ALGO, 1);
-        bad += check("  .. up once: STOP", org_patch[OP_ROT] == 0);
+        bad += check("  .. up once: STOP, the rotary stays on (the speed is 0)", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 0);
+        turn(EN_ALGO, -1);
+        bad += check("  .. down from STOP: SLOW", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 1);
+        turn(EN_ALGO, 1);
+        turn(EN_ALGO, 1);
+        bad += check("  .. and back to FAST", org_patch[OP_ROT] == 1 && org_patch[OP_ROT_SPEED] == 2);
     }
     /* PRESET steps through the factory patches and wraps */
     press(B_HOME);
