@@ -1148,6 +1148,15 @@ static void scr_home(void)
     cv_rect(HU(20), 0, HU(537), HU(62), HEADBG);
     ltext(HU(20), HU(12), &AF_N, num, CREAM_W, HEADBG);                 /* the number and the name: one size, a gap between */
     ltext(HU(20) + text_w(&AF_N, num) + 6, HU(12), text_w(&AF_N, nm) + HU(20) + text_w(&AF_N, num) + 6 > 224 ? &AF_M : &AF_N, nm, CREAM_W, HEADBG);
+    {   /* the CPU load: the audio render's average (song.cpu_q8, 1/256 of a half), left of the battery; red from 85 % */
+        char cb[8] = {'C', 'P', 'U', ' ', '0', '0', '%', 0};
+        uint32_t pct = song.cpu_q8 * 100u / 256u;
+        if (pct > 99u)
+            pct = 99u;
+        cb[4] = (char)('0' + pct / 10u);
+        cb[5] = (char)('0' + pct % 10u);
+        rtext(196, 11, &AF_X, cb, pct >= 85u ? RGB565(0xff, 0x50, 0x38) : CREAM_W, HEADBG);
+    }
     cv_frame(201, 9, 22, 9, CREAM_W);                                   /* the battery: a pixel right and up */
     cv_rect(223, 11, 2, 4, CREAM_W);
     cv_rect(202, 11, 4, 5, CREAM_W);
