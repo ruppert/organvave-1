@@ -103,6 +103,10 @@ typedef struct {
     uint8_t var;                       /* the variant (ROT_V_*), 0 CLASSIC */
     int32_t vg;                        /* the variant's output gain, Q24: it matches CLASSIC's level (1.0 for 0) */
     int32_t dc[6];                     /* the drum taps' displacements (every sample, or every 4 with ROT_V_DRUM4) */
+    int32_t geo_ok;                    /* CLASSIC 5: the anchors below are valid (0 after a block without ROT_V_GEOM8) */
+    int32_t ga[6], gb[6];              /* CLASSIC 5: the horn delays at the current anchor and at the next (8 samples ahead) */
+    int32_t sl[6], cur[6];             /* CLASSIC 5: the delays' step per sample and their running value */
+    int16_t cA[6][5], cB[6][5];        /* CLASSIC 5: the horn FIRs at the current and the next anchor (held through the block; Q15, in int16) */
 } rot_t;
 
 /* a * c for a Q24 coefficient c and a state or sample a (|a| < 2^19): split into c's high and low parts */
@@ -180,7 +184,7 @@ static inline uint32_t tab_f8(uint32_t h, uint32_t ang, uint32_t sh)
     uint32_t lo = 8u - sh;
     return ((h & ((1u << sh) - 1u)) << lo) | ((ang >> (18u - lo)) & ((1u << lo) - 1u));
 }
-static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int32_t c[5], uint32_t near, uint32_t sh)
+static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int16_t c[5], uint32_t near, uint32_t sh)
 {
     uint32_t mask = (16384u >> sh) - 1u, k = h >> sh, fr = h & ((1u << sh) - 1u), j;
     uint32_t k1 = (k + 1u) & mask;
@@ -193,7 +197,7 @@ static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int32_t c[5], uint
     }
     for (j = 0; j < 5; j++) {
         int32_t a = f[k][j], b = f[k1][j];
-        c[j] = a + (((b - a) * (int32_t)fr) >> sh);
+        c[j] = (int16_t)(a + (((b - a) * (int32_t)fr) >> sh));
     }
 }
 
@@ -201,13 +205,13 @@ static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int32_t c[5], uint
  * function of the angle only, so CLASSIC 5 holds it for 8 samples) and the tap itself (the FIR of the four last inputs,
  * newest first, then the write split linearly between the two samples around the delay, de-interpolating) */
 static inline void horn_geom(rot_t *r, uint32_t ang, uint32_t P, const int32_t *disp, const int16_t (*fir)[5], uint32_t sh,
-                             int32_t c[5], int32_t *ts)
+                             int16_t c[5], int32_t *ts)
 {
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[P]) & 16383u;
     tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c, r->var & ROT_V_NEAR, sh);
     *ts = ROT_SPACE[P] + tab_disp(disp, h, tab_f8(h, ang, sh), sh);
 }
-static inline void horn_tap(int32_t x, const int32_t *hist, int32_t *buf, const int32_t c[5], int32_t ts, uint32_t op)
+static inline void horn_tap(int32_t x, const int32_t *hist, int32_t *buf, const int16_t c[5], int32_t ts, uint32_t op)
 {
     int32_t xa, t, q, f;
     uint32_t n;
@@ -363,9 +367,11 @@ static void rot_speeds(rot_t *r)
 static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n,
                                                            uint32_t sh, const int32_t *const *D, const int16_t (*const *F)[5])
 {
-    uint32_t i;
+    uint32_t i, ntap = (r->var & ROT_V_TAP4) ? 4u : 6u;
     const int32_t *ca = ROT_CPL[r->hset ? 3 : 0], *cb = ROT_CPL[r->hset ? 4 : 1];     /* the horn character's two filters */
-    int32_t gc[6][5], gt[6];                                                           /* the horn taps' geometry */
+    int16_t gc[6][5];
+    int32_t gt[6];                                                     /* the horn taps' delay */
+    const int16_t *gp[6];                                                              /* the FIR of each tap (gc, or the held one) */
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
@@ -374,8 +380,10 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
         uint32_t ang_hf = r->ph_h + r->mic_fw, ang_hb = r->ph_h + r->mic_bw;
         uint32_t ang_d = r->ph_d;
 
-        /* 0) the horn taps' geometry: every sample, or every 8 (ROT_V_GEOM8: the angles move slowly) */
-        if (!(r->var & ROT_V_GEOM8) || (i & 7u) == 0) {
+        /* 0) the horn taps' geometry. Every sample; or, with ROT_V_GEOM8, the FIR is held for 8 samples and the delay ramps
+         * linearly between this block's anchor and the next one, 8 samples ahead, so the ramp is centred on its samples */
+        if (!(r->var & ROT_V_GEOM8)) {
+            r->geo_ok = 0;
             horn_geom(r, ang_hf, 0, D[0], F[1], sh, gc[0], &gt[0]);
             horn_geom(r, ang_hb, 1, D[1], F[0], sh, gc[1], &gt[1]);
             horn_geom(r, ang_hf, 2, D[1], F[0], sh, gc[2], &gt[2]);
@@ -383,6 +391,44 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
             if (!(r->var & ROT_V_TAP4)) {
                 horn_geom(r, ang_hf, 4, D[0], F[1], sh, gc[4], &gt[4]);
                 horn_geom(r, ang_hb, 5, D[1], F[0], sh, gc[5], &gt[5]);
+            }
+            for (uint32_t k = 0; k < ntap; k++) gp[k] = gc[k];
+        } else {
+            if ((op & 7u) == 0) {                      /* the blocks run on the rotors' sample count, not on the call's */
+                uint32_t k, af = ang_hf + (r->inc_h << 3), ab = ang_hb + (r->inc_h << 3);
+                if (!r->geo_ok) {                      /* the first block: the current anchor, computed here */
+                    horn_geom(r, ang_hf, 0, D[0], F[1], sh, r->cA[0], &r->ga[0]);
+                    horn_geom(r, ang_hb, 1, D[1], F[0], sh, r->cA[1], &r->ga[1]);
+                    horn_geom(r, ang_hf, 2, D[1], F[0], sh, r->cA[2], &r->ga[2]);
+                    horn_geom(r, ang_hb, 3, D[0], F[1], sh, r->cA[3], &r->ga[3]);
+                    if (!(r->var & ROT_V_TAP4)) {
+                        horn_geom(r, ang_hf, 4, D[0], F[1], sh, r->cA[4], &r->ga[4]);
+                        horn_geom(r, ang_hb, 5, D[1], F[0], sh, r->cA[5], &r->ga[5]);
+                    }
+                    r->geo_ok = 1;
+                } else {                               /* the next anchor became the current one */
+                    for (k = 0; k < ntap; k++) {
+                        r->ga[k] = r->gb[k];
+                        for (uint32_t j = 0; j < 5; j++) r->cA[k][j] = r->cB[k][j];
+                    }
+                }
+                horn_geom(r, af, 0, D[0], F[1], sh, r->cB[0], &r->gb[0]);
+                horn_geom(r, ab, 1, D[1], F[0], sh, r->cB[1], &r->gb[1]);
+                horn_geom(r, af, 2, D[1], F[0], sh, r->cB[2], &r->gb[2]);
+                horn_geom(r, ab, 3, D[0], F[1], sh, r->cB[3], &r->gb[3]);
+                if (!(r->var & ROT_V_TAP4)) {
+                    horn_geom(r, af, 4, D[0], F[1], sh, r->cB[4], &r->gb[4]);
+                    horn_geom(r, ab, 5, D[1], F[0], sh, r->cB[5], &r->gb[5]);
+                }
+                for (k = 0; k < ntap; k++) {           /* the step over the block, and the first sample's delay */
+                    r->sl[k] = (r->gb[k] - r->ga[k]) >> 3;
+                    r->cur[k] = r->ga[k] + r->sl[k];
+                }
+            }
+            for (uint32_t k = 0; k < ntap; k++) {
+                gt[k] = r->cur[k];
+                r->cur[k] += r->sl[k];
+                gp[k] = r->cA[k];
             }
         }
 
@@ -392,18 +438,18 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
         leak = mul14(x * (1 << ROT_G), r->leak);
 
         /* 2) the horn: taps 0 and 1 (history 0), reflection 1, taps 2 and 3 (history 1), reflection 2, taps 4 and 5 */
-        horn_tap(x, r->hh[0], r->HL, gc[0], gt[0], op);
-        horn_tap(x, r->hh[0], r->HR, gc[1], gt[1], op);
+        horn_tap(x, r->hh[0], r->HL, gp[0], gt[0], op);
+        horn_tap(x, r->hh[0], r->HR, gp[1], gt[1], op);
         r->hh[0][3] = r->hh[0][2]; r->hh[0][2] = r->hh[0][1]; r->hh[0][1] = r->hh[0][0]; r->hh[0][0] = x;
         x = rot_refl(&r->rf[0], x);
 
-        horn_tap(x, r->hh[1], r->HL, gc[2], gt[2], op);
-        horn_tap(x, r->hh[1], r->HR, gc[3], gt[3], op);
+        horn_tap(x, r->hh[1], r->HL, gp[2], gt[2], op);
+        horn_tap(x, r->hh[1], r->HR, gp[3], gt[3], op);
         r->hh[1][3] = r->hh[1][2]; r->hh[1][2] = r->hh[1][1]; r->hh[1][1] = r->hh[1][0]; r->hh[1][0] = x;
         if (!(r->var & ROT_V_TAP4)) {                 /* ROT_V_TAP4 leaves this last pair out */
             x = rot_refl(&r->rf[1], x);
-            horn_tap(x, r->hh[2], r->HL, gc[4], gt[4], op);
-            horn_tap(x, r->hh[2], r->HR, gc[5], gt[5], op);
+            horn_tap(x, r->hh[2], r->HL, gp[4], gt[4], op);
+            horn_tap(x, r->hh[2], r->HR, gp[5], gt[5], op);
             r->hh[2][3] = r->hh[2][2]; r->hh[2][2] = r->hh[2][1]; r->hh[2][1] = r->hh[2][0]; r->hh[2][0] = x;
         }
 
