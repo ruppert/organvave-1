@@ -21,7 +21,7 @@ static void check(const char *what, int ok)
     bad += !ok;
 }
 static uint32_t mic_deg = 180;                       /* render(): the horn mic angle */
-static uint8_t var_req = 0;                         /* render(): the classic variant (ROT_V_*, rotmix's table) */
+static uint8_t var_req = 0;                         /* render(): the classic variant (ROT_V_*, ROT_VAR) */
 static int32_t vg_req = 1 << 24;                    /* render(): its level gain, Q24 */
 static uint32_t turn(double rpm) { return (uint32_t)(rpm / 60.0 / 44100.0 * 4294967296.0 + 0.5); }
 
@@ -134,44 +134,36 @@ int main(void)
     memset(in, 0, sizeof in);
     render(in, L, R, N, 400, 340);
     check("silence in, silence out", peak(L, N) == 0 && peak(R, N) == 0);
-    /* 5. the variants of the CLASSIC engine (the models CLASSIC 2 and 3): the same chord through each, the level in dB and the
-     *    difference to CLASSIC. CLASSIC 2 (the nearest FIR and the drum's displacement every 4 samples) sounds the same
-     *    (above 50 dB SNR); CLASSIC 3 (four horn taps) is another colour (about 17 dB SNR to CLASSIC), with the same level
-     *    in dB (within 0.05 dB, its gain ROT_VG[3]). */
+    /* 5. the models of the CLASSIC engine (0 CLASSIC, 1 CLASSIC 2 .. 4 CLASSIC 5): the same chord through each, from the
+     *    firmware's own tables (ROT_VAR, ROT_VG). Each one's level is within 0.05 dB of CLASSIC's, and each keeps a
+     *    sound close to CLASSIC (CLASSIC 2 and 5: above 30 dB SNR, the horn's geometry every 8 or 4 samples; CLASSIC 3 and
+     *    CLASSIC 4, the horn taps: another colour, between 10 and 25 dB SNR). */
     {
-        static float V0[N], V1[N], V2[N], V3[N], V4[N], V5[N];
-        double l0 = 0, l1 = 0, l2 = 0, l3 = 0, l4 = 0, l5 = 0, s1v = 0, n1v = 0, n2v = 0, n3v = 0, n4v = 0, n5v = 0;
-        size_t k;
+        static float V[5][N];
+        double lev[5], snr[5];
+        size_t k, m;
         for (i = 0; i < N; i++) in[i] = 0.25f * (float)(sin(2 * M_PI * 110 * i / 44100.0) + sin(2 * M_PI * 440 * i / 44100.0) + sin(2 * M_PI * 880 * i / 44100.0)) + 0.2f * (float)sin(2 * M_PI * 1760 * i / 44100.0);
-        var_req = 0; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V0, L, sizeof V0);
-        var_req = 3; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V1, L, sizeof V1);
-        var_req = 4; vg_req = 16944154; render(in, L, R, N, 400, 340); memcpy(V2, L, sizeof V2);
-        var_req = 9; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V3, L, sizeof V3);
-        var_req = 16; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V4, L, sizeof V4);
-        var_req = 32; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V5, L, sizeof V5);
-        for (k = N / 2; k < N; k++) {
-            l0 += (double)V0[k] * V0[k];
-            l1 += (double)V1[k] * V1[k];
-            l2 += (double)V2[k] * V2[k];
-            l3 += (double)V3[k] * V3[k];
-            l4 += (double)V4[k] * V4[k];
-            l5 += (double)V5[k] * V5[k];
-            s1v += (double)V0[k] * V0[k];
-            n1v += ((double)V0[k] - V1[k]) * ((double)V0[k] - V1[k]);
-            n2v += ((double)V0[k] - V2[k]) * ((double)V0[k] - V2[k]);
-            n3v += ((double)V0[k] - V3[k]) * ((double)V0[k] - V3[k]);
-            n4v += ((double)V0[k] - V4[k]) * ((double)V0[k] - V4[k]);
-            n5v += ((double)V0[k] - V5[k]) * ((double)V0[k] - V5[k]);
+        for (m = 0; m < 5; m++) {
+            var_req = ROT_VAR[m]; vg_req = ROT_VG[m];
+            render(in, L, R, N, 400, 340);
+            memcpy(V[m], L, sizeof V[m]);
         }
-        printf("rotary: variants: level CLASSIC 2 %.3f dB, CLASSIC 3 %.3f dB against CLASSIC; SNR CLASSIC 2 %.1f dB, CLASSIC 3 %.1f dB\n",
-               10 * log10(l1 / l0), 10 * log10(l2 / l0), 10 * log10(s1v / n1v), 10 * log10(s1v / n2v));
-        check("variants: CLASSIC 2 at CLASSIC's level (within 0.05 dB)", fabs(10 * log10(l1 / l0)) < 0.05);
-        check("variants: CLASSIC 3 at CLASSIC's level (within 0.05 dB)", fabs(10 * log10(l2 / l0)) < 0.05);
-        check("variants: CLASSIC 2 sounds as CLASSIC (above 50 dB SNR)", 10 * log10(s1v / n1v) > 50);
-        check("variants: CLASSIC 3 is another colour (SNR to CLASSIC between 10 and 25 dB)", 10 * log10(s1v / n2v) > 10 && 10 * log10(s1v / n2v) < 25);
-        check("variants: CLASSIC 4 at CLASSIC's level (within 0.05 dB) and above 40 dB SNR (256 angles)", fabs(10 * log10(l3 / l0)) < 0.05 && 10 * log10(s1v / n3v) > 40);
-        check("variants: CLASSIC 6 at CLASSIC's level (within 0.05 dB) and above 30 dB SNR (horn geometry every 4)", fabs(10 * log10(l5 / l0)) < 0.05 && 10 * log10(s1v / n5v) > 30);
-        check("variants: CLASSIC 5 at CLASSIC's level (within 0.05 dB) and above 30 dB SNR (horn geometry every 8 samples)", fabs(10 * log10(l4 / l0)) < 0.05 && 10 * log10(s1v / n4v) > 30);
+        for (m = 0; m < 5; m++) {
+            double l = 0, sv = 0, nv = 0;
+            for (k = 0; k < N; k++) {
+                l += (double)V[m][k] * V[m][k];
+                sv += (double)V[0][k] * V[0][k];
+                nv += ((double)V[0][k] - V[m][k]) * ((double)V[0][k] - V[m][k]);
+            }
+            lev[m] = 10 * log10(l);
+            snr[m] = m == 0 ? 999 : 10 * log10(sv / (nv > 0 ? nv : 1e-30));
+        }
+        printf("rotary: models: level CLASSIC 2 %.3f, CLASSIC 3 %.3f, CLASSIC 4 %.3f, CLASSIC 5 %.3f dB against CLASSIC; SNR to CLASSIC %.1f, %.1f, %.1f, %.1f dB\n",
+               lev[1] - lev[0], lev[2] - lev[0], lev[3] - lev[0], lev[4] - lev[0], snr[1], snr[2], snr[3], snr[4]);
+        check("models: CLASSIC 2 at CLASSIC's level (within 0.05 dB) and above 30 dB SNR (horn geometry every 8 samples)", fabs(lev[1] - lev[0]) < 0.05 && snr[1] > 30);
+        check("models: CLASSIC 3 at CLASSIC's level (within 0.05 dB) and another colour (SNR 10 to 25 dB)", fabs(lev[2] - lev[0]) < 0.05 && snr[2] > 10 && snr[2] < 25);
+        check("models: CLASSIC 4 (drum every 4, four horn taps) at CLASSIC's level (within 0.05 dB) and 10 to 25 dB SNR", fabs(lev[3] - lev[0]) < 0.05 && snr[3] > 10 && snr[3] < 25);
+        check("models: CLASSIC 5 at CLASSIC's level (within 0.05 dB) and above 30 dB SNR (horn geometry every 4 samples)", fabs(lev[4] - lev[0]) < 0.05 && snr[4] > 30);
     }
     return bad ? 1 : 0;
 }

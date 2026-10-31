@@ -37,10 +37,10 @@ def effects(p, fx):
     p[OP_DRV_GAIN] = 6
     if "rot" in fx:
         model, speed, horn, width, hdb = fx["rot"]
-        assert model in ("classic", "light") and speed in ("stop", "slow", "fast") and horn in ("normal", "sharp")
+        assert model in ("classic", "classic2") and speed in ("stop", "slow", "fast") and horn in ("normal", "sharp")
         assert width in (0, 30, 60, 90, 120, 150, 180) and -6 <= hdb <= 6
         p[OP_ROT] = 1
-        p[OP_ROT_MODEL] = 0 if model == "classic" else 1
+        p[OP_ROT_MODEL] = 0 if model == "classic" else 1   # CLASSIC 2 (0.9.23: LIGHT is gone)
         p[OP_ROT_SPEED] = ("stop", "slow", "fast").index(speed)
         p[OP_ROT_HORN] = 0 if horn == "normal" else 1
         p[OP_ROT_MIC] = (180 - width) // 30

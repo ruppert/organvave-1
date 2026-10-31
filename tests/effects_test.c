@@ -4,7 +4,7 @@
  * whole firmware (organ_app.c) and a chord held on the organ.
  * 1. the bytes: clamped by org_pmax; a patch of zeros leaves the mix as it was (no rotary, no drive).
  * 2. the rotary: FAST turns the horn (the left channel's level moves by more than 3 dB over a second, the channels differ);
- *    STOP holds still (the level varies under 1 dB); MODEL LIGHT runs (MIC 6 is printed: the mics' angle narrows the image).
+ *    STOP holds still (the level varies under 1 dB); MODEL CLASSIC 2 runs (MIC 6 is printed: the mics' angle narrows the image).
  * 3. the fades: switching the rotary or the drive on or off with the chord held makes no step (largest sample-to-sample
  *    jump within 3 times the dry mix's).
  * 4. the drive: a single key at one drawbar gets its odd harmonics (the third more than 6 dB higher re the fundamental).
@@ -50,11 +50,9 @@ static void boot(void)
     org_init();
     rot_load_tables();
     rot_init(&rot_st);
-    lt_init(&lt_st, &rot_st);
     dr_init(&dr_st);
     eq_init(&eq_st);
     eq_w = 0; eq_idle = 0; eq_on = 0;
-    memset(&rot_mix, 0, sizeof rot_mix);
     rot_w = dr_w = 0;
     rot_idle = 0;
     rot_on = dr_on = 0;
@@ -183,8 +181,8 @@ int main(void)
     P[OP_ROT_MIC] = 0; P[OP_ROT_MODEL] = 1;
     patch_set(P);
     blocks(44100 * 2);
-    check("the rotary LIGHT runs (the model in use is 1, the output is alive and bounded)",
-          rot_mix.model == 1 && rms_win(oL, pos - 22050, 22050) > 300 && maxjump(oL, pos - 22050, pos) < 40000);
+    check("the rotary CLASSIC 2 runs (the model in use is 1, the output is alive and bounded)",
+          rot_model_req == 1 && rms_win(oL, pos - 22050, 22050) > 300 && maxjump(oL, pos - 22050, pos) < 40000);
 
     /* 3. the fades */
     boot();
@@ -245,7 +243,7 @@ int main(void)
     /* 5. silence */
     {
         static const struct { uint8_t rot, model, drv; const char *n; } C[4] = {
-            {0, 0, 1, "drive"}, {1, 0, 0, "rotary CLASSIC"}, {1, 1, 0, "rotary LIGHT"}, {1, 1, 1, "all"}};
+            {0, 0, 1, "drive"}, {1, 0, 0, "rotary CLASSIC"}, {1, 1, 0, "rotary CLASSIC 2"}, {1, 1, 1, "all"}};
         uint32_t c;
         int32_t worst = 0;
         for (c = 0; c < 4; c++) {
@@ -266,7 +264,7 @@ int main(void)
     }
     /* 6. after the keys: the cabinet and the drive go quiet (no limit cycle: at most 1 LSB), and MASTER 0 is silent */
     {
-        static const struct { uint8_t model, drv; const char *n; } C[3] = {{0, 0, "CLASSIC"}, {1, 0, "LIGHT"}, {0, 1, "CLASSIC and the drive"}};
+        static const struct { uint8_t model, drv; const char *n; } C[3] = {{0, 0, "CLASSIC"}, {1, 0, "CLASSIC 2"}, {0, 1, "CLASSIC and the drive"}};
         uint32_t c;
         for (c = 0; c < 3; c++) {
             int32_t pk = 0;
@@ -438,7 +436,7 @@ int main(void)
         blocks(256);
         check("  .. the warning is up, the delay is off", cpu_high > 0 && fx.dly_on == 0);
         check("  .. the oldest key let go, the others held", org.keys[10] == 0 && org.keys[20] && org.keys[30] && org.ndown == 2);
-        check("  .. the rotary and the drive are as chosen", rot_mix.model == 0 && rot_on && dr_on == 1);
+        check("  .. the rotary and the drive are as chosen", rot_model_req == 0 && rot_on && dr_on == 1);
         fx_cpu_high(); blocks(256);
         check("  .. the next oldest goes", org.keys[20] == 0 && org.keys[30] && org.ndown == 1);
         fx_cpu_high(); blocks(256);
@@ -608,11 +606,11 @@ int main(void)
         }
     }
     /* 10. headroom: a loud chord (the mix several times 1.0) goes through the cabinet without clipping at its input. The swell
-     * taken down by 12 dB must take the output down by 12 dB (4.0 in rms) through CLASSIC and LIGHT as it does dry; a hard clip
+     * taken down by 12 dB must take the output down by 12 dB (4.0 in rms) through CLASSIC and CLASSIC 2 as it does dry; a hard clip
      * at the cabinet's input (the distortion with the rotary on) leaves the loud case well under 4 times the quiet one */
     {
         uint32_t m;
-        for (m = 0; m < 3; m++) {                       /* 0 dry, 1 CLASSIC, 2 LIGHT */
+        for (m = 0; m < 3; m++) {                       /* 0 dry, 1 CLASSIC, 2 CLASSIC 2 */
             double r_hi, r_lo;
             boot();
             memset(P, 0, sizeof P);
@@ -632,7 +630,7 @@ int main(void)
             pos = 0;
             blocks(22050);
             r_lo = rms_win(oL, 0, 22050);
-            printf("effects: headroom, %s: loud %.0f, quiet %.0f (ratio %.2f, 4.00 is linear)\n", m == 0 ? "dry" : m == 1 ? "CLASSIC" : "LIGHT", r_hi, r_lo, r_hi / r_lo);
+            printf("effects: headroom, %s: loud %.0f, quiet %.0f (ratio %.2f, 4.00 is linear)\n", m == 0 ? "dry" : m == 1 ? "CLASSIC" : "CLASSIC 2", r_hi, r_lo, r_hi / r_lo);
             check("  .. the output follows the swell linearly (12 dB = 4.0 within 5 %)", r_lo > 20.0 && r_hi / r_lo > 3.8 && r_hi / r_lo < 4.2);
             chord_off();
         }

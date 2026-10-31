@@ -142,6 +142,7 @@ static void up_slot_label(char *b, uint32_t k)  /* "U07" */
 /* ------------------------------------------------ the presets' organ patches --- */
 #define UPF_MAGIC 0x36465055u                    /* "UPF6" */
 #define UPF_N 128u                               /* an entry's patch: 128 7-bit values (the organ: its ORG_PSIZE first) */
+#define UPF_RENUM 0x5Du                          /* the last value of a patch entry: stored with the 0.9.23 rotary numbers (0 before) */
 #define UPF_PK 112u                              /* .. packed 8 to 7 bytes */
 typedef struct {
     uint32_t tag;                                /* upf_tag of the record it belongs to */
@@ -235,6 +236,7 @@ static int upf_store(uint32_t k)
     memset(c, 0, sizeof c);
     memcpy(c, org_patch, ORG_PSIZE);
     org_sanitize(c);
+    c[UPF_N - 1u] = UPF_RENUM;                 /* (the rotary models' numbers as of 0.9.23: see upf_track_load) */
     upf_pk_put(c, upf.e[k].pk);
     upf.e[k].tag = upf_tag(up_rec(k));
     upf.used |= 1u << k;
@@ -250,8 +252,15 @@ static void upf_track_load(track_t *t, uint32_t k)
     uint8_t pk[UPF_N];
     if (t->eng_req != ENGI_ORGAN)
         return;
-    if (upf_get(k, pk))
+    if (upf_get(k, pk))                       /* (1: not stored: the factory's first) */
         memcpy(pk, ORG_FACTORY[0], ORG_PSIZE);
+    else if (pk[UPF_N - 1u] != UPF_RENUM) {
+        /* a patch stored by 0.9.22 or earlier: the rotary models were renumbered in 0.9.23 (LIGHT, the old CLASSIC 2 .. 4
+         * and the 256 angles are gone; the old CLASSIC 5 and 6 are CLASSIC 2 and 5). Its sound is kept */
+        static const uint8_t ROT_MAP[7] = {0u, 1u, 0u, 2u, 0u, 1u, 4u};
+        if (pk[OP_ROT_MODEL] < 7u)
+            pk[OP_ROT_MODEL] = ROT_MAP[pk[OP_ROT_MODEL]];
+    }
     org_set_patch(pk);
 }
 

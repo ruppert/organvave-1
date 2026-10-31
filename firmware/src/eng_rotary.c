@@ -55,16 +55,6 @@ static int16_t rot_fir_ram[2][ROT_NA][5] __attribute__((section(".pool")));
 #define RT_FIR ROT_FIR
 #endif
 
-/* CLASSIC 4 (ROT_V_ANG256): its own angle tables, 256 angles = every 4th entry of the 1024 (rot_load_tables): 9 KB of
- * pool more than CLASSIC alone, the 1024 stay for the other models */
-#ifdef ROT_RAM
-#define POOL_ATTR __attribute__((section(".pool")))
-#else
-#define POOL_ATTR
-#endif
-#define ROT_NA2 256u
-static int32_t rot_disp256[4][ROT_NA2] POOL_ATTR;
-static int16_t rot_fir256[2][ROT_NA2][5] POOL_ATTR;
 
 #define ROT_LINE 1024u                 /* the delay lines: 1024 samples */
 #define ROT_MASK (ROT_LINE - 1u)
@@ -73,15 +63,14 @@ static int16_t rot_fir256[2][ROT_NA2][5] POOL_ATTR;
 #define ROT_CTL 32u                    /* the speed ramp's block (setBfree's bufferLengthSamples) */
 #define ROT_FS 44100u
 /* the variants (rot_t.var, the classic engine's options; 0 is setBfree's CLASSIC, bit for bit):
- *   ROT_V_NEAR  the horn taps' FIR read at the nearest table entry (no interpolation)
  *   ROT_V_DRUM4 the drum taps' displacement refreshed every 4 samples
- *   ROT_V_TAP4  the horn's last tap pair (4, 5) left out (four horn taps) */
-#define ROT_V_NEAR 1u
+ *   ROT_V_TAP4  the horn's last tap pair (4, 5) left out (four horn taps)
+ *   ROT_V_GEOM8 the horn taps' geometry (FIR and delay) computed every 8 samples, the delay ramped between them
+ *   ROT_V_GEOM4 the same every 4 samples */
 #define ROT_V_DRUM4 2u
 #define ROT_V_TAP4 4u
-#define ROT_V_ANG256 8u              /* CLASSIC 4: the 256-angle tables (rot_disp256 / rot_fir256) */
-#define ROT_V_GEOM8 16u              /* CLASSIC 5: the horn's geometry (FIR and delay) every 8 samples, held between */
-#define ROT_V_GEOM4 32u              /* CLASSIC 6: the same every 4 samples */
+#define ROT_V_GEOM8 16u
+#define ROT_V_GEOM4 32u
 
 /* the taps' phases and spacings (setBfree's hornPhase / hornSpacing: horn 0..5, drum 6..11 in ROT_PHASE, ROT_SPACE) */
 
@@ -185,17 +174,11 @@ static inline uint32_t tab_f8(uint32_t h, uint32_t ang, uint32_t sh)
     uint32_t lo = 8u - sh;
     return ((h & ((1u << sh) - 1u)) << lo) | ((ang >> (18u - lo)) & ((1u << lo) - 1u));
 }
-static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int16_t c[5], uint32_t near, uint32_t sh)
+static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int16_t c[5], uint32_t sh)
 {
     uint32_t mask = (16384u >> sh) - 1u, k = h >> sh, fr = h & ((1u << sh) - 1u), j;
     uint32_t k1 = (k + 1u) & mask;
     k &= mask;
-    if (near) {                                       /* ROT_V_NEAR: the entry nearest to the angle */
-        k = (k + (fr >> (sh - 1u))) & mask;
-        for (j = 0; j < 5; j++)
-            c[j] = f[k][j];
-        return;
-    }
     for (j = 0; j < 5; j++) {
         int32_t a = f[k][j], b = f[k1][j];
         c[j] = (int16_t)(a + (((b - a) * (int32_t)fr) >> sh));
@@ -209,7 +192,7 @@ static inline void horn_geom(rot_t *r, uint32_t ang, uint32_t P, const int32_t *
                              int16_t c[5], int32_t *ts)
 {
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[P]) & 16383u;
-    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c, r->var & ROT_V_NEAR, sh);
+    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c, sh);
     *ts = ROT_SPACE[P] + tab_disp(disp, h, tab_f8(h, ang, sh), sh);
 }
 static inline void horn_tap(int32_t x, const int32_t *hist, int32_t *buf, const int16_t c[5], int32_t ts, uint32_t op)
@@ -336,15 +319,6 @@ static void rot_load_tables(void)
                 rot_fir_ram[i][j][c] = ROT_FIR[i][j][c];
         }
 #endif
-    for (i = 0; i < 4; i++)                              /* CLASSIC 4's 256 angles: every 4th of the 1024 */
-        for (j = 0; j < ROT_NA2; j++)
-            rot_disp256[i][j] = RT_DISP[i][j * 4u];
-    for (i = 0; i < 2; i++)
-        for (j = 0; j < ROT_NA2; j++) {
-            uint32_t c;
-            for (c = 0; c < 5; c++)
-                rot_fir256[i][j][c] = RT_FIR[i][j * 4u][c];
-        }
 }
 /* the cabinet emptied (the lines, the filters, the reflections), the rotors untouched: a model that has not run for a
  * while starts from silence */
@@ -494,21 +468,15 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
             outR[i] = mul24(outR[i], r->vg);
         }
 }
-/* the sample loop for the two table sets: setBfree's 1024 angles (shift 4) and CLASSIC 4's 256 (shift 6, ROT_V_ANG256) */
+/* the sample loop: setBfree's 1024 angles (shift 4) */
 #ifdef ROT_RAM
 __attribute__((noinline))
 #endif
 static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
 {
-    if (r->var & ROT_V_ANG256) {
-        const int32_t *D[4] = {rot_disp256[0], rot_disp256[1], rot_disp256[2], rot_disp256[3]};
-        const int16_t (*F[2])[5] = {rot_fir256[0], rot_fir256[1]};
-        rot_body(r, in, outL, outR, n, 6u, D, F);
-    } else {
-        const int32_t *D[4] = {RT_DISP[0], RT_DISP[1], RT_DISP[2], RT_DISP[3]};
-        const int16_t (*F[2])[5] = {RT_FIR[0], RT_FIR[1]};
-        rot_body(r, in, outL, outR, n, 4u, D, F);
-    }
+    const int32_t *D[4] = {RT_DISP[0], RT_DISP[1], RT_DISP[2], RT_DISP[3]};
+    const int16_t (*F[2])[5] = {RT_FIR[0], RT_FIR[1]};
+    rot_body(r, in, outL, outR, n, 4u, D, F);
 }
 
 /* one block of CTL samples (n <= ROT_CTL), the CLASSIC model alone: in (Q15 mono) to outL and outR (Q15) */
@@ -516,6 +484,18 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
 {
     rot_speeds(r);
     rot_samples(r, in, outL, outR, n);
+}
+
+/* the models (the patch byte OP_ROT_MODEL): 0 CLASSIC (setBfree's whirl.c), 1 CLASSIC 2 (the horn's geometry every 8
+ * samples), 2 CLASSIC 3 (four horn taps), 3 CLASSIC 4 (the drum every 4 samples and four horn taps), 4 CLASSIC 5 (the
+ * horn's geometry every 4 samples). The variants change at once: the classic states carry over. Their levels match
+ * CLASSIC's in dB (ROT_VG, Q24). */
+static const uint8_t ROT_VAR[5] = {0u, ROT_V_GEOM8, ROT_V_TAP4, ROT_V_DRUM4 | ROT_V_TAP4, ROT_V_GEOM4};
+static const int32_t ROT_VG[5] = {1 << 24, 1 << 24, 16944154, 16928555, 1 << 24};   /* CLASSIC 3: +0.09 dB; CLASSIC 4: +0.078 dB (both measured: rotary_test) */
+static void rotary_model(rot_t *r, uint32_t model)
+{
+    r->var = ROT_VAR[model];
+    r->vg = ROT_VG[model];
 }
 
 #endif /* ENG_ROTARY_C */

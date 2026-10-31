@@ -40,7 +40,7 @@ UI: the organ's panel and screens replaced it.
 | scanner vibrato / chorus | ~1 KB | ~1 KB | |
 | preamp | ~1 KB | ~1 KB | |
 | rotary CLASSIC (improved whirl, below) | ~53 KB | ~37 KB | 37 KB of angle tables copied to SRAM at boot, four 1024-sample lines |
-| rotary LIGHT (physical model, below) | ~3 KB | - | both models stay allocated: switching never reallocates |
+| rotary LIGHT (physical model; removed in 0.9.23) | ~3 KB | - | - |
 | total new | ~68 KB | ~49 KB | of 164 KB / 316 KB free |
 
 Static loop-instruction cost (method of `tests/target_budget.py`, probe kernels compiled with the chip's clang):
@@ -54,7 +54,7 @@ Static loop-instruction cost (method of `tests/target_budget.py`, probe kernels 
 | rotary, setBfree whirl reduced (256-angle tables, the first plan) | 767 |
 | rotary CLASSIC: whirl, 1024 angles, interpolated coefficients (below) | 951 |
 | rotary CLASSIC, economy variant: 1024 angles, nearest coefficients | ~767 |
-| rotary LIGHT: minimal physical model (stereo), + HORN tone filter | 210 + ~10 |
+| rotary LIGHT: minimal physical model (stereo), + HORN tone filter (removed in 0.9.23) | 210 + ~10 |
 
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
@@ -66,16 +66,14 @@ and the drive on, the economy variant (same sidebands, about 19 dB more residual
 
 ## Rotary speaker: two models, selectable **(owner)**
 
-The ROTARY pop-up has a MODEL field: **CLASSIC** (the owner's option 2: setBfree's `whirl.c`, reduced) and **LIGHT** (the
-owner's option 3: the minimal physical model). **(owner)** MODEL is part of every preset: loading a preset sets it, like
+The ROTARY pop-up has a MODEL field: **CLASSIC** (the owner's option 2: setBfree's `whirl.c`, reduced) and its variants CLASSIC 2 to 5 (0.9.23; LIGHT was removed). **(owner)** MODEL is part of every preset: loading a preset sets it, like
 the rest of the rotary's values; there is no global override. Switching fades the output over about 20 ms and starts the
 other model from its current rotor angles and speeds, so the rotation goes on without a jump. Both models are always
 allocated.
 
 **One set of parameters for both models**, so a preset's values mean the same whichever MODEL it names: horn and drum
 speeds (slow, fast), acceleration and deceleration of each, STOP (the rotors brake and halt), HORN / DRUM balance, width
-(the mic angle), leakage (the direct signal around the cabinet) and HORN character (default, mellow, sharp). In LIGHT the
-HORN character is a tone filter on the horn path (about 10 instructions a sample) fitted to CLASSIC's three filter sets;
+(the mic angle), leakage (the direct signal around the cabinet) and HORN character (default, mellow, sharp). (Before 0.9.23, LIGHT's HORN character was a tone filter on the horn path, about 10 instructions a sample, fitted to CLASSIC's three filter sets;
 LIGHT's own internals (crossover frequency, AM and Doppler depths, reflection level) are factory tuning against CLASSIC,
 not on the screen. CLASSIC's geometry (horn and drum radius, mic distance) is fixed: its angle tables are generated from
 it in `tools/`.
@@ -117,19 +115,13 @@ measured at the output 4.10 s up (parameter 4.127), 1.48 s down (1.371). The dru
 (-331 .. +28 cents at 150 Hz, fast); the literature calls the drum mostly AM: noted, to revisit with measurements. The
 horn's angle coefficients in setBfree were read off a figure, not measured.
 
-### LIGHT: the minimal physical model
+### The CLASSIC models (0.9.23)
 
-A crossover (one low-pass biquad near 800 Hz, high = input - low), the horn with a direct and a reflected read tap per
-mic (linear interpolation, delays ramped per block from the rotor angle), angle-dependent gains ramped per block; the
-drum with one read tap and a gain per mic; one shared input line per rotor (512 samples). Built: 337 loop instructions
-a sample plus 144 a block, 4 KB, against the plan's 210 (its tone biquad, a Q14 direct form I crossover and the model's six
-ramps are in it). It has no reference of its own, so it is tuned against CLASSIC with the same measurements (rotation rates and
-their time constants, horn and drum AM, FM in cents, the first sideband pairs, the left / right difference): the two
-models then share speeds, acceleration and balance, and LIGHT is the cheaper approximation of CLASSIC, not a different
-speaker. **Measured** (`tests/rotary_light_test.c`, `tools/rotary_light/`): the sidebands of nine tones within 5 to 10 dB rms of
-CLASSIC's (mean 6.4), the levels within 1.4 to 4.1 dB (6.7 for a 500 Hz tone on the drum: the crossover's region), the same
-at slow and fast speeds; a character match (rates, depth of the modulation, left / right difference), not a sideband-by-sideband
-one. The horn's tone is one biquad fitted to CLASSIC's horn filters above 500 Hz: 1.0 dB rms (default), 4 dB (sharp).
+LIGHT was removed in 0.9.23 (and the 256-angle model). The rotary's models are all the CLASSIC engine (setBfree's
+`whirl.c`, the tables at 1024 angles) with a variant: CLASSIC 2 (the horn's FIR and delay every 8 samples, ramped), CLASSIC 3
+(four horn taps), CLASSIC 4 (the drum every 4 samples and four horn taps) and CLASSIC 5 (the horn's geometry every 4
+samples). Their levels are matched to CLASSIC's in dB (`ROT_VG`, measured by `tests/rotary_test.c`), and each stays
+within the bounds that test checks (30 dB SNR for CLASSIC 2 and 5, 10 to 25 dB for CLASSIC 3 and 4).
 
 ### Alternatives studied (first plan)
 
@@ -173,11 +165,11 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   1 / (1 - fb), 1000 at fb 0.999, outside the usable range); the input of the stage after the drive must be clamped (the
   largest gains put the output at 7 times full scale). Nothing here is tested on a real FM-1.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
-- **Rotary**: above (CLASSIC from `whirl.c`, LIGHT our own).
+- **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 
 ## Effects section **(owner)**
 
-REVERB, ROTARY (MODEL CLASSIC / LIGHT, speeds and acceleration, HORN / ROTOR balance, HORN character), DRIVE (gain, overdrive types, tone), DELAY and EQ, each
+REVERB, ROTARY (MODEL CLASSIC 1 to 5, speeds and acceleration, HORN / ROTOR balance, HORN character), DRIVE (gain, overdrive types, tone), DELAY and EQ, each
 edited in a pop-up as FMini-1's FX page did.
 
 ## Interface

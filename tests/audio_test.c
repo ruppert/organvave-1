@@ -47,7 +47,7 @@ static void fresh(void)
     org_init();                                        /* (the tone generator from power-on: runs compare) */
     org_pgen_seen = 0xFF;
     rot_load_tables();                                 /* (the effects as at power-on too: the rotors turn, so a run starts at the same phase) */
-    rot_init(&rot_st); lt_init(&lt_st, &rot_st); dr_init(&dr_st); eq_init(&eq_st);
+    rot_init(&rot_st); dr_init(&dr_st); eq_init(&eq_st);
     rot_dc = 0; rot_idle = 0; fxo_seen = 0xFF;
     for (p = 0; p < NPART; p++) host_preset(&trk[p], ENGI_ORGAN, 0);
     memset(&felucca_dbg, 0, sizeof felucca_dbg);

@@ -1055,7 +1055,6 @@ static void mix_part(track_t *t, uint32_t n)
 
 static void events_block(uint32_t n);                 /* (seq.c) */
 #include "eng_rotary.c"             /* the rotary speaker, CLASSIC */
-#include "eng_rotary_light.c"       /* ... and LIGHT, and the switch between the two */
 #include "eng_drive.c"              /* the drive: the organ's preamp, before the master and the rotary */
 #include "eng_eq.c"                 /* the equaliser: after MASTER, before the limiter */
 _Static_assert(CTL <= DR_MAX, "the drive's longest block");
@@ -1066,10 +1065,8 @@ static volatile uint8_t dr_on;                          /* 0 off, 1 on (the effe
 /* the rotary speaker (eng_rotary.c) between the mix and the master: off (rot_on 0) the mix is as it was; on, the mono
  * sum of the mix and the reverb's return goes through the cabinet and comes out in stereo */
 static rot_t rot_st __attribute__((section(".pool")));
-static lt_t lt_st __attribute__((section(".pool")));
-static rotmix_t rot_mix;
 static volatile uint8_t rot_on;
-static volatile uint8_t rot_model_req;                  /* 0 CLASSIC, 1 LIGHT (the effects section sets it) */
+static volatile uint8_t rot_model_req;                  /* 0 CLASSIC .. 4 CLASSIC 5 (the effects section sets it) */
 
 /* the organ's effects settings (the patch bytes OP_ROT .. OP_DRV_FAT), taken at the next block after a change */
 /* the drive's output gain: setBfree's 0.8795 and 3 dB (the curve saturates: with a few keys it comes out 2 to 16 dB below the dry mix, with a full chord about 2 dB) */
@@ -1213,8 +1210,6 @@ static void mix_block(int32_t *out, uint32_t n)
         if (rot_on && !rot_w) {                         /* coming in: the cabinet starts empty */
             rot_dc = 0;
             rot_flush(&rot_st);
-            lt_init(&lt_st, &rot_st);
-            rot_mix.fade = 0;
         }
         int32_t pk = 0;
         for (i = 0; i < n; i++) {
@@ -1232,14 +1227,12 @@ static void mix_block(int32_t *out, uint32_t n)
             rot_idle = 0;
         else if (rot_idle < ROT_IDLE_BLOCKS + 1u && ++rot_idle == ROT_IDLE_BLOCKS) {
             rot_flush(&rot_st);
-            lt_init(&lt_st, &rot_st);
         }
         if (rot_idle >= ROT_IDLE_BLOCKS)                /* (and the input stays zero while it is that quiet: v >> 2 of a faint, */
             for (i = 0; i < n; i++)                     /* mostly negative remainder is a constant -1 the cabinet would carry to the output x4) */
                 xin[i] = 0;
-        if (rot_model_req != rot_mix.model)
-            rotary_model(&rot_mix, &rot_st, &lt_st, rot_model_req);
-        rotary_run(&rot_mix, &rot_st, &lt_st, xin, ol, orr, n);
+        rotary_model(&rot_st, rot_model_req);
+        rot_block(&rot_st, xin, ol, orr, n);
         rot_w += rot_on ? FX_FADE : -FX_FADE;
         rot_w = rot_w < 0 ? 0 : rot_w > 32768 ? 32768 : rot_w;
         for (i = 0; i < n; i++) {

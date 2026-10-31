@@ -137,7 +137,7 @@ await P.sendPatch();
 await wait(120);
 const got3 = (await direct(85, [0, 0])).slice(3, 3 + 64);
 ok(got3[P.OP_ROT] === 1 && got3[P.OP_ROT_MODEL] === 1 && got3[P.OP_ROT_SPEED] === 2 && got3[P.OP_ROT_HORN] === 1 &&
-   got3[P.OP_ROT_MIC] === 3 && got3[P.OP_ROT_BAL] === 6, "send: the rotary (on, LIGHT, FAST, sharp horn, 90 degrees, horn level 6) reaches the instrument");
+   got3[P.OP_ROT_MIC] === 3 && got3[P.OP_ROT_BAL] === 6, "send: the rotary (on, CLASSIC 2, FAST, sharp horn, 90 degrees, horn level 6) reaches the instrument");
 ok(got3[P.OP_DRV] === 1 && got3[P.OP_DRV_GAIN] === 9 && got3[P.OP_DRV_TYPE] === 1 && got3[P.OP_DRV_TONE] === 2 && got3[P.OP_DRV_OUT] === 7,
    "send: the drive (on, gain 9, TUBE, tone +2, output -4 dB) reaches the instrument (the second frame, bytes 48 and on, too)");
 ok(got3[P.OP_ROT_HSLOW] === 2 && got3[P.OP_ROT_DFAST] === 5 && got3[P.OP_ROT_HRAMP] === 4 && got3[P.OP_ROT_DRAMP] === 0 &&

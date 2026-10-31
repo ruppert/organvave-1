@@ -76,11 +76,9 @@ $HC -O2 -o "$OUT/rotary_test" tests/rotary_test.c -lm
 run "the rotary CLASSIC against setBfree's: the sidebands, stopped rotors, the speed ramp reaching its targets, bounds at full scale and at the filters' resonances, silence" "$OUT/rotary_test"
 $HC -O2 -o "$OUT/drive_test" tests/drive_test.c -lm
 run "the drive against setBfree's: the odd harmonics of sines at 110 Hz and 1 kHz, no even ones, block-size independence, bounds at the largest gains, silence, a DC step blocked" "$OUT/drive_test"
-$HC -O2 -o "$OUT/rotary_light_test" tests/rotary_light_test.c -lm
-run "the rotary LIGHT against CLASSIC: sidebands and levels (nine tones), bounds, silence, the model switch (a 20 ms fade, no jump, each model alone afterwards)" "$OUT/rotary_light_test"
 $HC -O2 -o "$OUT/effects_test" tests/effects_test.c -lm
 $HC -O1 -o "$OUT/midi_organ_test" tests/midi_organ_test.c -lm
-run "the effects section end to end: the patch bytes through mix_block (the rotary: speeds, STOP, LIGHT; the drive; the fades; silence)" "$OUT/effects_test"
+run "the effects section end to end: the patch bytes through mix_block (the rotary: speeds, STOP, CLASSIC 2; the drive; the fades; silence)" "$OUT/effects_test"
 $HC -O1 -o "$OUT/eq_test" tests/eq_test.c -lm
 run "the equaliser: the codings, flat, LOW / MID / HIGH against their design at the ends, the steps, bounds and the settle" "$OUT/eq_test"
 run "the organ over MIDI: the manuals by channel (GLO's MIDI channel), the swell, the drawbar CCs, the rotor speed" "$OUT/midi_organ_test"
