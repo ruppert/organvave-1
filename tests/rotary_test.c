@@ -147,7 +147,7 @@ int main(void)
         var_req = 3; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V1, L, sizeof V1);
         var_req = 4; vg_req = 16944154; render(in, L, R, N, 400, 340); memcpy(V2, L, sizeof V2);
         var_req = 9; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V3, L, sizeof V3);
-        var_req = 19; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V4, L, sizeof V4);
+        var_req = 16; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V4, L, sizeof V4);
         for (k = N / 2; k < N; k++) {
             l0 += (double)V0[k] * V0[k];
             l1 += (double)V1[k] * V1[k];
@@ -167,7 +167,7 @@ int main(void)
         check("variants: CLASSIC 2 sounds as CLASSIC (above 50 dB SNR)", 10 * log10(s1v / n1v) > 50);
         check("variants: CLASSIC 3 is another colour (SNR to CLASSIC between 10 and 25 dB)", 10 * log10(s1v / n2v) > 10 && 10 * log10(s1v / n2v) < 25);
         check("variants: CLASSIC 4 at CLASSIC's level (within 0.05 dB) and above 40 dB SNR (256 angles)", fabs(10 * log10(l3 / l0)) < 0.05 && 10 * log10(s1v / n3v) > 40);
-        check("variants: CLASSIC 5 at CLASSIC's level (within 0.05 dB) and above 30 dB SNR (horn geometry every 8, drum every 4, nearest FIR)", fabs(10 * log10(l4 / l0)) < 0.05 && 10 * log10(s1v / n4v) > 30);
+        check("variants: CLASSIC 5 at CLASSIC's level (within 0.05 dB) and above 30 dB SNR (horn geometry every 8 samples)", fabs(10 * log10(l4 / l0)) < 0.05 && 10 * log10(s1v / n4v) > 30);
     }
     return bad ? 1 : 0;
 }

@@ -142,7 +142,7 @@ typedef struct {
 /* the models: 0 CLASSIC, 1 LIGHT, 2 CLASSIC 2 (A+B), 3 CLASSIC 3 (D): the classic engine with a variant (rot_t.var) and
  * its level (ROT_VG, Q24, matched to CLASSIC's in dB). Only a change to or from LIGHT crossfades; between the classic
  * models the variant changes at once (the classic states carry over). */
-static const uint8_t ROT_VAR[6] = {0u, 0u, ROT_V_NEAR | ROT_V_DRUM4, ROT_V_TAP4, ROT_V_ANG256 | ROT_V_NEAR, ROT_V_NEAR | ROT_V_DRUM4 | ROT_V_GEOM8};
+static const uint8_t ROT_VAR[6] = {0u, 0u, ROT_V_NEAR | ROT_V_DRUM4, ROT_V_TAP4, ROT_V_ANG256 | ROT_V_NEAR, ROT_V_GEOM8};
 static const int32_t ROT_VG[6] = {1 << 24, 1 << 24, 1 << 24, 16944154, 1 << 24, 1 << 24};   /* CLASSIC 3: +0.09 dB (its level is -0.09 dB under CLASSIC) */
 static const int32_t LT_VG = 13922586;                                  /* LIGHT, Q24: -1.62 dB (it was +1.6 dB over CLASSIC) */
 static void lt_gain(int32_t *oL, int32_t *oR, uint32_t n)
