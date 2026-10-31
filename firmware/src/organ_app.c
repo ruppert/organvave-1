@@ -689,7 +689,7 @@ typedef struct {
 } oa_val_t;
 
 static void oa_vt(oa_val_t *v, const char *s) { str_cpy(v->t, s, 16); }
-static const char *const ROT_MODEL_NAME[6] = {"CLASSIC", "LIGHT", "CLASSIC 2", "CLASSIC 3", "CLASSIC 4", "CLASSIC 5"};
+static const char *const ROT_MODEL_NAME[7] = {"CLASSIC", "LIGHT", "CLASSIC 2", "CLASSIC 3", "CLASSIC 4", "CLASSIC 5", "CLASSIC 6"};
 static void oa_vnum(oa_val_t *v, int32_t x, int32_t dec, const char *unit)   /* x with dec decimals, then the unit */
 {
     fmt_fix(v->t, x, (uint32_t)dec);
@@ -825,7 +825,7 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
         if (r == 0u)
             oa_vsw(v, OP_ROT, "OFF", "ON");
         else if (r == 1u) {
-            oa_vt(v, ROT_MODEL_NAME[org_patch[OP_ROT_MODEL] % 6u]);
+            oa_vt(v, ROT_MODEL_NAME[org_patch[OP_ROT_MODEL] % 7u]);
             v->on = org_patch[OP_ROT] != 0;
         } else if (r == 2u)
             oa_vsw(v, OP_ROT_HORN, "NORMAL", "SHARP");
@@ -969,7 +969,7 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
         if (r == 0u)
             org_set(OP_ROT, on);
         else if (r == 1u)
-            org_set(OP_ROT_MODEL, (uint32_t)clamp(oa_u(OP_ROT_MODEL, 5u) + d, 0, 5));   /* CLASSIC, LIGHT, CLASSIC 2, CLASSIC 3, CLASSIC 4, CLASSIC 5 */
+            org_set(OP_ROT_MODEL, (uint32_t)clamp(oa_u(OP_ROT_MODEL, 6u) + d, 0, 6));   /* CLASSIC, LIGHT, CLASSIC 2, CLASSIC 3, CLASSIC 4, CLASSIC 5, CLASSIC 6 */
         else if (r == 2u)
             org_set(OP_ROT_HORN, on);
         else if (r == 3u)

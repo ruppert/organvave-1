@@ -81,6 +81,7 @@ static int16_t rot_fir256[2][ROT_NA2][5] POOL_ATTR;
 #define ROT_V_TAP4 4u
 #define ROT_V_ANG256 8u              /* CLASSIC 4: the 256-angle tables (rot_disp256 / rot_fir256) */
 #define ROT_V_GEOM8 16u              /* CLASSIC 5: the horn's geometry (FIR and delay) every 8 samples, held between */
+#define ROT_V_GEOM4 32u              /* CLASSIC 6: the same every 4 samples */
 
 /* the taps' phases and spacings (setBfree's hornPhase / hornSpacing: horn 0..5, drum 6..11 in ROT_PHASE, ROT_SPACE) */
 
@@ -103,7 +104,7 @@ typedef struct {
     uint8_t var;                       /* the variant (ROT_V_*), 0 CLASSIC */
     int32_t vg;                        /* the variant's output gain, Q24: it matches CLASSIC's level (1.0 for 0) */
     int32_t dc[6];                     /* the drum taps' displacements (every sample, or every 4 with ROT_V_DRUM4) */
-    int32_t geo_ok;                    /* CLASSIC 5: the anchors below are valid (0 after a block without ROT_V_GEOM8) */
+    int32_t geo_ok;                    /* CLASSIC 5: the anchors below are valid (0 after a block without ROT_V_GEOM8/4) */
     int32_t ga[6], gb[6];              /* CLASSIC 5: the horn delays at the current anchor and at the next (8 samples ahead) */
     int32_t sl[6], cur[6];             /* CLASSIC 5: the delays' step per sample and their running value */
     int16_t cA[6][5], cB[6][5];        /* CLASSIC 5: the horn FIRs at the current and the next anchor (held through the block; Q15, in int16) */
@@ -382,7 +383,7 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
 
         /* 0) the horn taps' geometry. Every sample; or, with ROT_V_GEOM8, the FIR is held for 8 samples and the delay ramps
          * linearly between this block's anchor and the next one, 8 samples ahead, so the ramp is centred on its samples */
-        if (!(r->var & ROT_V_GEOM8)) {
+        if (!(r->var & (ROT_V_GEOM8 | ROT_V_GEOM4))) {
             r->geo_ok = 0;
             horn_geom(r, ang_hf, 0, D[0], F[1], sh, gc[0], &gt[0]);
             horn_geom(r, ang_hb, 1, D[1], F[0], sh, gc[1], &gt[1]);
@@ -394,8 +395,9 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
             }
             for (uint32_t k = 0; k < ntap; k++) gp[k] = gc[k];
         } else {
-            if ((op & 7u) == 0) {                      /* the blocks run on the rotors' sample count, not on the call's */
-                uint32_t k, af = ang_hf + (r->inc_h << 3), ab = ang_hb + (r->inc_h << 3);
+            uint32_t gb_n = (r->var & ROT_V_GEOM4) ? 2u : 3u;      /* the block: 4 or 8 samples */
+            if ((op & ((1u << gb_n) - 1u)) == 0) {     /* the blocks run on the rotors' sample count, not on the call's */
+                uint32_t k, af = ang_hf + (r->inc_h << gb_n), ab = ang_hb + (r->inc_h << gb_n);
                 if (!r->geo_ok) {                      /* the first block: the current anchor, computed here */
                     horn_geom(r, ang_hf, 0, D[0], F[1], sh, r->cA[0], &r->ga[0]);
                     horn_geom(r, ang_hb, 1, D[1], F[0], sh, r->cA[1], &r->ga[1]);
@@ -421,7 +423,7 @@ static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32
                     horn_geom(r, ab, 5, D[1], F[0], sh, r->cB[5], &r->gb[5]);
                 }
                 for (k = 0; k < ntap; k++) {           /* the step over the block, and the first sample's delay */
-                    r->sl[k] = (r->gb[k] - r->ga[k]) >> 3;
+                    r->sl[k] = (r->gb[k] - r->ga[k]) >> gb_n;
                     r->cur[k] = r->ga[k] + r->sl[k];
                 }
             }

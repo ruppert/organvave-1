@@ -411,8 +411,10 @@ int main(int argc, char **argv)
         turn(EN_K2, 1);
         bad += check("  .. KNOB 2 again: CLASSIC 5", org_patch[OP_ROT_MODEL] == 5);
         turn(EN_K2, 1);
-        bad += check("  .. KNOB 2 at the end: stays CLASSIC 5", org_patch[OP_ROT_MODEL] == 5);
-        turn(EN_K2, -4);
+        bad += check("  .. KNOB 2 again: CLASSIC 6", org_patch[OP_ROT_MODEL] == 6);
+        turn(EN_K2, 1);
+        bad += check("  .. KNOB 2 at the end: stays CLASSIC 6", org_patch[OP_ROT_MODEL] == 6);
+        turn(EN_K2, -5);
         bad += check("  .. KNOB 2 back to LIGHT", org_patch[OP_ROT_MODEL] == 1);
         turn(EN_K3, 1);
         bad += check("  .. KNOB 3: the sharp horn", org_patch[OP_ROT_HORN] == 1);
