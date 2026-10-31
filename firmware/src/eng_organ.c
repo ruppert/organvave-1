@@ -535,7 +535,7 @@ enum {
     OP_PERC_SEL = 32,           /* the harmonic: 0 the 4' (second), 1 the 2 2/3' (third) */
     OP_VIB = 33,                /* scanner: 0 off, 1..3 VIB1..3, 4..6 CHO1..3 */
     OP_ROT = 34,                /* rotary speaker (version 0.3.0; 0 in older patches): 0 off, 1 on */
-    OP_ROT_MODEL = 35,          /* 0 CLASSIC (setBfree's whirl.c), 1 LIGHT (the cheaper model), 2 CLASSIC 2 (0.10.6: A+B), 3 CLASSIC 3 (D) */
+    OP_ROT_MODEL = 35,          /* 0 CLASSIC (setBfree's whirl.c), 1 LIGHT (the cheaper model), 2 CLASSIC 2 (0.10.6: A+B), 3 CLASSIC 3 (D), 4 CLASSIC 4 (256 angles) */
     OP_ROT_SPEED = 36,          /* 0 STOP, 1 SLOW (chorale), 2 FAST (tremolo) */
     OP_ROT_HORN = 37,           /* the horn's character: 0 normal, 1 sharp */
     OP_ROT_MIC = 38,            /* the mics' angle (the stereo width): 0 wide (180 degrees) .. 6 mono (0), 30 degrees a step */
@@ -653,7 +653,7 @@ static uint32_t org_pmax(uint32_t i)
     if (i == OP_ROT || i == OP_ROT_HORN || i == OP_DRV)
         return 1u;
     if (i == OP_ROT_MODEL)
-        return 3u;
+        return 4u;
     if (i == OP_ROT_SPEED)
         return 2u;
     if (i == OP_ROT_BAL || i == OP_DRV_FAT || (i >= OP_DRV_TONE && i <= OP_ROT_DRAMP))

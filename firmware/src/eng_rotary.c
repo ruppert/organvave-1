@@ -55,6 +55,17 @@ static int16_t rot_fir_ram[2][ROT_NA][5] __attribute__((section(".pool")));
 #define RT_FIR ROT_FIR
 #endif
 
+/* CLASSIC 4 (ROT_V_ANG256): its own angle tables, 256 angles = every 4th entry of the 1024 (rot_load_tables): 9 KB of
+ * pool more than CLASSIC alone, the 1024 stay for the other models */
+#ifdef ROT_RAM
+#define POOL_ATTR __attribute__((section(".pool")))
+#else
+#define POOL_ATTR
+#endif
+#define ROT_NA2 256u
+static int32_t rot_disp256[4][ROT_NA2] POOL_ATTR;
+static int16_t rot_fir256[2][ROT_NA2][5] POOL_ATTR;
+
 #define ROT_LINE 1024u                 /* the delay lines: 1024 samples */
 #define ROT_MASK (ROT_LINE - 1u)
 #define ROT_G 2                        /* the lines hold Q15 + ROT_G bits: the taps' rounding is 2^-ROT_G smaller */
@@ -68,6 +79,7 @@ static int16_t rot_fir_ram[2][ROT_NA][5] __attribute__((section(".pool")));
 #define ROT_V_NEAR 1u
 #define ROT_V_DRUM4 2u
 #define ROT_V_TAP4 4u
+#define ROT_V_ANG256 8u              /* CLASSIC 4: the 256-angle tables (rot_disp256 / rot_fir256) */
 
 /* the taps' phases and spacings (setBfree's hornPhase / hornSpacing: horn 0..5, drum 6..11 in ROT_PHASE, ROT_SPACE) */
 
@@ -154,44 +166,51 @@ static inline int32_t rot_frac(int32_t a, int32_t f)
  * interpolated at the exact angle, as setBfree's is (its h1 is a float with the angle's fraction): f8 is the position
  * between two table entries in 256ths, h's low 4 bits and the 4 bits of the angle below them. The FIR is read at the
  * nearest 16384th (setBfree's x_iroundf) and interpolated between the table entries at that integer position. */
-static inline int32_t tab_disp(const int32_t *d, uint32_t h, uint32_t f8)
+static inline int32_t tab_disp(const int32_t *d, uint32_t h, uint32_t f8, uint32_t sh)
 {
-    uint32_t k = h >> 4;
-    int32_t a = d[k & (ROT_NA - 1u)], b = d[(k + 1u) & (ROT_NA - 1u)];
+    uint32_t mask = (16384u >> sh) - 1u, k = h >> sh;
+    int32_t a = d[k & mask], b = d[(k + 1u) & mask];
     return a + (((b - a) * (int32_t)f8) >> 8);
 }
-static inline void tab_fir(const int16_t f[ROT_NA][5], uint32_t h, int32_t c[5], uint32_t near)
+/* the angle's fraction in 256ths of a table step: the h bits below the step, then the two (sh 4) or four (sh 6)
+ * bits of the angle below them */
+static inline uint32_t tab_f8(uint32_t h, uint32_t ang, uint32_t sh)
 {
-    uint32_t k = h >> 4, fr = h & 15u, j;
-    uint32_t k1 = (k + 1u) & (ROT_NA - 1u);
-    k &= ROT_NA - 1u;
+    uint32_t lo = 8u - sh;
+    return ((h & ((1u << sh) - 1u)) << lo) | ((ang >> (18u - lo)) & ((1u << lo) - 1u));
+}
+static inline void tab_fir(const int16_t (*f)[5], uint32_t h, int32_t c[5], uint32_t near, uint32_t sh)
+{
+    uint32_t mask = (16384u >> sh) - 1u, k = h >> sh, fr = h & ((1u << sh) - 1u), j;
+    uint32_t k1 = (k + 1u) & mask;
+    k &= mask;
     if (near) {                                       /* ROT_V_NEAR: the entry nearest to the angle */
-        k = (k + (fr >> 3)) & (ROT_NA - 1u);
+        k = (k + (fr >> (sh - 1u))) & mask;
         for (j = 0; j < 5; j++)
             c[j] = f[k][j];
         return;
     }
     for (j = 0; j < 5; j++) {
         int32_t a = f[k][j], b = f[k1][j];
-        c[j] = a + (((b - a) * (int32_t)fr) >> 4);
+        c[j] = a + (((b - a) * (int32_t)fr) >> sh);
     }
 }
 
 /* a horn tap (setBfree's HN_MOTION): its read through the FIR of the four last inputs (hist, newest first), the
  * delay at the displacement, the write split linearly between the two samples around it (de-interpolating) */
-static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *disp, const int16_t fir[ROT_NA][5],
-                            int32_t x, const int32_t *hist, int32_t *buf)
+static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *disp, const int16_t (*fir)[5],
+                            int32_t x, const int32_t *hist, int32_t *buf, uint32_t sh)
 {
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[P]) & 16383u;
     int32_t c[5], xa, t, q, f;
     uint32_t n;
-    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c, r->var & ROT_V_NEAR);
+    tab_fir(fir, (h + ((ang >> 17) & 1u)) & 16383u, c, r->var & ROT_V_NEAR, sh);
     {   /* the FIR's five products (Q15 coefficients) summed before one rounding, in the lines' format */
         int32_t hi = x * (c[0] >> 8) + hist[0] * (c[1] >> 8) + hist[1] * (c[2] >> 8) + hist[2] * (c[3] >> 8) + hist[3] * (c[4] >> 8);
         int32_t lo = x * (c[0] & 255) + hist[0] * (c[1] & 255) + hist[1] * (c[2] & 255) + hist[2] * (c[3] & 255) + hist[3] * (c[4] & 255);
         xa = (hi + ((lo + 128) >> 8) + (1 << (6 - ROT_G))) >> (7 - ROT_G);
     }
-    t = ROT_SPACE[P] + tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u)) + (int32_t)(r->outpos << ROT_D);
+    t = ROT_SPACE[P] + tab_disp(disp, h, tab_f8(h, ang, sh), sh) + (int32_t)(r->outpos << ROT_D);
     n = ((uint32_t)(t >> ROT_D)) & ROT_MASK;
     f = t & ((1 << ROT_D) - 1);
     q = rot_frac(xa, f);
@@ -199,12 +218,13 @@ static inline void horn_tap(rot_t *r, uint32_t ang, uint32_t P, const int32_t *d
     buf[(n + 1u) & ROT_MASK] += q;
 }
 
-/* a drum tap (setBfree's DR_MOTION): no FIR, the same split write */
-static inline int32_t drum_disp(uint32_t ang, uint32_t P, const int32_t *disp)
+/* a drum tap's displacement (setBfree's DR_MOTION): no FIR */
+static inline int32_t drum_disp(uint32_t ang, uint32_t P, const int32_t *disp, uint32_t sh)
 {
     uint32_t h = ((ang >> 18) + (uint32_t)ROT_PHASE[6u + P]) & 16383u;
-    return tab_disp(disp, h, ((h & 15u) << 4) | ((ang >> 14) & 15u));
+    return tab_disp(disp, h, tab_f8(h, ang, sh), sh);
 }
+/* a drum tap: the same split write, at the displacement td */
 static inline void drum_tap(rot_t *r, uint32_t P, int32_t td, int32_t x, int32_t *buf)
 {
     int32_t t, q, f;
@@ -291,10 +311,10 @@ static void rot_mic(rot_t *r, uint32_t deg)
 }
 
 /* one block of CTL samples (n <= ROT_CTL): in (Q15 mono) to outL and outR (Q15) */
-#ifdef ROT_RAM
 static void rot_load_tables(void)
 {
     uint32_t i, j;
+#ifdef ROT_RAM
     for (i = 0; i < 4; i++)
         for (j = 0; j < ROT_NA; j++)
             rot_disp_ram[i][j] = ROT_DISP[i][j];
@@ -304,8 +324,17 @@ static void rot_load_tables(void)
             for (c = 0; c < 5; c++)
                 rot_fir_ram[i][j][c] = ROT_FIR[i][j][c];
         }
-}
 #endif
+    for (i = 0; i < 4; i++)                              /* CLASSIC 4's 256 angles: every 4th of the 1024 */
+        for (j = 0; j < ROT_NA2; j++)
+            rot_disp256[i][j] = RT_DISP[i][j * 4u];
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < ROT_NA2; j++) {
+            uint32_t c;
+            for (c = 0; c < 5; c++)
+                rot_fir256[i][j][c] = RT_FIR[i][j * 4u][c];
+        }
+}
 /* the cabinet emptied (the lines, the filters, the reflections), the rotors untouched: a model that has not run for a
  * while starts from silence */
 static void rot_flush(rot_t *r)
@@ -325,14 +354,11 @@ static void rot_speeds(rot_t *r)
     rot_ramp(&r->inc_d, r->tgt_d, &r->acdc_d, r->acdc_d > 0 ? r->k_da : r->k_dd, &r->rem_d);
 }
 
-#ifdef ROT_RAM
-__attribute__((noinline))
-#endif
-static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
+static inline __attribute__((always_inline)) void rot_body(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n,
+                                                           uint32_t sh, const int32_t *const *D, const int16_t (*const *F)[5])
 {
     uint32_t i;
     const int32_t *ca = ROT_CPL[r->hset ? 3 : 0], *cb = ROT_CPL[r->hset ? 4 : 1];     /* the horn character's two filters */
-    uint32_t k;
 
     for (i = 0; i < n; i++) {
         int32_t xx = in[i], x, leak, y, lo, ro;
@@ -347,25 +373,31 @@ static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *out
         leak = mul14(x * (1 << ROT_G), r->leak);
 
         /* 2) the horn: taps 0 and 1 (history 0), reflection 1, taps 2 and 3 (history 1), reflection 2, taps 4 and 5 */
-        horn_tap(r, ang_hf, 0, RT_DISP[0], RT_FIR[1], x, r->hh[0], r->HL);
-        horn_tap(r, ang_hb, 1, RT_DISP[1], RT_FIR[0], x, r->hh[0], r->HR);
+        horn_tap(r, ang_hf, 0, D[0], F[1], x, r->hh[0], r->HL, sh);
+        horn_tap(r, ang_hb, 1, D[1], F[0], x, r->hh[0], r->HR, sh);
         r->hh[0][3] = r->hh[0][2]; r->hh[0][2] = r->hh[0][1]; r->hh[0][1] = r->hh[0][0]; r->hh[0][0] = x;
         x = rot_refl(&r->rf[0], x);
 
-        horn_tap(r, ang_hf, 2, RT_DISP[1], RT_FIR[0], x, r->hh[1], r->HL);
-        horn_tap(r, ang_hb, 3, RT_DISP[0], RT_FIR[1], x, r->hh[1], r->HR);
+        horn_tap(r, ang_hf, 2, D[1], F[0], x, r->hh[1], r->HL, sh);
+        horn_tap(r, ang_hb, 3, D[0], F[1], x, r->hh[1], r->HR, sh);
         r->hh[1][3] = r->hh[1][2]; r->hh[1][2] = r->hh[1][1]; r->hh[1][1] = r->hh[1][0]; r->hh[1][0] = x;
         if (!(r->var & ROT_V_TAP4)) {                 /* ROT_V_TAP4 leaves this last pair out */
             x = rot_refl(&r->rf[1], x);
-            horn_tap(r, ang_hf, 4, RT_DISP[0], RT_FIR[1], x, r->hh[2], r->HL);
-            horn_tap(r, ang_hb, 5, RT_DISP[1], RT_FIR[0], x, r->hh[2], r->HR);
+            horn_tap(r, ang_hf, 4, D[0], F[1], x, r->hh[2], r->HL, sh);
+            horn_tap(r, ang_hb, 5, D[1], F[0], x, r->hh[2], r->HR, sh);
             r->hh[2][3] = r->hh[2][2]; r->hh[2][2] = r->hh[2][1]; r->hh[2][1] = r->hh[2][0]; r->hh[2][0] = x;
         }
 
         /* 3) the drum: the unfiltered input, the same two reflections, then its high-shelf per mic */
         if (!(r->var & ROT_V_DRUM4) || (i & 3u) == 0)   /* the six drum displacements: every sample, or every 4 (ROT_V_DRUM4) */
-            for (k = 0; k < 6; k++)
-                r->dc[k] = drum_disp(ang_d, k, RT_DISP[(k == 0 || k == 3 || k == 4) ? 2 : 3]);
+        {
+            r->dc[0] = drum_disp(ang_d, 0, D[2], sh);
+            r->dc[1] = drum_disp(ang_d, 1, D[3], sh);
+            r->dc[2] = drum_disp(ang_d, 2, D[3], sh);
+            r->dc[3] = drum_disp(ang_d, 3, D[2], sh);
+            r->dc[4] = drum_disp(ang_d, 4, D[2], sh);
+            r->dc[5] = drum_disp(ang_d, 5, D[3], sh);
+        }
         drum_tap(r, 0, r->dc[0], xx, r->DL);
         drum_tap(r, 1, r->dc[1], xx, r->DR);
         x = rot_refl(&r->rf[2], xx);
@@ -395,6 +427,23 @@ static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *out
             outR[i] = mul24(outR[i], r->vg);
         }
 }
+/* the sample loop for the two table sets: setBfree's 1024 angles (shift 4) and CLASSIC 4's 256 (shift 6, ROT_V_ANG256) */
+#ifdef ROT_RAM
+__attribute__((noinline))
+#endif
+static void rot_samples(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
+{
+    if (r->var & ROT_V_ANG256) {
+        const int32_t *D[4] = {rot_disp256[0], rot_disp256[1], rot_disp256[2], rot_disp256[3]};
+        const int16_t (*F[2])[5] = {rot_fir256[0], rot_fir256[1]};
+        rot_body(r, in, outL, outR, n, 6u, D, F);
+    } else {
+        const int32_t *D[4] = {RT_DISP[0], RT_DISP[1], RT_DISP[2], RT_DISP[3]};
+        const int16_t (*F[2])[5] = {RT_FIR[0], RT_FIR[1]};
+        rot_body(r, in, outL, outR, n, 4u, D, F);
+    }
+}
+
 /* one block of CTL samples (n <= ROT_CTL), the CLASSIC model alone: in (Q15 mono) to outL and outR (Q15) */
 static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR, uint32_t n)
 {
@@ -402,7 +451,4 @@ static void rot_block(rot_t *r, const int32_t *in, int32_t *outL, int32_t *outR,
     rot_samples(r, in, outL, outR, n);
 }
 
-#ifndef ROT_RAM
-static void rot_load_tables(void) {}   /* (host builds read the constants) */
-#endif
 #endif /* ENG_ROTARY_C */

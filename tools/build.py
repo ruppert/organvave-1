@@ -294,8 +294,8 @@ def check(img, syms, dis, rt):
         errors.append("app.ld: POOL does not start where RAM ends")
     if ram_len - bss < 4096:                      # keep >= 4 KiB of .bss spare (state the audio side touches)
         errors.append(f"RAM headroom {ram_len - bss} B < 4096 B")
-    if pool_len - pool < 8192:                    # keep >= 8 KiB of the pool spare
-        errors.append(f"pool headroom {pool_len - pool} B < 8192 B")
+    if pool_len - pool < 1024:                    # keep >= 1 KiB of the pool spare (CLASSIC 4 tables, v0.9.18)
+        errors.append(f"pool headroom {pool_len - pool} B < 1024 B")
     return errors, notes
 
 

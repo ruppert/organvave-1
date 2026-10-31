@@ -75,6 +75,7 @@ static void render(int model, const float *in, float *L, float *R, size_t n, uin
 
 int main(void)
 {
+    rot_load_tables();                          /* (main.c's boot: the tables to SRAM and the 256-angle copies) */
     static const struct { int kind; int hz; } cs[9] = {{0, 700}, {0, 1000}, {0, 2000}, {0, 3500}, {0, 5000}, {1, 100}, {1, 200}, {1, 300}, {1, 500}};
     enum { N = 176400 };
     static float in[N], L[N], R[N], L2[N], R2[N], L3[N], R3[N];

@@ -58,6 +58,7 @@ static double peak(const float *y, size_t n) { double m = 0; size_t i; for (i = 
 
 int main(void)
 {
+    rot_load_tables();                          /* (main.c's boot: the tables to SRAM and the 256-angle copies) */
     enum { N = 176400 };
     static float in[N], L[N], R[N], L2[N], R2[N];
     double fr = 400.0 / 60.0, c, s1, s2, s3;
@@ -138,20 +139,23 @@ int main(void)
      *    (above 50 dB SNR); CLASSIC 3 (four horn taps) is another colour (about 17 dB SNR to CLASSIC), with the same level
      *    in dB (within 0.05 dB, its gain ROT_VG[3]). */
     {
-        static float V0[N], V1[N], V2[N];
-        double l0 = 0, l1 = 0, l2 = 0, s1v = 0, n1v = 0, n2v = 0;
+        static float V0[N], V1[N], V2[N], V3[N];
+        double l0 = 0, l1 = 0, l2 = 0, l3 = 0, s1v = 0, n1v = 0, n2v = 0, n3v = 0;
         size_t k;
         for (i = 0; i < N; i++) in[i] = 0.25f * (float)(sin(2 * M_PI * 110 * i / 44100.0) + sin(2 * M_PI * 440 * i / 44100.0) + sin(2 * M_PI * 880 * i / 44100.0)) + 0.2f * (float)sin(2 * M_PI * 1760 * i / 44100.0);
         var_req = 0; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V0, L, sizeof V0);
         var_req = 3; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V1, L, sizeof V1);
         var_req = 4; vg_req = 16944154; render(in, L, R, N, 400, 340); memcpy(V2, L, sizeof V2);
+        var_req = 9; vg_req = 1 << 24; render(in, L, R, N, 400, 340); memcpy(V3, L, sizeof V3);
         for (k = N / 2; k < N; k++) {
             l0 += (double)V0[k] * V0[k];
             l1 += (double)V1[k] * V1[k];
             l2 += (double)V2[k] * V2[k];
+            l3 += (double)V3[k] * V3[k];
             s1v += (double)V0[k] * V0[k];
             n1v += ((double)V0[k] - V1[k]) * ((double)V0[k] - V1[k]);
             n2v += ((double)V0[k] - V2[k]) * ((double)V0[k] - V2[k]);
+            n3v += ((double)V0[k] - V3[k]) * ((double)V0[k] - V3[k]);
         }
         printf("rotary: variants: level CLASSIC 2 %.3f dB, CLASSIC 3 %.3f dB against CLASSIC; SNR CLASSIC 2 %.1f dB, CLASSIC 3 %.1f dB\n",
                10 * log10(l1 / l0), 10 * log10(l2 / l0), 10 * log10(s1v / n1v), 10 * log10(s1v / n2v));
@@ -159,6 +163,7 @@ int main(void)
         check("variants: CLASSIC 3 at CLASSIC's level (within 0.05 dB)", fabs(10 * log10(l2 / l0)) < 0.05);
         check("variants: CLASSIC 2 sounds as CLASSIC (above 50 dB SNR)", 10 * log10(s1v / n1v) > 50);
         check("variants: CLASSIC 3 is another colour (SNR to CLASSIC between 10 and 25 dB)", 10 * log10(s1v / n2v) > 10 && 10 * log10(s1v / n2v) < 25);
+        check("variants: CLASSIC 4 at CLASSIC's level (within 0.05 dB) and above 40 dB SNR (256 angles)", fabs(10 * log10(l3 / l0)) < 0.05 && 10 * log10(s1v / n3v) > 40);
     }
     return bad ? 1 : 0;
 }

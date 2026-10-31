@@ -28,6 +28,8 @@ static inline int32_t clamp_(int32_t v, int32_t lo, int32_t hi) { return v < lo 
 enum { P_E0, P_E1, P_E2, P_E3 };
 struct track { int dummy; };
 #include "../firmware/engines/src/dsp.c"
+static void fm1_irq_off(void) {}                 /* the engine's critical sections (host: no interrupts) */
+static void fm1_irq_on(void) {}
 #include "../firmware/src/eng_organ.c"
 
 static int bad;

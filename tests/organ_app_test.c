@@ -407,8 +407,10 @@ int main(int argc, char **argv)
         turn(EN_K2, 1);
         bad += check("  .. KNOB 2 again: CLASSIC 3", org_patch[OP_ROT_MODEL] == 3);
         turn(EN_K2, 1);
-        bad += check("  .. KNOB 2 at the end: stays CLASSIC 3", org_patch[OP_ROT_MODEL] == 3);
-        turn(EN_K2, -2);
+        bad += check("  .. KNOB 2 again: CLASSIC 4 (256 angles)", org_patch[OP_ROT_MODEL] == 4);
+        turn(EN_K2, 1);
+        bad += check("  .. KNOB 2 at the end: stays CLASSIC 4", org_patch[OP_ROT_MODEL] == 4);
+        turn(EN_K2, -3);
         bad += check("  .. KNOB 2 back to LIGHT", org_patch[OP_ROT_MODEL] == 1);
         turn(EN_K3, 1);
         bad += check("  .. KNOB 3: the sharp horn", org_patch[OP_ROT_HORN] == 1);
