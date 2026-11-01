@@ -150,20 +150,17 @@ standard libraries, Pd's standard objects or Csound's opcodes.
 - **Drawbar law**: **(owner)** linear, as setBfree (8 -> 4 = -6 dB).
 - **Scanner vibrato / chorus** (`vibrato.c`): write-side interpolated variable delay, 7.25 Hz, depths 3 / 6 / 9 samples;
   chorus = the same mixed with the dry signal at 0.707. (Not the original's 16-stage LC line.)
-- **Preamp / overdrive** (`overdrive.c`, ported in `src/eng_drive.c`, 0.3.0): an effective 9-tap input FIR, the biased curve
-  with sag and feedback poles, a 33-tap output FIR (no real oversampling: setBfree sums the four polyphase rows of its
-  interpolation filter for every sample and filters the curve's output at the same rate). The FIRs are not redesigned: the
-  firmware takes setBfree's own taps (the sum of the four rows, and the output filter, which has only odd taps and the centre),
-  dumped by `tools/setbfree_ref/drive_render --fir` into `tools/setbfree_ref/drive_fir.txt` and turned into
-  `src/eng_drive_tables.h` by `tools/gen_drive_tables.py`. The curve of `ovt_biased.c` is odd, v(u) = sign(u) (D(|u| + bias) -
-  D(bias)) with D(x) = x^2 / (1 + x^2), so one 1025-entry table (1/64 steps up to 16, 2 KB) serves it, and the post-differentiator
-  (pole 0.999) is written as a low-pass with a 28-bit state (a 16-bit one stalls at its tiny coefficient). The input is Q13 (1.0 = 8192, up to 4.0: a loud chord is several times 1.0), the output Q15. The sag, the
-  feedback poles and the global feedback are setBfree's defaults (gain 3.5675 in, 0.8795 out, fb 0.5821, fb2 0.999, gfb 0.6214,
-  bias 0.5347, sag 0.991 / 0.0094). Measured against `overdrive.c` itself (sines at 110 Hz and 1 kHz, 0.1 to 1.0 full
-  scale): the odd harmonics within 0.11 dB, no even ones (below -99 dB, as the reference), waveform SNR 48 to 62 dB; the cost
-  is 201 loop instructions a block (about 150 a sample). In the instrument the output gain is setBfree's plus 3 dB (`DRV_OG` in `fx.c`): the curve saturates, and with a few keys the driven mix comes out 2 to 16 dB below the dry one. Limits: the pre-differentiator's state is clamped (its gain is
-  1 / (1 - fb), 1000 at fb 0.999, outside the usable range); the input of the stage after the drive must be clamped (the
-  largest gains put the output at 7 times full scale). Nothing here is tested on a real FM-1.
+- **Drive** (0.9.24, rewritten from scratch; `src/eng_drive.c`, the tables from `tools/gen_drive_tables.py`): the setBfree port of
+  0.3.0 is gone. Four types, each a short integer chain (input high-pass, pre-gain, waveshaper table, tone, output trim):
+  **TUBE SCREAM** (inspired by [TS-808-Ultra](https://github.com/JamesStubbsEng/TS-808-Ultra), GPL-3.0: the diode clipper's tanh fit,
+  high-passed at 720 Hz), **TUBE PREAMP** (inspired by [ValveLord](https://github.com/D4p0up/ValveLord), a 12AU7 circuit: an asymmetric
+  curve from the grid bias), **TUBE DRIVE** (made here: warm, mild, good at low and high gain) and **DISTORTION** (a JCM900-style
+  two-stage clip). GAIN 0..10: 0 bypasses the drive; the output trim is measured (a three-note chord at -20 dBFS) so the level stays at
+  the dry level and rises +2.5 dB over the knob. TONE: dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a 2 kHz-pivot treble lift);
+  OUTPUT +-8 dB. Cost: 78 loop instructions a block (the old port: about 250), host measurement about 75 instructions a sample for
+  the two-stage DISTORTION at GAIN 10 (the old one about 166). Known: on the organ's hotter signal the types differ by about 5 dB (the
+  two-stage DISTORTION compresses harder), not yet matched per type. Nothing here is tested on a real FM-1, and the sound is a
+  first design (it has not been listened to).
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 

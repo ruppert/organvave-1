@@ -541,14 +541,14 @@ enum {
     OP_ROT_MIC = 38,            /* the mics' angle (the stereo width): 0 wide (180 degrees) .. 6 mono (0), 30 degrees a step */
     OP_ROT_BAL = 39,            /* horn level against the drum: 0..8, 4 even (1.5 dB a step, -6 .. +6 dB) */
     OP_DRV = 40,                /* drive (the preamp): 0 off, 1 on */
-    OP_DRV_GAIN = 41,           /* its input gain: 0..12, 2 dB a step, 6 setBfree's default (3.5675) */
+    OP_DRV_GAIN = 41,           /* its gain: 0..10 (0.9.24): 0 bypasses the drive, 1..10 saturate more (the level is compensated) */
     OP_DRV_FAT = 42,            /* unused since 0.9.2 (the character went); stored 0..8 in older patches, ignored */
     OP_EQ = 43,                 /* the equaliser (version 0.5.0; 0 in older patches): 0 off, 1 on */
     OP_EQ_LOW = 44,             /* LOW (120 Hz shelf), -12 .. +12 dB: 0 flat, 1..12 dB up, 13..24 dB down (s - 25) */
     OP_EQ_MID = 45,             /* MID (the peak), the same coding */
     OP_EQ_FREQ = 46,            /* the peak's frequency, 0..11: 0 900 Hz, then 1280 Hz .. 7.2 kHz, 7 is 160 Hz .. 11 is 640 Hz */
     OP_EQ_HIGH = 47,            /* HIGH (4 kHz shelf), the same coding as LOW */
-    OP_DRV_TYPE = 48,           /* the drive's type (version 0.9.2; 0 in older patches): 0 DISTORTION (setBfree's preamp), 1 TUBE (a valve's soft saturation) */
+    OP_DRV_TYPE = 48,           /* the drive's type (0.9.24): 0 TUBE SCREAM, 1 TUBE PREAMP, 2 TUBE DRIVE, 3 DISTORTION (before 0.9.24: 0 DISTORTION, 1 TUBE) */
     OP_DRV_TONE = 49,           /* its tone: 0..8 "zero is the default" (c9: index (s + 4) % 9, 4 flat, 0 dark .. 8 bright) */
     OP_DRV_OUT = 50,            /* its output level, the same coding: index 4 is 0 dB, 2 dB a step (-8 .. +8 dB) */
     OP_ROT_HSLOW = 51,          /* the rotary's horn SLOW speed (version 0.9.2; 0 in older patches), c9: index 4 is 40 rpm, 12 % a step */
@@ -659,9 +659,9 @@ static uint32_t org_pmax(uint32_t i)
     if (i == OP_ROT_BAL || i == OP_DRV_FAT || (i >= OP_DRV_TONE && i <= OP_ROT_DRAMP))
         return 8u;
     if (i == OP_DRV_TYPE)
-        return 1u;
+        return 3u;
     if (i == OP_DRV_GAIN)
-        return 12u;
+        return 10u;
     if (i == OP_EQ)
         return 1u;
     if (i == OP_EQ_LOW || i == OP_EQ_MID || i == OP_EQ_HIGH)

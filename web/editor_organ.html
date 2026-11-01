@@ -152,10 +152,10 @@
     <div class="set row">
       <label class="chk"><input type="checkbox" id="drv"> Drive on</label>
       <label>Type
-        <select id="dtype"><option value="0">Distortion (setBfree's preamp)</option><option value="1">Tube drive (valve, gentle)</option></select>
+        <select id="dtype"><option value="0">Tube Scream</option><option value="1">Tube Preamp (12AU7)</option><option value="2">Tube Drive (warm)</option><option value="3">Distortion (JCM900 style)</option></select>
       </label>
       <label>Gain
-        <input type="range" id="dgain" min="0" max="12" step="1"> <output id="dgaino"></output>
+        <input type="range" id="dgain" min="0" max="10" step="1"> <output id="dgaino"></output>
       </label>
       <label>Tone
         <input type="range" id="dtone" min="0" max="8" step="1"> <output id="dtoneo"></output>
@@ -464,7 +464,7 @@ function words() {
 function dbText(d) { return (d > 0 ? "+" : "") + d + " dB"; }
 // the sliders' words: the horn level 1.5 dB a step around 4, the drive's gain 2 dB a step around 6 (setBfree's default)
 function balText(v) { const d = (v - 4) * 1.5; return (d > 0 ? "+" : "") + d.toFixed(1) + " dB"; }
-function gainText(v) { const d = (v - 6) * 2; return (d > 0 ? "+" : "") + d + " dB"; }
+function gainText(v) { return v === 0 ? "OFF (bypass)" : "GAIN " + v; }
 
 // the edits from the controls back into the patch (the device sanitizes what it stores)
 function fromControls() {

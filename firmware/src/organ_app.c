@@ -861,14 +861,18 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
         if (r == 0u)
             oa_vsw(v, OP_DRV, "OFF", "ON");
         else if (r == 1u) {
-            oa_vsw(v, OP_DRV_TYPE, "DISTORTION", "TUBE");
+            static const char *const DRV_NAME[4] = {"TUBE SCREAM", "TUBE PREAMP", "TUBE DRIVE", "DISTORTION"};
+            oa_vt(v, DRV_NAME[org_patch[OP_DRV_TYPE] & 3u]);
             v->on = org_patch[OP_DRV] != 0;
         } else if (r == 2u) {
-            i = oa_u(OP_DRV_GAIN, 12u);
-            oa_vdb(v, (i - 6) * 20);
-            v->mn = 13;
+            i = oa_u(OP_DRV_GAIN, 10u);                  /* 0.9.24: 0 .. 10; 0 bypasses the drive */
+            if (i == 0)
+                oa_vt(v, "OFF");
+            else
+                oa_vnum(v, i, 0, "");
+            v->mn = 11;
             v->mv = (int8_t)(i + 1);
-            v->on = 1;
+            v->on = i != 0;
         } else if (r == 3u) {
             i = (int32_t)org_c9(org_patch[OP_DRV_TONE] <= 8u ? org_patch[OP_DRV_TONE] : 0u);
             oa_vt(v, i == 4 ? "FLAT" : i < 4 ? "DARK" : "BRIGHT");
@@ -984,9 +988,9 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
         if (r == 0u)
             org_set(OP_DRV, on);
         else if (r == 1u)
-            org_set(OP_DRV_TYPE, on);
+            org_set(OP_DRV_TYPE, (uint32_t)clamp(oa_u(OP_DRV_TYPE, 3u) + d, 0, 3));   /* 0.9.24: TUBE SCREAM .. DISTORTION */
         else if (r == 2u)
-            org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 12u) + d, 0, 12));
+            org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 10u) + d, 0, 10));  /* 0 is the bypass */
         else
             oa_c9(r == 3u ? OP_DRV_TONE : OP_DRV_OUT, d);
     } else if (pg == 5u) {

@@ -142,7 +142,7 @@ static void up_slot_label(char *b, uint32_t k)  /* "U07" */
 /* ------------------------------------------------ the presets' organ patches --- */
 #define UPF_MAGIC 0x36465055u                    /* "UPF6" */
 #define UPF_N 128u                               /* an entry's patch: 128 7-bit values (the organ: its ORG_PSIZE first) */
-#define UPF_RENUM 0x5Du                          /* the last value of a patch entry: stored with the 0.9.23 rotary numbers (0 before) */
+#define UPF_RENUM 0x5Eu                          /* the last value of a patch entry: stored with the 0.9.24 numbers (0.9.23: 0x5D; 0.9.22 and before: 0) */
 #define UPF_PK 112u                              /* .. packed 8 to 7 bytes */
 typedef struct {
     uint32_t tag;                                /* upf_tag of the record it belongs to */
@@ -254,12 +254,23 @@ static void upf_track_load(track_t *t, uint32_t k)
         return;
     if (upf_get(k, pk))                       /* (1: not stored: the factory's first) */
         memcpy(pk, ORG_FACTORY[0], ORG_PSIZE);
-    else if (pk[UPF_N - 1u] != UPF_RENUM) {
-        /* a patch stored by 0.9.22 or earlier: the rotary models were renumbered in 0.9.23 (LIGHT, the old CLASSIC 2 .. 4
-         * and the 256 angles are gone; the old CLASSIC 5 and 6 are CLASSIC 2 and 5). Its sound is kept */
-        static const uint8_t ROT_MAP[7] = {0u, 1u, 0u, 2u, 0u, 1u, 4u};
-        if (pk[OP_ROT_MODEL] < 7u)
-            pk[OP_ROT_MODEL] = ROT_MAP[pk[OP_ROT_MODEL]];
+    else {
+        /* the numbers changed in two steps: 0.9.23 renumbered the rotary models (LIGHT, the old CLASSIC 2 .. 4 and the 256
+         * angles are gone; the old CLASSIC 5 and 6 are CLASSIC 2 and 5), 0.9.24 the drive's types (DISTORTION is 3, TUBE is 2)
+         * and its gain (0..10). A patch keeps its sound where a value still means it; the drive's gain scale changed, so it
+         * is only clamped (set the drive again if it sounds different) */
+        if (pk[UPF_N - 1u] != UPF_RENUM) {
+            static const uint8_t DRV_MAP[2] = {3u, 2u};
+            if (pk[OP_DRV_TYPE] < 2u)
+                pk[OP_DRV_TYPE] = DRV_MAP[pk[OP_DRV_TYPE]];
+            if (pk[OP_DRV_GAIN] > 10u)
+                pk[OP_DRV_GAIN] = 10u;
+        }
+        if (pk[UPF_N - 1u] != UPF_RENUM && pk[UPF_N - 1u] != 0x5Du) {
+            static const uint8_t ROT_MAP[7] = {0u, 1u, 0u, 2u, 0u, 1u, 4u};
+            if (pk[OP_ROT_MODEL] < 7u)
+                pk[OP_ROT_MODEL] = ROT_MAP[pk[OP_ROT_MODEL]];
+        }
     }
     org_set_patch(pk);
 }

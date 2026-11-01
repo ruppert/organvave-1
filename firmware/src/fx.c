@@ -1070,10 +1070,6 @@ static volatile uint8_t rot_model_req;                  /* 0 CLASSIC .. 4 CLASSI
 
 /* the organ's effects settings (the patch bytes OP_ROT .. OP_DRV_FAT), taken at the next block after a change */
 /* the drive's output gain: setBfree's 0.8795 and 3 dB (the curve saturates: with a few keys it comes out 2 to 16 dB below the dry mix, with a full chord about 2 dB) */
-#define DRV_OG 5090
-static const uint16_t DRV_IG[13] = {3670, 4621, 5817, 7324, 9220, 11607, 14612, 18396, 23159, 29156, 36705, 40960, 40960};
-static const int32_t DRV_FB[9] = {9766017, 9766017, 9766017, 13150415, 15099494, 15099494, 15099494, 15099494, 15099494};
-static const int32_t DRV_FB2[9] = {16760439, 13376041, 9766017, 9766017, 9766017, 11431356, 13207717, 14984078, 16760439};
 static const uint16_t ROT_BAL_HL[9] = {5734, 6820, 8110, 9644, 11469, 13639, 16220, 19288, 22938};
 /* the rotary's speed and ramp scales (the bytes OP_ROT_HSLOW .. OP_ROT_DRAMP, index 0..8, 4 the default): 1.12^(i-4) and 1.4^(i-4), Q8 */
 static const uint16_t ROT_SPF[9] = {163, 182, 204, 229, 256, 287, 321, 360, 403};
@@ -1097,7 +1093,7 @@ static void fx_cpu_high(void)
 }
 static void fx_organ_apply(void)
 {
-    uint32_t sp, g, f;
+    uint32_t sp, g;
     if (org_pgen == fxo_seen)
         return;
     fxo_seen = org_pgen;
@@ -1117,13 +1113,11 @@ static void fx_organ_apply(void)
     rot_st.hset = org_patch[OP_ROT_HORN];
     rot_mic(&rot_st, 180u - 30u * org_patch[OP_ROT_MIC]);
     rot_st.hl = ROT_BAL_HL[org_patch[OP_ROT_BAL] % 9u];
-    g = org_patch[OP_DRV_GAIN] % 13u;
-    f = 0;                              /* (the character went in 0.9.2: setBfree's own) */
-    dr_set(&dr_st, DRV_IG[g], DRV_OG, DRV_FB[f], DRV_FB2[f], 10425000, 35043, 157700, 16626000);
-    if (dr_st.type != (int32_t)(org_patch[OP_DRV_TYPE] ? 1 : 0))
-        dr_clear(&dr_st);               /* (the other curve starts from silence) */
-    dr_user(&dr_st, org_patch[OP_DRV_TYPE], org_c9(org_patch[OP_DRV_TONE]), org_c9(org_patch[OP_DRV_OUT]));
-    dr_on = org_patch[OP_DRV];
+    g = org_patch[OP_DRV_GAIN] > 10u ? 10u : org_patch[OP_DRV_GAIN];   /* 0.9.24: 0 bypasses the drive, 1..10 saturate more */
+    if (dr_st.type != (int32_t)(org_patch[OP_DRV_TYPE] & 3u))
+        dr_clear(&dr_st);               /* (another type starts from silence) */
+    dr_user(&dr_st, org_patch[OP_DRV_TYPE], g, org_c9(org_patch[OP_DRV_TONE]), org_c9(org_patch[OP_DRV_OUT]));
+    dr_on = org_patch[OP_DRV] && g > 0u;
     eq_set(&eq_st, org_patch[OP_EQ_LOW], org_patch[OP_EQ_MID], org_patch[OP_EQ_FREQ], org_patch[OP_EQ_HIGH]);
     eq_on = org_patch[OP_EQ];
 }

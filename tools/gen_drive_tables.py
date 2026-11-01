@@ -1,60 +1,139 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Guilherme Ruppert (OrganVave-1)
-"""Writes firmware/src/eng_drive_tables.h (the drive's tables) from tools/setbfree_ref/drive_fir.txt, which
-`drive_render --fir` (tools/setbfree_ref/drive_render.c, setBfree's own overdrive.c) writes.
+"""Generates firmware/src/eng_drive_tables.h: the drive's shaping curves and gain tables (integer, for the firmware).
 
-   python3 tools/gen_drive_tables.py            # from the checked-in dump
-   python3 tools/gen_drive_tables.py FILE.txt   # from another dump
+The drive (0.9.24) has four types, each a short chain: an input high-pass (one pole), a pre-gain (0..10 on the GAIN
+knob, 0 is bypass), a waveshaper table (tanh-like curves on -8..8, 512 steps), an optional second stage (DISTORTION),
+a tone (dark low-pass / bright tilt) and an output trim. Gain compensation: the trim is measured here, so that the level
+stays at the same value across the GAIN knob, rising a little (+2.5 dB over the range) so the drive sounds stronger.
 
-DR_IN[9]: the input FIR (the sum of setBfree's four polyphase rows, Q15). DR_OUT[9]: the 33-tap output FIR, which has
-only odd taps and the centre: DR_OUT[0] is the centre (tap 16), DR_OUT[1 + j] the pair of taps 15 - 2j and 17 + 2j (Q15).
-DR_D[1025]: D(x) = x^2 / (1 + x^2) for x = i / 64, Q16 (uint16): the transfer curve is odd, v(u) = sign(u) *
-(D(|u| + bias) - D(bias)) (setBfree's ovt_biased, 1 / (1 + x^2) - 1 + norm below zero, 1 - norm - 1 / (1 + x^2) above)."""
-import os
-import sys
+Inspired by (no code copied; the TS-808 is GPL-3.0, its curves are a tanh fit of the diode pair's asinh behaviour):
+  TUBE SCREAM   James Stubbs' TS-808-Ultra (GPL-3.0): the op-amp gain stage, the diode clipper, the tone stage.
+  TUBE PREAMP   D4p0up's ValveLord (no licence, hardware only): a 12AU7 gain stage, asymmetric (grid bias offset).
+  TUBE DRIVE    a warm overdrive, made here: mild, odd-harmonic soft clip, good at both low and high gain.
+  DISTORTION    a high-gain two-stage clip, Marshall JCM900 style (the second stage clipping the first's output).
+The floats are here only: the firmware is integer.
+Run: python3 tools/gen_drive_tables.py
+"""
+import math, os
 
+FS = 44100.0
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
-SRC = os.path.join(ROOT, "firmware", "src", "eng_drive_tables.h")
+OUT = os.path.join(HERE, "..", "firmware", "src", "eng_drive_tables.h")
+NWS = 512                                   # table steps over -8 .. +8 (1/32 each)
 
+# (name, HP cutoff Hz, pre-gain dB per GAIN step, [stage shapes: (A, B, C)], second stage gain)
+TYPES = [
+    ("TUBE SCREAM", 720.0, 4.5, [(0.80, 1.60, 0.00)], 0.0),
+    ("TUBE PREAMP", 120.0, 3.5, [(0.90, 1.10, 0.35)], 0.0),
+    ("TUBE DRIVE", 60.0, 2.5, [(0.90, 0.75, 0.10)], 0.0),
+    ("DISTORTION", 180.0, 3.0, [(0.95, 1.80, 0.20), (0.90, 1.50, -0.05)], 2.0),   # s2: the gain into stage 2
+]
+
+def shape(a, b, c, x):
+    return a * (math.tanh(b * x + c) - math.tanh(c))
+
+def table(a, b, c):
+    t = []
+    for i in range(NWS):
+        x = -8.0 + i * 16.0 / NWS                     # the firmware indexes (x + 8) * 32: step 1/32, index 256 is x = 0
+        t.append(max(-32767, min(32767, int(round(shape(a, b, c, x) * 32767)))))
+    return t
+
+def hp_coef(fc):
+    return int(round(math.exp(-2 * math.pi * fc / FS) * 32768))
+
+def lp_coef(fc):
+    return int(round((1 - math.exp(-2 * math.pi * fc / FS)) * 32768))
+
+BASE_DB = {"TUBE SCREAM": 0.0, "TUBE PREAMP": 0.0, "TUBE DRIVE": 0.0, "DISTORTION": -10.0}   # the pre-gain at step 0 (the first step is nearly linear)
+
+def pre_db(ty, g):
+    return BASE_DB[ty[0]] + ty[2] * g
+
+def pre_gain_q8(ty, g):
+    return int(round(10 ** (pre_db(ty, g) / 20.0) * 256))
+
+def float_chain(ty, g, x):
+    """the float model of one GAIN step, sample by sample: HP, pre-gain, the stages, output (for the trims)"""
+    name, fc, dbstep, stages, s2 = ty
+    a = math.exp(-2 * math.pi * fc / FS)
+    G = 10 ** (pre_db(ty, g) / 20.0) if g else 1.0
+    y = 0.0; xp = 0.0; out = []
+    for v in x:
+        y = a * (y + v - xp); xp = v
+        s = max(-8.0, min(8.0, y * G))
+        for si, (A, B, C) in enumerate(stages):
+            s = max(-8.0, min(8.0, shape(A, B, C, s)))
+            if si == 0 and s2:                               # DISTORTION: the second stage is driven 4x
+                s = s * s2
+        out.append(s)
+    return out
+
+def rms(v):
+    return math.sqrt(sum(t * t for t in v) / len(v))
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "setbfree_ref", "drive_fir.txt")
-    fin, fout = [0.0] * 9, [0.0] * 33
-    for line in open(path):
-        w = line.split()
-        if len(w) != 3:
-            continue
-        (fin if w[0] == "in" else fout)[int(w[1])] = float(w[2])
-    q15 = lambda v: int(round(v * 32768))
-    din = [q15(v) for v in fin]
-    dout = [q15(fout[16])]
-    for j in range(8):
-        a, b = fout[15 - 2 * j], fout[17 + 2 * j]
-        if abs(a - b) > 1e-6:
-            sys.exit("the output FIR is not symmetric")
-        dout.append(q15(a))
-    for k in range(0, 33, 2):
-        if k != 16 and abs(fout[k]) > 1e-6:
-            sys.exit("the output FIR has an even tap")
-    dtab = [min(65535, int(round(65536 * (i / 64) ** 2 / (1 + (i / 64) ** 2)))) for i in range(1025)]
+    n = 4096
+    # the calibration: a three-note chord at -20 dBFS RMS (a chord has a higher crest factor than a sine: the types
+    # compress it differently, so the levels of the types agree on a chord, not on a sine)
+    a = 0.1 * math.sqrt(2) / math.sqrt(3)
+    sig = [a * (math.sin(2 * math.pi * 800 * i / FS) + math.sin(2 * math.pi * 1200 * i / FS) + math.sin(2 * math.pi * 1900 * i / FS)) for i in range(n)]
+    trims = []
+    for ty in TYPES:
+        row = []
+        ref = rms(sig[n // 2:])                              # the dry level (the bypass)
+        for g in range(11):
+            if g == 0:
+                row.append(1.0)
+                continue
+            r = rms(float_chain(ty, g, sig)[n // 2:])
+            # the target: the dry level, rising 0.25 dB a step (+2.5 dB at the top): the same level across the knob
+            target = ref * 10 ** (0.25 * g / 20.0)
+            row.append(min(4.0, target / r))
+        trims.append(row)
+    cut = [1500.0 * 2 ** (t * 0.6) for t in range(4)] + [1500.0] * 5   # dark steps 0..3; 4..8 use the bright emphasis
+    lines = []
+    lines.append("/* GENERATED by tools/gen_drive_tables.py: do not edit (0.9.24). The drive's curves, gains and trims. */")
+    lines.append("#ifndef ENG_DRIVE_TABLES_H\n#define ENG_DRIVE_TABLES_H")
+    lines.append("#include <stdint.h>")
+    lines.append("#define DR_NWS 512")
+    lines.append("#define DR_TYPES 4")
+    stage_tabs = []
+    for ti, ty in enumerate(TYPES):
+        for si, (A, B, C) in enumerate(ty[3]):
+            stage_tabs.append((ti, si, table(A, B, C)))
+    lines.append("/* the waveshapers: 512 steps over -8 .. +8, Q15 out (see the stage list below) */")
+    lines.append("static const int16_t DR_WS[5][DR_NWS] = {")
+    names = []
+    order = [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1)]
+    for (ti, si) in order:
+        tab = [t for (a, b, c) in [TYPES[ti][3][si]] for t in table(a, b, c)]
+        lines.append("  {" + ",".join(str(v) for v in tab) + "},")
+        names.append("%s stage %d" % (TYPES[ti][0], si + 1))
+    lines.append("};")
+    lines.append("/* the stages: index 0 TS, 1 PREAMP, 2 DRIVE, 3 DISTORTION stage 1, 4 DISTORTION stage 2 (" + "; ".join(names) + ") */")
+    lines.append("static const uint16_t DR_HP[4] = {%s};" % ",".join(str(hp_coef(ty[1])) for ty in TYPES))
+    lines.append("/* the pre-gain, Q8, per type and GAIN step 0..10 (step 0: bypass, unused) */")
+    lines.append("static const uint16_t DR_PRE[4][11] = {")
+    for ty in TYPES:
+        lines.append("  {" + ",".join(str(pre_gain_q8(ty, g)) for g in range(11)) + "},")
+    lines.append("};")
+    lines.append("/* the output trim, Q12, per type and GAIN step: the level stays put and rises 0.25 dB a step */")
+    lines.append("static const uint16_t DR_TRIM[4][11] = {")
+    for row in trims:
+        lines.append("  {" + ",".join(str(int(round(t * 4096))) for t in row) + "},")
+    lines.append("};")
+    lines.append("/* the tone: the dark cutoff (Hz) per TONE step 0..8 (the low-pass), and the bright emphasis's own low-pass (Hz) */")
+    lines.append("static const uint16_t DR_TONE_LP[9] = {%s};" % ",".join(str(lp_coef(c)) for c in cut))
+    lines.append("#define DR_LP_BRIGHT %d" % lp_coef(2000.0))   # the bright emphasis pivots at 2 kHz
+    lines.append("#endif")
+    with open(OUT, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("wrote", os.path.normpath(OUT))
+    for ti, ty in enumerate(TYPES):
+        print(ty[0], "trims", ["%.2f" % t for t in trims[ti]])
 
-    def arr(name, typ, v, per):
-        s = f"static const {typ} {name}[{len(v)}] = {{\n"
-        for i in range(0, len(v), per):
-            s += "    " + ", ".join(str(x) for x in v[i:i + per]) + ",\n"
-        return s + "};\n"
-
-    with open(SRC, "w") as f:
-        f.write("/* SPDX-License-Identifier: GPL-3.0-only */\n"
-                "/* Generated by tools/gen_drive_tables.py from tools/setbfree_ref/drive_fir.txt: do not edit. */\n"
-                "#ifndef ENG_DRIVE_TABLES_H\n#define ENG_DRIVE_TABLES_H\n#include <stdint.h>\n")
-        f.write(arr("DR_IN", "int16_t", din, 9))
-        f.write(arr("DR_OUT", "int16_t", dout, 9))
-        f.write(arr("DR_D", "uint16_t", dtab, 12))
-        f.write("#endif\n")
-    print(f"wrote {SRC}: input FIR sum {sum(din) / 32768:.4f}, output FIR sum {(dout[0] + 2 * sum(dout[1:])) / 32768:.4f}")
-
-
-main()
+if __name__ == "__main__":
+    main()

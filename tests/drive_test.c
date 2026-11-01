@@ -1,13 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Guilherme Ruppert (OrganVave-1) */
-/* The drive (src/eng_drive.c) on the host, against setBfree's overdrive.c (tools/setbfree_ref/drive_render.c, default
- * constants). The reference numbers below are its output for sines at 110 Hz and 1 kHz, 0.1 to 3.9 times 1.0 (odd harmonics 1, 3, 5, 7 in dB
- * re a full-scale sine, last two seconds of three, Hann window); the curve is odd, so the even ones stay below -85 dB.
- * 1. harmonics: the odd ones within 0.4 dB of the reference (1.0 dB below -60 dB), the even ones below -85 dB.
- * 2. blocks: the output does not depend on the block length (1, 7, 32, 64: bit-exact).
- * 3. bounds: full-scale square, noise and sines at the largest gain stay inside 16 bits and do not wrap; silence in,
- *    silence out; a DC step is gone within 6 s (the post-differentiator).
- * The largest gains (10 in and out) can put the output at 7 times full scale: the stage after the drive clamps. */
+/* The drive (src/eng_drive.c, 0.9.24) on the host: the four types at GAIN 1 .. 10.
+ * 1. level: a -20 dBFS chord comes out between the dry level -0.5 dB and +3 dB at every GAIN step (the
+ *    compensation: the same level, rising a little over the knob, +2.5 dB at the top).
+ * 2. saturation: the third harmonic of a -20 dBFS sine (against the fundamental) rises from GAIN 1 to GAIN 10, every type, by 3 dB or more.
+ * 3. bounds: full-scale sines, a square and noise stay inside 16 bits at every gain; silence in, silence out.
+ * 4. blocks: the output does not depend on the block length (1, 7, 64: bit-exact).
+ * Levels are in Q15 (1.0 = 32768), the input in Q13 (1.0 = 8192). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,121 +16,161 @@
 static int bad;
 static void check(const char *what, int ok)
 {
-    printf("drive: %-100s %s\n", what, ok ? "ok" : "FAIL");
-    bad += !ok;
+    printf("drive: %-96s %s\n", what, ok ? "ok" : "FAIL");
+    if (!ok)
+        bad++;
 }
-#define FS_ 44100.0
-#define N_ 132300
 
-static void render(dr_t *d, const int32_t *x, int32_t *y, int n, int blk)
+#define N 32768
+static int32_t in[N], out[N], ref[N], sine[N];
+
+/* the amplitude (dB re 1.0) of frequency f over the last half of x (a correlation at f, Hann) */
+static double amp_db(const int32_t *x, double f, double fs)
 {
-    int i;
-    for (i = 0; i < n; i += blk)
-        dr_run(d, x + i, y + i, (uint32_t)(n - i < blk ? n - i : blk));
-}
-static double level(const int32_t *y, double f)
-{
-    int n = (int)(FS_ * 2), n0 = N_ - n, i;
-    double re = 0, im = 0, ws = 0;
-    for (i = 0; i < n; i++) {
-        double w = 0.5 - 0.5 * cos(2 * M_PI * i / n), ph = 2 * M_PI * f * (i + n0) / FS_;
-        re += w * y[n0 + i] / 32768.0 * cos(ph);
-        im -= w * y[n0 + i] / 32768.0 * sin(ph);
-        ws += w;
+    double re = 0, im = 0, w = 0, t;
+    size_t i, s = N / 2;
+    for (i = s; i < N; i++) {
+        t = (double)(i - s) / (double)(N - s);
+        double h = 0.5 * (1 - cos(2 * M_PI * t));
+        re += h * (x[i] / 32768.0) * cos(2 * M_PI * f * (double)i / fs);
+        im += h * (x[i] / 32768.0) * sin(2 * M_PI * f * (double)i / fs);
+        w += h;
     }
-    return 20 * log10(2 * sqrt(re * re + im * im) / ws + 1e-9);
+    return 20 * log10(2 * sqrt(re * re + im * im) / w + 1e-12);
 }
-
-typedef struct { double f, amp; double h[4]; } hcase;
-static const hcase HC[] = {
-    {110, 0.1, {-23.1, -58.9, -75.5, -84.8}},
-    {110, 0.3, {-20.2, -31.1, -41.2, -48.4}},
-    {110, 1.0, {-11.9, -13.6, -20.7, -30.4}},
-    {1000, 0.3, {-18.7, -28.7, -33.4, -42.4}},
-    {1000, 1.0, {-12.9, -12.7, -28.0, -23.6}},
-    {110, 3.0, {-13.4, -15.8, -22.9, -19.5}},      /* a loud chord is several times 1.0 */
-    {110, 3.9, {-14.8, -17.3, -21.0, -20.2}},
-    {1000, 3.0, {-14.4, -16.2, -20.5, -19.8}},
-};
+static double rms_db(const int32_t *x)
+{
+    double s = 0;
+    size_t i;
+    for (i = N / 2; i < N; i++)
+        s += (x[i] / 32768.0) * (x[i] / 32768.0);
+    return 10 * log10(s / (N / 2) + 1e-30);
+}
+static void run_drive(dr_t *d, const int32_t *x, int32_t *y, size_t blk)
+{
+    size_t i = 0;
+    while (i < N) {
+        size_t k = N - i < blk ? N - i : blk;
+        dr_run_ex(d, x + i, y + i, (uint32_t)k);
+        i += k;
+    }
+}
+static dr_t D;
 
 int main(void)
 {
-    static int32_t x[N_], y[N_], y2[N_];
-    dr_t *d = calloc(1, sizeof *d);
-    unsigned c, i, k;
-    for (c = 0; c < sizeof HC / sizeof *HC; c++) {
-        char what[160];
-        int ok = 1, ok2 = 1;
-        double worst = 0, ev = -200;
-        for (i = 0; i < N_; i++)
-            x[i] = (int32_t)lrint(HC[c].amp * 8192.0 * sin(2 * M_PI * HC[c].f * i / FS_));
-        dr_init(d);
-        render(d, x, y, N_, 32);
-        for (k = 0; k < 4; k++) {
-            double got = level(y, HC[c].f * (2 * k + 1)), dd = fabs(got - HC[c].h[k]);
-            double tol = HC[c].h[k] > -60 ? 0.4 : 1.0;
-            if (HC[c].f * (2 * k + 1) >= 21000) continue;
-            if (dd > worst) worst = dd;
-            if (dd > tol) ok = 0;
-        }
-        for (k = 1; k <= 3; k++) {
-            double got = level(y, HC[c].f * 2 * k);
-            if (got > ev) ev = got;
-        }
-        ok2 = ev < -85;
-        snprintf(what, sizeof what, "%4.0f Hz at %.1f: odd harmonics within 0.4 dB of setBfree's (worst %.2f dB)", HC[c].f, HC[c].amp, worst);
-        check(what, ok);
-        snprintf(what, sizeof what, "%4.0f Hz at %.1f: even harmonics below -85 dB (%.1f)", HC[c].f, HC[c].amp, ev);
-        check(what, ok2);
+    static const char *NAME[4] = {"TUBE SCREAM", "TUBE PREAMP", "TUBE DRIVE", "DISTORTION"};
+    size_t i;
+    int t, g;
+    /* the level input: a three-note chord at -20 dBFS RMS (as the tables are calibrated: tools/gen_drive_tables.py), in
+     * Q13 (1.0 = 8192); the saturation input: a sine at -20 dBFS, 1 kHz */
+    const double a = 0.1 * sqrt(2.0) / sqrt(3.0);
+    for (i = 0; i < N; i++) {
+        double t = (double)i / 44100.0;
+        in[i] = (int32_t)lrint(8192 * a * (sin(2 * M_PI * 800 * t) + sin(2 * M_PI * 1200 * t) + sin(2 * M_PI * 1900 * t)));
+        sine[i] = (int32_t)lrint(0.1 * 8192 * sin(2 * M_PI * 1000 * t));
     }
-    /* blocks */
+    /* the dry level: the input in the drive's unit (1.0 = 8192 in Q13): 0.1 RMS */
+    const double dry = 20 * log10(0.1);
+    for (t = 0; t < 4; t++) {
+        double h3[11], lev[11];
+        int ok_level = 1, ok_top = 1;
+        for (g = 1; g <= 10; g++) {
+            dr_init(&D);
+            dr_user(&D, (uint32_t)t, (uint32_t)g, 4u, 4u);
+            run_drive(&D, in, out, 64);
+            lev[g] = rms_db(out);
+            dr_init(&D);
+            dr_user(&D, (uint32_t)t, (uint32_t)g, 4u, 4u);
+            run_drive(&D, sine, out, 64);
+            h3[g] = amp_db(out, 3000.0, 44100.0);
+            if (lev[g] - dry < -0.5 || lev[g] - dry > 3.0)
+                ok_level = 0;
+        }
+        {
+            char what[120];
+            snprintf(what, sizeof what, "level: %s: every GAIN step between the dry level -0.5 dB and +3 dB", NAME[t]);
+            check(what, ok_level);
+        }
+        if (lev[10] - dry < 1.0 || lev[10] - dry > 3.0)
+            ok_top = 0;
+        {
+            char what[120];
+            snprintf(what, sizeof what, "level: %s rises a little over the knob (GAIN 10: %+.2f dB against GAIN 1: %+.2f dB)",
+                     NAME[t], lev[10] - dry, lev[1] - dry);
+            check(what, ok_top && lev[10] >= lev[1] - 0.2);
+        }
+        {
+            char what[120];
+            snprintf(what, sizeof what, "saturation: %s: the third harmonic rises from GAIN 1 (%.1f dB) to GAIN 10 (%.1f dB)",
+                     NAME[t], h3[1], h3[10]);
+            check(what, h3[10] > h3[1] + 3.0);
+        }
+    }
+    /* bounds: full scale (the input's clamp is 32767, 4.0 in Q13), a square and noise, at every gain and type */
     {
-        static const int bl[] = {1, 7, 32, 64};
-        int same = 1, b;
-        for (i = 0; i < N_; i++)
-            x[i] = (int32_t)lrint(0.6 * 8192.0 * sin(2 * M_PI * 233.0 * i / FS_) * (0.5 + 0.5 * sin(2 * M_PI * 0.7 * i / FS_)));
-        dr_init(d);
-        render(d, x, y, N_, 32);
-        for (b = 0; b < 4; b++) {
-            dr_init(d);
-            render(d, x, y2, N_, bl[b]);
-            if (memcmp(y, y2, sizeof y)) same = 0;
-        }
-        check("the output does not depend on the block length (1, 7, 32, 64: bit-exact)", same);
+        int ok = 1;
+        for (t = 0; t < 4; t++)
+            for (g = 1; g <= 10; g++) {
+                size_t k;
+                dr_init(&D);
+                dr_user(&D, (uint32_t)t, (uint32_t)g, 8u, 8u);
+                for (k = 0; k < N; k++)
+                    in[k] = (k / 50) % 2 ? 32767 : -32768;
+                run_drive(&D, in, out, 64);
+                for (k = 0; k < N; k++)
+                    if (out[k] > 32767 || out[k] < -32768)
+                        ok = 0;
+                for (k = 0; k < N; k++)
+                    in[k] = (int32_t)(rand() % 65536) - 32768;
+                dr_init(&D);
+                dr_user(&D, (uint32_t)t, (uint32_t)g, 8u, 8u);
+                run_drive(&D, in, out, 64);
+                for (k = 0; k < N; k++)
+                    if (out[k] > 32767 || out[k] < -32768)
+                        ok = 0;
+            }
+        check("bounds: square and noise at full scale stay inside 16 bits, every type and GAIN, with the output at +8", ok);
     }
-    /* bounds */
+    /* silence in, silence out */
     {
-        int ok = 1, quiet = 1, gone = 1;
-        unsigned seed = 12345;
-        double pk = 0;
-        for (i = 0; i < N_; i++) {
-            seed = seed * 1664525u + 1013904223u;
-            x[i] = ((i / 100) & 1) ? 32767 : -32768;   /* 4.0 in Q13 */
-            y2[i] = (int32_t)(seed >> 16) - 32768;
+        int ok = 1;
+        for (i = 0; i < N; i++)
+            in[i] = 0;
+        for (t = 0; t < 4; t++) {
+            dr_init(&D);
+            dr_user(&D, (uint32_t)t, 10u, 4u, 4u);
+            run_drive(&D, in, out, 64);
+            for (i = 0; i < N; i++)
+                if (out[i] != 0)
+                    ok = 0;
         }
-        dr_init(d);
-        dr_set(d, 40960, 40960, 9766000, 16760438, 10425000, 35043, 157700, 16626000);
-        render(d, x, y, N_, 32);
-        for (i = 0; i < N_; i++) if (fabs((double)y[i]) > pk) pk = fabs((double)y[i]);
-        ok &= pk < 2147483647.0 / 4096;
-        render(d, y2, y, N_, 32);
-        for (i = 0; i < N_; i++) if (fabs((double)y[i]) > pk) pk = fabs((double)y[i]);
-        ok &= pk < 2147483647.0 / 4096;
-        printf("drive: largest output at gains 10 / 10: %.0f (of 32768)\n", pk);
-        check("full-scale square and noise at the largest gains: no overflow (the output stays below 2^19)", ok);
-        dr_init(d);
-        memset(x, 0, sizeof x);
-        render(d, x, y, N_, 32);
-        for (i = 0; i < N_; i++) if (y[i]) quiet = 0;
-        check("silence in, silence out", quiet);
-        dr_init(d);
-        for (i = 0; i < N_; i++) x[i] = i < 8000 ? 0 : 1500;
-        render(d, x, y, N_, 32);
-        for (i = (unsigned)(FS_ * 2.9); i < N_; i++) if (abs(y[i]) > 40) gone = 0;
-        printf("drive: the DC step of 1500 at the end: |y| < %d\n", 41);
-        check("a DC step is blocked: the output is back near 0 (below 40 of 32768) at the end of 3 s", gone);
+        check("silence in, silence out (no DC from the high-pass or the tone)", ok);
     }
-    printf(bad ? "drive: FAILED\n" : "drive: all ok\n");
-    free(d);
-    return bad;
+    /* block independence */
+    {
+        int ok = 1;
+        for (i = 0; i < N; i++)
+            in[i] = (int32_t)lrint(0.3 * 8192 * sin(2 * M_PI * 220.0 * (double)i / 44100.0));
+        for (t = 0; t < 4; t++) {
+            dr_init(&D);
+            dr_user(&D, (uint32_t)t, 7u, 2u, 6u);
+            run_drive(&D, in, ref, 64);
+            dr_init(&D);
+            dr_user(&D, (uint32_t)t, 7u, 2u, 6u);
+            run_drive(&D, in, out, 1);
+            for (i = 0; i < N; i++)
+                if (out[i] != ref[i])
+                    ok = 0;
+            dr_init(&D);
+            dr_user(&D, (uint32_t)t, 7u, 2u, 6u);
+            run_drive(&D, in, out, 7);
+            for (i = 0; i < N; i++)
+                if (out[i] != ref[i])
+                    ok = 0;
+        }
+        check("blocks: the output is the same for block lengths 1, 7 and 64 (bit-exact, every type)", ok);
+    }
+    printf("drive: %s\n", bad ? "FAILED" : "all ok");
+    return bad ? 1 : 0;
 }
