@@ -43,8 +43,8 @@ static void audio_block(int32_t *out, uint32_t n)       /* mix (fx.c), then Q15 
  * next block, and one more each half while it lasts. Keep each part's
  * lowest POLY note and MONO / LEGATO / UNISON lead, as the shared budget does. */
 static volatile uint8_t shed_req;
-static uint8_t shed_over;                              /* bit k: the half k halves ago was over 85 % */
-#define SHED_TICKS ((HALF_FRAMES * 1000000u / FS) * 85u / 100u * FM1_TICKS_PER_US)   /* 85 % of a half */
+static uint8_t shed_over;                              /* bit k: the half k halves ago was over 93 % */
+#define SHED_TICKS ((HALF_FRAMES * 1000000u / FS) * 93u / 100u * FM1_TICKS_PER_US)   /* 93 % of a half: the critical level */
 static uint32_t shed_count;
 
 /* end of a half: all = its ticks, TIMER5 nested in it included -> the render alone in us. The deadline sees
@@ -61,6 +61,7 @@ static void shed_voice(void)
 {
     uint32_t p, i;
     voice_t *best = 0;
+    fx_cpu_pop();                               /* every cut shows "Warning: CPU High" for 0.5 s */
     for (p = 0; p < NPART; p++)
         for (i = 0; i < NVOICE; i++) {
             voice_t *v = &trk[p].v[i];

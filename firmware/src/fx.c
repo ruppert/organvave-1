@@ -1086,6 +1086,11 @@ static uint8_t fxo_seen = 0xFF;
 /* CPU overload (audio.c shed_voice): CPU_HIGH_BLOCKS blocks (2 s) of "CPU HIGH" per request, during which the delay is off and
  * the oldest key is let go (eng_organ.c org_fragment). The rotary and the drive are left as they are */
 #define CPU_HIGH_BLOCKS 2756u
+#define CPU_POP_BLOCKS 689u                    /* 0.5 s of the popup (CTL 32 at 44.1 kHz: 1378 blocks a second) */
+static void fx_cpu_pop(void)
+{
+    cpu_pop = CPU_POP_BLOCKS;
+}
 static void fx_cpu_high(void)
 {
     cpu_high = CPU_HIGH_BLOCKS;
@@ -1175,6 +1180,8 @@ static void mix_block(int32_t *out, uint32_t n)
     fx_organ_apply();
     if (cpu_high)
         cpu_high--;
+    if (cpu_pop)
+        cpu_pop--;
     for (i = 0; i < n; i++)
         send_c[i] = send_d[i] = send_r[i] = mix_l[i] = mix_r[i] = 0;
     events_block(n);

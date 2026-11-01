@@ -1431,6 +1431,11 @@ static void oa_scene(void)
         ctext(120, 104, &AF_M, oa_msg, C_AMBER, C_POP);
     } else if (oa_pp_on())
         oa_pp_draw();
+    if (cpu_pop) {                                        /* overload (audio.c): the popup, on top of every page */
+        cv_rect(12, 92, 216, 40, C_ORANGE);
+        cv_rect(14, 94, 212, 36, C_POP);
+        ctext(120, 104, &AF_M, "Warning: CPU High", RGB565(0xff, 0x50, 0x38), C_POP);
+    }
 }
 
 static uint32_t oa_signature(void)
@@ -1450,7 +1455,7 @@ static uint32_t oa_signature(void)
     h = (h ^ t->p[P_REV] ^ (uint32_t)t->p[P_DLY] << 8 ^ (uint32_t)song.g[G_RTYPE] << 16 ^ (uint32_t)song.g[G_DTIME] << 20) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_RDAMP] << 7 ^ (uint32_t)song.g[G_DRREV] << 14 ^
          (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
-    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_high != 0u) << 14) * 16777619u;
+    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_high != 0u) << 14 ^ (uint32_t)(cpu_pop != 0u) << 15) * 16777619u;
     return h;
 }
 
