@@ -421,8 +421,8 @@ int main(void)
         }
         song.master_q12 = 4096;
     }
-    /* 8. CPU overload (fx_cpu_high, which audio.c's shed_voice calls when it has no voice to take; tests/audio_test.c checks that
-     * call): "CPU HIGH" for 2 s, the delay off, the oldest key let go (never the last); the rotary and the drive stay as chosen */
+    /* 8. CPU overload (fx_cpu_high, which audio.c's shed_voice calls when it has no voice to take): the oldest key let go
+     * (never the last); the delay, the rotary and the drive stay as chosen (no CPU HIGH indicator, 0.9.26) */
     {
         boot();
         memset(P, 0, sizeof P);
@@ -431,10 +431,10 @@ int main(void)
         trk[0].p[P_DLY] = 60;
         org_key(10, 1); org_key(20, 1); org_key(30, 1);
         blocks(8820);
-        check("overload: before, the delay runs, no warning", fx.dly_on == 1 && cpu_high == 0 && org.ndown == 3);
+        check("overload: before, the delay runs and the organ holds 3 keys", fx.dly_on == 1 && org.ndown == 3);
         fx_cpu_high();
         blocks(256);
-        check("  .. the warning is up, the delay is off", cpu_high > 0 && fx.dly_on == 0);
+        check("  .. the delay still runs", fx.dly_on == 1);
         check("  .. the oldest key let go, the others held", org.keys[10] == 0 && org.keys[20] && org.keys[30] && org.ndown == 2);
         check("  .. the rotary and the drive are as chosen", rot_model_req == 0 && rot_on && dr_on == 1);
         fx_cpu_high(); blocks(256);
@@ -449,8 +449,7 @@ int main(void)
                 pk = oL[i] > pk ? oL[i] : -oL[i] > pk ? -oL[i] : pk;
             check("  .. and the organ still sounds", pk > 500);
         }
-        blocks(90000);
-        check("  .. 2 s later the warning is gone and the delay is back", cpu_high == 0 && fx.dly_on == 1);
+        check("  .. the delay runs on", fx.dly_on == 1);
         org_key(30, 0);
         trk[0].p[P_DLY] = 0;
         blocks(2000);

@@ -185,10 +185,7 @@ static void header(const char *page, const char *right)
 static void footer(const char *s)
 {
     cv_rect(0, 226, 240, 1, C_PANEL2);
-    if (cpu_high)                                       /* overload (audio.c): the warning replaces the hint, on every page */
-        ctext(120, 230, &AF_X, "CPU HIGH", RGB565(0xff, 0x50, 0x38), C_PANEL);
-    else
-        ctext(120, 230, &AF_X, s, C_DIM, C_PANEL);
+    ctext(120, 230, &AF_X, s, C_DIM, C_PANEL);
 }
 
 /* the drawbars' colours by footage, as on the console: brown 16' 5 1/3', white the octaves, black the mutations */
@@ -1238,10 +1235,7 @@ static void scr_home(void)
         ctext(140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
     } else {
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
-    if (cpu_high)
-        ctext(HU(281), HU(331), &AF_X, "CPU HIGH", RGB565(0xff, 0x50, 0x38), BLACK);
-    else
-        ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
+    ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
     }
     wood(HU(20), HU(358), HU(537), HU(12));
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
@@ -1455,7 +1449,7 @@ static uint32_t oa_signature(void)
     h = (h ^ t->p[P_REV] ^ (uint32_t)t->p[P_DLY] << 8 ^ (uint32_t)song.g[G_RTYPE] << 16 ^ (uint32_t)song.g[G_DTIME] << 20) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_RDAMP] << 7 ^ (uint32_t)song.g[G_DRREV] << 14 ^
          (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
-    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_high != 0u) << 14 ^ (uint32_t)(cpu_pop != 0u) << 15) * 16777619u;
+    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_pop != 0u) << 15) * 16777619u;
     return h;
 }
 

@@ -937,7 +937,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
             sr |= (uint32_t)(trk[k].p[P_REV] > 0);
         }
         cho_act = sc || fx_any(cho_in, n);
-        dly_act = !cpu_high && (sd || fx_any(dly_in, n));
+        dly_act = sd || fx_any(dly_in, n);
         rev_act = sr || fx_any(rev_in, n);
     }
     /* FMini-1: RATE only changes the rate. The depth is a fixed, typical pitch swing (about +-16 cents, 25% above the first pick): the delay swing
@@ -1083,9 +1083,8 @@ static const int32_t ROT_KT[4][9] = {
     {2169204, 1563201, 1109987, 794698, 568144, 406302, 289768, 207222, 147989},
 };
 static uint8_t fxo_seen = 0xFF;
-/* CPU overload (audio.c shed_voice): CPU_HIGH_BLOCKS blocks (2 s) of "CPU HIGH" per request, during which the delay is off and
- * the oldest key is let go (eng_organ.c org_fragment). The rotary and the drive are left as they are */
-#define CPU_HIGH_BLOCKS 2756u
+/* CPU overload (audio.c shed_voice): the oldest key is let go (eng_organ.c org_fragment); the popup is armed by fx_cpu_pop.
+ * The delay, the rotary and the drive are left as they are */
 #define CPU_POP_BLOCKS 689u                    /* 0.5 s of the popup (CTL 32 at 44.1 kHz: 1378 blocks a second) */
 static void fx_cpu_pop(void)
 {
@@ -1093,7 +1092,6 @@ static void fx_cpu_pop(void)
 }
 static void fx_cpu_high(void)
 {
-    cpu_high = CPU_HIGH_BLOCKS;
     org_shed_req = 1;
 }
 static void fx_organ_apply(void)
@@ -1178,8 +1176,6 @@ static void mix_block(int32_t *out, uint32_t n)
     int32_t mg = fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12;   /* (USB LEVEL FIXED: MASTER after) */
     int32_t ol[CTL], orr[CTL], eq_a[CTL], eq_b[CTL];
     fx_organ_apply();
-    if (cpu_high)
-        cpu_high--;
     if (cpu_pop)
         cpu_pop--;
     for (i = 0; i < n; i++)

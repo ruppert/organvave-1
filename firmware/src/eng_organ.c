@@ -121,7 +121,6 @@ static int16_t org_atk_ram[8][128] __attribute__((section(".pool")));
 static int16_t org_rel_ram[8][128] __attribute__((section(".pool")));
 /* what the tables were built from (0: setBfree's defaults, the flash tables) */
 static uint8_t org_b_env[8], org_b_xt[6], org_xt_valid;     /* org_b_env: the six click bytes 58..63, the attack gain (84), the release gain (85) */
-static volatile uint16_t cpu_high;      /* overload: blocks left of "CPU HIGH" (the delay is off meanwhile; audio.c shed_voice arms it) */
 static volatile uint16_t cpu_pop;       /* overload: blocks left of the "Warning: CPU High" popup (0.5 s; audio.c shed_voice arms it) */
 static volatile uint8_t org_shed_req;   /* overload: release the oldest key at the next fragment (org_fragment) */
 

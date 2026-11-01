@@ -57,7 +57,7 @@ static void fresh(void)
     host_pending = FM1_AUDIO_HALF;
     transport_req = panic_req = 0;
 }
-/* the organ is no voice engine: an overload's shedding raises CPU HIGH (fx_cpu_high), the organ goes on */
+/* the organ is no voice engine: an overload's shedding lets the oldest key go (fx_cpu_high), the organ goes on */
 static void overload(void)
 {
     int32_t out[2 * CTL];
@@ -74,8 +74,8 @@ static void overload(void)
     shed_voice();
     for (b = 0; b < 8u; b++)
         mix_block(out, CTL);
-    acheck("overload: shedding raises CPU HIGH and lets the oldest key go, the organ goes on",
-           shed_count == 1u && cpu_high > 0u && org.keys[12] == 0u && org.keys[24] && org.nacl > 0u);
+    acheck("overload: shedding lets the oldest key go, the organ goes on",
+           shed_count == 1u && org.keys[12] == 0u && org.keys[24] && org.nacl > 0u);
     acheck("overload: every cut shows the popup, for 0.5 s (689 blocks), then it is gone",
            cpu_pop > 0u && cpu_pop <= 689u);
     for (b = 0; b < 689u; b++)

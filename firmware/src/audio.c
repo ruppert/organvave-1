@@ -88,7 +88,7 @@ static void shed_voice(void)
     if (best) {
         voice_kill(best);
         shed_count++;
-    } else {                                    /* the organ has no voices to take: "CPU HIGH", the delay off, the oldest key let go */
+    } else {                                    /* the organ has no voices to take: the oldest key let go */
         fx_cpu_high();
         shed_count++;
     }
