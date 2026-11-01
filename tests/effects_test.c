@@ -66,7 +66,7 @@ static void boot(void)
     P[OP_UB + 2] = 8;                    /* 8' */
     P[OP_UB + 3] = 6;                    /* 4' */
     P[OP_ROT_BAL] = 4;
-    P[OP_DRV_GAIN] = 6;
+    P[OP_DRV_GAIN] = 60;
     patch_set(P);
 }
 static double db(double x) { return 20 * log10(x > 1e-9 ? x : 1e-9); }
@@ -132,14 +132,14 @@ int main(void)
     boot();
     org_set(OP_ROT_SPEED, 9);
     org_set(OP_ROT_MIC, 9);
-    org_set(OP_DRV_GAIN, 99);
+    org_set(OP_DRV_GAIN, 250);
     org_set(OP_DRV_TYPE, 99);
     org_set(OP_DRV_TONE, 99);
     org_set(OP_ROT_HSLOW, 99);
     org_set(OP_ROT_BAL, 99);
     org_set(OP_ROT, 5);
-    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 12, TYPE 1, TONE 8, HSLOW 8, BAL 8, ROT 1)",
-          org_patch[OP_ROT_SPEED] == 2 && org_patch[OP_ROT_MIC] == 6 && org_patch[OP_DRV_GAIN] == 10 &&
+    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 100, TYPE 3, TONE 8, HSLOW 8, BAL 8, ROT 1)",
+          org_patch[OP_ROT_SPEED] == 2 && org_patch[OP_ROT_MIC] == 6 && org_patch[OP_DRV_GAIN] == 100 &&
               org_patch[OP_DRV_TYPE] == 3 && org_patch[OP_DRV_TONE] == 8 && org_patch[OP_ROT_HSLOW] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
     /* a patch of zeros in the effects bytes leaves the mix dry */
     boot();
@@ -221,7 +221,7 @@ int main(void)
     boot();
     memset(P, 0, sizeof P);
     P[OP_UB + 2] = 8;
-    P[OP_DRV_GAIN] = 6;
+    P[OP_DRV_GAIN] = 60;
     patch_set(P);
     input_on(&trk[0], 48, 100);          /* C3, 130.81 Hz at the equal temperament; the 60 Hz gear is near it */
     blocks(44100 * 2);
@@ -426,7 +426,7 @@ int main(void)
     {
         boot();
         memset(P, 0, sizeof P);
-        P[OP_UB + 2] = 8; P[OP_ROT] = 1; P[OP_ROT_MODEL] = 0; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 6;
+        P[OP_UB + 2] = 8; P[OP_ROT] = 1; P[OP_ROT_MODEL] = 0; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 60;
         patch_set(P);
         trk[0].p[P_DLY] = 60;
         org_key(10, 1); org_key(20, 1); org_key(30, 1);
@@ -464,7 +464,7 @@ int main(void)
         memset(P, 0, sizeof P);
         for (i = 0; i < 27u; i++)
             P[i] = 8;                                    /* every drawbar of every manual at 8 */
-        P[OP_PERC] = 1; P[OP_VIB] = 5; P[OP_ROT] = 1; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 10;
+        P[OP_PERC] = 1; P[OP_VIB] = 5; P[OP_ROT] = 1; P[OP_ROT_SPEED] = 2; P[OP_ROT_BAL] = 4; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 100;
         P[OP_EQ] = 1; P[OP_EQ_LOW] = 12; P[OP_EQ_MID] = 12; P[OP_EQ_HIGH] = 12;
         patch_set(P);
         trk[0].p[P_REV] = 127; trk[0].p[P_DLY] = 127;
@@ -503,7 +503,7 @@ int main(void)
         double f0 = 130.81, d1, d2, d3, t1, t2, t3, rd, rt, rt0, rt1;
         boot();
         memset(P, 0, sizeof P);
-        P[OP_UB + 2] = 8; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 6;
+        P[OP_UB + 2] = 8; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 60;
         patch_set(P);
         input_on(&trk[0], 48, 100);
         blocks(44100 * 2);

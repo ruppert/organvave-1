@@ -1043,7 +1043,7 @@ VIB 1..3, 4..6 CHO 1..3), and, from 0.3.0, the rotary speaker (`OP_ROT` 34: 0 of
 setBfree's whirl, 1 LIGHT, the cheaper model; `OP_ROT_SPEED` 36: 0 stop, 1 slow, 2 fast; `OP_ROT_HORN` 37: 0 the normal horn,
 1 the sharp one; `OP_ROT_MIC` 38: 0..6, the mics' angle, 180 degrees minus 30 a step, so 0 is the widest image and 6 the
 narrowest; `OP_ROT_BAL` 39: 0..8, the horn's level against the drum, 1.5 dB a step around 4, which is even) and the drive
-(`OP_DRV` 40: 0 off, 1 on; `OP_DRV_GAIN` 41: 0..12, the input gain, 2 dB a step around 6, setBfree's default of 3.5675;
+(`OP_DRV` 40: 0 off, 1 on; `OP_DRV_GAIN` 41: 0..100 in tenths since 0.9.25 (0.0..10.0, 0 bypasses the drive; the 0.3.0 scale 0..12 is gone, see the 0.9.24 and 0.9.25 notes below);
 `OP_DRV_FAT` 42: unused since 0.9.2, see below) and, from 0.5.0, the equaliser (`OP_EQ` 43: 0 off, 1 on; `OP_EQ_LOW` 44, `OP_EQ_MID` 45, `OP_EQ_HIGH` 47: 0..24, the
 gain of the 120 Hz low shelf, the peak and the 4 kHz high shelf, coded so that **0 is flat**: a byte s is s dB for 0..12 and
 s - 25 dB for 13..24, so 13 is -12 dB and 24 is -1 dB; `OP_EQ_FREQ` 46: 0..11, the peak's frequency, the index (f + 5) mod 12 of
@@ -1372,8 +1372,9 @@ Version 0.9.22 gave byte 35, `OP_ROT_MODEL`, the value 6: CLASSIC 6 (the same as
 Version 0.9.23 renumbered byte 35, `OP_ROT_MODEL`, and removed LIGHT and the 256-angle model. The values are now: 0 CLASSIC (setBfree's whirl); 1 CLASSIC 2 (the horn's geometry every 8 samples; the old 5); 2 CLASSIC 3 (four horn taps; the old 3); 3 CLASSIC 4 (the drum every 4 samples and four horn taps; new); 4 CLASSIC 5 (the horn's geometry every 4 samples; the old 6). The value 5 and above are no longer valid (the firmware clamps them to 4 on the FX knob; the editor offers 0 to 4). Migration on load (`upf_track_load`, a user preset found in the library): 0 -> 0, 1 (LIGHT) -> 1, 2 (old CLASSIC 2, the same sound as CLASSIC) -> 0, 3 -> 2, 4 (256 angles) -> 0, 5 -> 1, 6 -> 4. The factory bank: the presets that used LIGHT now use CLASSIC 2 (value 1), so their sound is not the old LIGHT's. Sound files and editor patches that store byte 35 are not migrated: their value is read as the new number (1 now plays CLASSIC 2, 2 plays CLASSIC 3, 4 plays CLASSIC 5), so re-check them against the mapping above.
 
 Version 0.9.24 rewrote the drive (`OP_DRV_TYPE`, `OP_DRV_GAIN`). The types are now 0 TUBE SCREAM, 1 TUBE PREAMP, 2 TUBE DRIVE, 3 DISTORTION
-(before: 0 DISTORTION, 1 TUBE). GAIN is 0..10 (0 bypasses the drive, the old scale 0..12 is gone: 11 and 12 are read as 10). Stored
-user presets and the editor's library: the drive type is migrated on load (0 -> 3, 1 -> 2) for records made before 0.9.24 (a last
-value 0x5E marks the new ones; 0x5D marks 0.9.23), and the gain is only clamped (its scale changed: set the drive again if it sounds
-different). Sound files and editor patches that store the drive are not migrated: 0 now plays TUBE SCREAM and 1 TUBE PREAMP.
-The factory bank: presets with a drive use TUBE DRIVE (type 2) or DISTORTION (type 3) with GAIN 4 + gain_db/2, clamped to 1..10.
+(before: 0 DISTORTION, 1 TUBE). Version 0.9.25 gives GAIN a resolution of 0.1: byte 41 is now 0..100 in tenths (0 bypasses the drive,
+`GAIN 3` in the old scale is `30` now). Stored user presets and the editor's library: the drive type is migrated on load (0 -> 3, 1 -> 2)
+for records made before 0.9.24 (last byte 0x5E marks 0.9.24, 0x5D marks 0.9.23); records before 0.9.25 (last byte not 0x5F) have their
+gain multiplied by 10 and clamped to 10.0 (100). The new marker is 0x5F. Sound files and editor patches that store the drive are not
+migrated: their type and gain are read as the new numbers, so re-check them. The factory bank: presets with a drive use TUBE DRIVE (type 2)
+or DISTORTION (type 3) with GAIN 10 * (4 + gain_db/2) in tenths, clamped to 1.0..10.0.

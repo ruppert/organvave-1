@@ -49,17 +49,20 @@ def lp_coef(fc):
 
 BASE_DB = {"TUBE SCREAM": 0.0, "TUBE PREAMP": 0.0, "TUBE DRIVE": 0.0, "DISTORTION": -10.0}   # the pre-gain at step 0 (the first step is nearly linear)
 
+NG = 101                                    # the GAIN knob: 0.0 .. 10.0 in tenths (index 0 is the bypass)
+
 def pre_db(ty, g):
+    """g: the GAIN in units (0.0 .. 10.0)"""
     return BASE_DB[ty[0]] + ty[2] * g
 
-def pre_gain_q8(ty, g):
-    return int(round(10 ** (pre_db(ty, g) / 20.0) * 256))
+def pre_gain_q8(ty, gi):
+    return int(round(10 ** (pre_db(ty, gi / 10.0) / 20.0) * 256))
 
 def float_chain(ty, g, x):
     """the float model of one GAIN step, sample by sample: HP, pre-gain, the stages, output (for the trims)"""
     name, fc, dbstep, stages, s2 = ty
     a = math.exp(-2 * math.pi * fc / FS)
-    G = 10 ** (pre_db(ty, g) / 20.0) if g else 1.0
+    G = 10 ** (pre_db(ty, g) / 20.0) if g else 1.0          # g in units
     y = 0.0; xp = 0.0; out = []
     for v in x:
         y = a * (y + v - xp); xp = v
@@ -76,20 +79,22 @@ def rms(v):
 
 def main():
     n = 4096
-    # the calibration: a three-note chord at -20 dBFS RMS (a chord has a higher crest factor than a sine: the types
-    # compress it differently, so the levels of the types agree on a chord, not on a sine)
-    a = 0.1 * math.sqrt(2) / math.sqrt(3)
-    sig = [a * (math.sin(2 * math.pi * 800 * i / FS) + math.sin(2 * math.pi * 1200 * i / FS) + math.sin(2 * math.pi * 1900 * i / FS)) for i in range(n)]
+    # the calibration: an organ-like chord (bass fundamentals, the drawbars' partials) at -18 dBFS RMS. A chord of treble
+    # notes lost its bass in the high-pass of TUBE SCREAM and PREAMP, and the level dropped when the drive was switched on.
+    freqs = [110.0, 165.0, 220.0, 330.0, 440.0, 660.0, 880.0]
+    a = 10 ** (-18.0 / 20) * math.sqrt(2) / math.sqrt(len(freqs))
+    sig = [a * sum(math.sin(2 * math.pi * f * i / FS) for f in freqs) for i in range(n)]
     trims = []
     for ty in TYPES:
         row = []
         ref = rms(sig[n // 2:])                              # the dry level (the bypass)
-        for g in range(11):
-            if g == 0:
+        for gi in range(NG):
+            if gi == 0:
                 row.append(1.0)
                 continue
+            g = gi / 10.0
             r = rms(float_chain(ty, g, sig)[n // 2:])
-            # the target: the dry level, rising 0.25 dB a step (+2.5 dB at the top): the same level across the knob
+            # the target: the dry level, rising 0.25 dB per unit of GAIN (+2.5 dB at 10): the same level across the knob
             target = ref * 10 ** (0.25 * g / 20.0)
             row.append(min(4.0, target / r))
         trims.append(row)
@@ -100,6 +105,7 @@ def main():
     lines.append("#include <stdint.h>")
     lines.append("#define DR_NWS 512")
     lines.append("#define DR_TYPES 4")
+    lines.append("#define DR_NG 101                             /* the GAIN knob: 0.0 .. 10.0 in tenths */")
     stage_tabs = []
     for ti, ty in enumerate(TYPES):
         for si, (A, B, C) in enumerate(ty[3]):
@@ -115,13 +121,13 @@ def main():
     lines.append("};")
     lines.append("/* the stages: index 0 TS, 1 PREAMP, 2 DRIVE, 3 DISTORTION stage 1, 4 DISTORTION stage 2 (" + "; ".join(names) + ") */")
     lines.append("static const uint16_t DR_HP[4] = {%s};" % ",".join(str(hp_coef(ty[1])) for ty in TYPES))
-    lines.append("/* the pre-gain, Q8, per type and GAIN step 0..10 (step 0: bypass, unused) */")
-    lines.append("static const uint16_t DR_PRE[4][11] = {")
+    lines.append("/* the pre-gain, Q8, per type and GAIN (tenths 0..100; index 0 is the bypass, unused) */")
+    lines.append("static const uint16_t DR_PRE[4][DR_NG] = {")
     for ty in TYPES:
-        lines.append("  {" + ",".join(str(pre_gain_q8(ty, g)) for g in range(11)) + "},")
+        lines.append("  {" + ",".join(str(pre_gain_q8(ty, g)) for g in range(NG)) + "},")
     lines.append("};")
-    lines.append("/* the output trim, Q12, per type and GAIN step: the level stays put and rises 0.25 dB a step */")
-    lines.append("static const uint16_t DR_TRIM[4][11] = {")
+    lines.append("/* the output trim, Q12, per type and GAIN (tenths): the drive stays at the dry level (organ chord) and rises 0.25 dB a unit */")
+    lines.append("static const uint16_t DR_TRIM[4][DR_NG] = {")
     for row in trims:
         lines.append("  {" + ",".join(str(int(round(t * 4096))) for t in row) + "},")
     lines.append("};")

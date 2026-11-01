@@ -1113,7 +1113,7 @@ static void fx_organ_apply(void)
     rot_st.hset = org_patch[OP_ROT_HORN];
     rot_mic(&rot_st, 180u - 30u * org_patch[OP_ROT_MIC]);
     rot_st.hl = ROT_BAL_HL[org_patch[OP_ROT_BAL] % 9u];
-    g = org_patch[OP_DRV_GAIN] > 10u ? 10u : org_patch[OP_DRV_GAIN];   /* 0.9.24: 0 bypasses the drive, 1..10 saturate more */
+    g = org_patch[OP_DRV_GAIN] > 100u ? 100u : org_patch[OP_DRV_GAIN];   /* 0.9.25: tenths, 0 bypasses the drive, more saturates */
     if (dr_st.type != (int32_t)(org_patch[OP_DRV_TYPE] & 3u))
         dr_clear(&dr_st);               /* (another type starts from silence) */
     dr_user(&dr_st, org_patch[OP_DRV_TYPE], g, org_c9(org_patch[OP_DRV_TONE]), org_c9(org_patch[OP_DRV_OUT]));

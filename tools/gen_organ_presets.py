@@ -52,7 +52,7 @@ def effects(p, fx):
         # (approximate: the old scale is gone; 4 is the middle of the new one)
         assert -12 <= gdb <= 12 and typ in ("distortion", "tube") and -4 <= tone <= 4 and -8 <= odb <= 8 and odb % 2 == 0
         p[OP_DRV] = 1
-        p[OP_DRV_GAIN] = max(1, min(10, 4 + int(round(gdb / 2))))
+        p[OP_DRV_GAIN] = max(10, min(100, 10 * (4 + int(round(gdb / 2)))))   # tenths (0.9.25)
         p[OP_DRV_TYPE] = 3 if typ == "distortion" else 2
         p[OP_DRV_TONE] = (tone + 4 + 5) % 9              # the byte for the index (the default 4 is byte 0)
         p[OP_DRV_OUT] = (odb // 2 + 4 + 5) % 9

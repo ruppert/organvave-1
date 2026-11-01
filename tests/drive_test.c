@@ -64,24 +64,28 @@ int main(void)
     int t, g;
     /* the level input: a three-note chord at -20 dBFS RMS (as the tables are calibrated: tools/gen_drive_tables.py), in
      * Q13 (1.0 = 8192); the saturation input: a sine at -20 dBFS, 1 kHz */
-    const double a = 0.1 * sqrt(2.0) / sqrt(3.0);
+    const double freqs[7] = {110, 165, 220, 330, 440, 660, 880};
+    const double a = pow(10.0, -18.0 / 20) * sqrt(2.0) / sqrt(7.0);
     for (i = 0; i < N; i++) {
-        double t = (double)i / 44100.0;
-        in[i] = (int32_t)lrint(8192 * a * (sin(2 * M_PI * 800 * t) + sin(2 * M_PI * 1200 * t) + sin(2 * M_PI * 1900 * t)));
+        double t = (double)i / 44100.0, c = 0;
+        size_t k;
+        for (k = 0; k < 7; k++)
+            c += sin(2 * M_PI * freqs[k] * t);
+        in[i] = (int32_t)lrint(8192 * a * c);
         sine[i] = (int32_t)lrint(0.1 * 8192 * sin(2 * M_PI * 1000 * t));
     }
     /* the dry level: the input in the drive's unit (1.0 = 8192 in Q13): 0.1 RMS */
-    const double dry = 20 * log10(0.1);
+    const double dry = -18.0;
     for (t = 0; t < 4; t++) {
         double h3[11], lev[11];
         int ok_level = 1, ok_top = 1;
         for (g = 1; g <= 10; g++) {
             dr_init(&D);
-            dr_user(&D, (uint32_t)t, (uint32_t)g, 4u, 4u);
+            dr_user(&D, (uint32_t)t, (uint32_t)(g * 10), 4u, 4u);
             run_drive(&D, in, out, 64);
             lev[g] = rms_db(out);
             dr_init(&D);
-            dr_user(&D, (uint32_t)t, (uint32_t)g, 4u, 4u);
+            dr_user(&D, (uint32_t)t, (uint32_t)(g * 10), 4u, 4u);
             run_drive(&D, sine, out, 64);
             h3[g] = amp_db(out, 3000.0, 44100.0);
             if (lev[g] - dry < -0.5 || lev[g] - dry > 3.0)
@@ -114,7 +118,7 @@ int main(void)
             for (g = 1; g <= 10; g++) {
                 size_t k;
                 dr_init(&D);
-                dr_user(&D, (uint32_t)t, (uint32_t)g, 8u, 8u);
+                dr_user(&D, (uint32_t)t, (uint32_t)(g * 10), 8u, 8u);
                 for (k = 0; k < N; k++)
                     in[k] = (k / 50) % 2 ? 32767 : -32768;
                 run_drive(&D, in, out, 64);
@@ -124,7 +128,7 @@ int main(void)
                 for (k = 0; k < N; k++)
                     in[k] = (int32_t)(rand() % 65536) - 32768;
                 dr_init(&D);
-                dr_user(&D, (uint32_t)t, (uint32_t)g, 8u, 8u);
+                dr_user(&D, (uint32_t)t, (uint32_t)(g * 10), 8u, 8u);
                 run_drive(&D, in, out, 64);
                 for (k = 0; k < N; k++)
                     if (out[k] > 32767 || out[k] < -32768)
@@ -139,7 +143,7 @@ int main(void)
             in[i] = 0;
         for (t = 0; t < 4; t++) {
             dr_init(&D);
-            dr_user(&D, (uint32_t)t, 10u, 4u, 4u);
+            dr_user(&D, (uint32_t)t, 100u, 4u, 4u);
             run_drive(&D, in, out, 64);
             for (i = 0; i < N; i++)
                 if (out[i] != 0)
@@ -154,16 +158,16 @@ int main(void)
             in[i] = (int32_t)lrint(0.3 * 8192 * sin(2 * M_PI * 220.0 * (double)i / 44100.0));
         for (t = 0; t < 4; t++) {
             dr_init(&D);
-            dr_user(&D, (uint32_t)t, 7u, 2u, 6u);
+            dr_user(&D, (uint32_t)t, 70u, 2u, 6u);
             run_drive(&D, in, ref, 64);
             dr_init(&D);
-            dr_user(&D, (uint32_t)t, 7u, 2u, 6u);
+            dr_user(&D, (uint32_t)t, 70u, 2u, 6u);
             run_drive(&D, in, out, 1);
             for (i = 0; i < N; i++)
                 if (out[i] != ref[i])
                     ok = 0;
             dr_init(&D);
-            dr_user(&D, (uint32_t)t, 7u, 2u, 6u);
+            dr_user(&D, (uint32_t)t, 70u, 2u, 6u);
             run_drive(&D, in, out, 7);
             for (i = 0; i < N; i++)
                 if (out[i] != ref[i])

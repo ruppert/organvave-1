@@ -469,12 +469,15 @@ int main(int argc, char **argv)
         bad += check("  .. the bottom stays TUBE SCREAM", org_patch[OP_DRV_TYPE] == 0);
         turn(EN_K2, 9);
         bad += check("  .. the top is DISTORTION", org_patch[OP_DRV_TYPE] == 3);
-        org_set(OP_DRV_GAIN, 6);
+        org_set(OP_DRV_GAIN, 60);
         turn(EN_K3, 1);
-        bad += check("  .. KNOB 3: the gain up a step", org_patch[OP_DRV_GAIN] == 7);
-        for (i = 0; i < 14u; i++)
+        bad += check("  .. KNOB 3: the gain up a tenth (6.0 to 6.1)", org_patch[OP_DRV_GAIN] == 61);
+        org_set(OP_DRV_GAIN, 3);
+        for (i = 0; i < 5u; i++)
             turn(EN_K3, -1);
         bad += check("  .. and down to the bottom (0: the bypass)", org_patch[OP_DRV_GAIN] == 0);
+        turn(EN_K3, -1);
+        bad += check("  .. the bottom stays at 0", org_patch[OP_DRV_GAIN] == 0);
         turn(EN_K4, 1);
         bad += check("  .. KNOB 4: the tone up a step (byte 1, index 5)", org_patch[OP_DRV_TONE] == 1 && org_c9(org_patch[OP_DRV_TONE]) == 5);
         for (i = 0; i < 4u; i++)

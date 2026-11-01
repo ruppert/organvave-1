@@ -150,13 +150,13 @@ standard libraries, Pd's standard objects or Csound's opcodes.
 - **Drawbar law**: **(owner)** linear, as setBfree (8 -> 4 = -6 dB).
 - **Scanner vibrato / chorus** (`vibrato.c`): write-side interpolated variable delay, 7.25 Hz, depths 3 / 6 / 9 samples;
   chorus = the same mixed with the dry signal at 0.707. (Not the original's 16-stage LC line.)
-- **Drive** (0.9.24, rewritten from scratch; `src/eng_drive.c`, the tables from `tools/gen_drive_tables.py`): the setBfree port of
+- **Drive** (0.9.24, GAIN in tenths since 0.9.25, rewritten from scratch; `src/eng_drive.c`, the tables from `tools/gen_drive_tables.py`): the setBfree port of
   0.3.0 is gone. Four types, each a short integer chain (input high-pass, pre-gain, waveshaper table, tone, output trim):
   **TUBE SCREAM** (inspired by [TS-808-Ultra](https://github.com/JamesStubbsEng/TS-808-Ultra), GPL-3.0: the diode clipper's tanh fit,
   high-passed at 720 Hz), **TUBE PREAMP** (inspired by [ValveLord](https://github.com/D4p0up/ValveLord), a 12AU7 circuit: an asymmetric
   curve from the grid bias), **TUBE DRIVE** (made here: warm, mild, good at low and high gain) and **DISTORTION** (a JCM900-style
-  two-stage clip). GAIN 0..10: 0 bypasses the drive; the output trim is measured (a three-note chord at -20 dBFS) so the level stays at
-  the dry level and rises +2.5 dB over the knob. TONE: dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a 2 kHz-pivot treble lift);
+  two-stage clip). GAIN 0.0..10.0 in steps of 0.1 (0 bypasses the drive). The output trim is measured on an organ-like chord (seven partials, bass
+  included, at -18 dBFS), so the level stays near the dry level at low gain and rises by 2.5 to 4.5 dB over the knob, by type. TONE: dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a 2 kHz-pivot treble lift);
   OUTPUT +-8 dB. Cost: 78 loop instructions a block (the old port: about 250), host measurement about 75 instructions a sample for
   the two-stage DISTORTION at GAIN 10 (the old one about 166). Known: on the organ's hotter signal the types differ by about 5 dB (the
   two-stage DISTORTION compresses harder), not yet matched per type. Nothing here is tested on a real FM-1, and the sound is a

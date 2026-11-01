@@ -541,7 +541,7 @@ enum {
     OP_ROT_MIC = 38,            /* the mics' angle (the stereo width): 0 wide (180 degrees) .. 6 mono (0), 30 degrees a step */
     OP_ROT_BAL = 39,            /* horn level against the drum: 0..8, 4 even (1.5 dB a step, -6 .. +6 dB) */
     OP_DRV = 40,                /* drive (the preamp): 0 off, 1 on */
-    OP_DRV_GAIN = 41,           /* its gain: 0..10 (0.9.24): 0 bypasses the drive, 1..10 saturate more (the level is compensated) */
+    OP_DRV_GAIN = 41,           /* its gain in tenths: 0..100 (0.9.25; 0.9.24 was 0..10): 0 bypasses the drive, more saturates (the level is compensated) */
     OP_DRV_FAT = 42,            /* unused since 0.9.2 (the character went); stored 0..8 in older patches, ignored */
     OP_EQ = 43,                 /* the equaliser (version 0.5.0; 0 in older patches): 0 off, 1 on */
     OP_EQ_LOW = 44,             /* LOW (120 Hz shelf), -12 .. +12 dB: 0 flat, 1..12 dB up, 13..24 dB down (s - 25) */
@@ -661,7 +661,7 @@ static uint32_t org_pmax(uint32_t i)
     if (i == OP_DRV_TYPE)
         return 3u;
     if (i == OP_DRV_GAIN)
-        return 10u;
+        return 100u;
     if (i == OP_EQ)
         return 1u;
     if (i == OP_EQ_LOW || i == OP_EQ_MID || i == OP_EQ_HIGH)

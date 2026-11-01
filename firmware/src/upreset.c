@@ -142,7 +142,8 @@ static void up_slot_label(char *b, uint32_t k)  /* "U07" */
 /* ------------------------------------------------ the presets' organ patches --- */
 #define UPF_MAGIC 0x36465055u                    /* "UPF6" */
 #define UPF_N 128u                               /* an entry's patch: 128 7-bit values (the organ: its ORG_PSIZE first) */
-#define UPF_RENUM 0x5Eu                          /* the last value of a patch entry: stored with the 0.9.24 numbers (0.9.23: 0x5D; 0.9.22 and before: 0) */
+#define UPF_RENUM 0x5Fu                          /* the last value of a patch entry: stored with the 0.9.25 numbers (0.9.24: 0x5E, 0.9.23: 0x5D; 0.9.22 and before: 0) */
+#define UPF_RENUM_DRV 0x5Eu                      /* 0.9.24: the drive types are the new ones, the gain is in units */
 #define UPF_PK 112u                              /* .. packed 8 to 7 bytes */
 typedef struct {
     uint32_t tag;                                /* upf_tag of the record it belongs to */
@@ -259,14 +260,16 @@ static void upf_track_load(track_t *t, uint32_t k)
          * angles are gone; the old CLASSIC 5 and 6 are CLASSIC 2 and 5), 0.9.24 the drive's types (DISTORTION is 3, TUBE is 2)
          * and its gain (0..10). A patch keeps its sound where a value still means it; the drive's gain scale changed, so it
          * is only clamped (set the drive again if it sounds different) */
-        if (pk[UPF_N - 1u] != UPF_RENUM) {
+        if (pk[UPF_N - 1u] != UPF_RENUM && pk[UPF_N - 1u] != UPF_RENUM_DRV) {
             static const uint8_t DRV_MAP[2] = {3u, 2u};
             if (pk[OP_DRV_TYPE] < 2u)
                 pk[OP_DRV_TYPE] = DRV_MAP[pk[OP_DRV_TYPE]];
-            if (pk[OP_DRV_GAIN] > 10u)
-                pk[OP_DRV_GAIN] = 10u;
         }
-        if (pk[UPF_N - 1u] != UPF_RENUM && pk[UPF_N - 1u] != 0x5Du) {
+        if (pk[UPF_N - 1u] != UPF_RENUM) {               /* the gain: 0.9.24 counted units (0..10), 0.9.25 tenths */
+            uint32_t gv = (pk[OP_DRV_GAIN] > 10u ? 10u : pk[OP_DRV_GAIN]) * 10u;   /* (0.9.23 and before: 0..12 in 2 dB steps: the top, 10) */
+            pk[OP_DRV_GAIN] = (uint8_t)gv;
+        }
+        if (pk[UPF_N - 1u] != UPF_RENUM && pk[UPF_N - 1u] != UPF_RENUM_DRV && pk[UPF_N - 1u] != 0x5Du) {
             static const uint8_t ROT_MAP[7] = {0u, 1u, 0u, 2u, 0u, 1u, 4u};
             if (pk[OP_ROT_MODEL] < 7u)
                 pk[OP_ROT_MODEL] = ROT_MAP[pk[OP_ROT_MODEL]];

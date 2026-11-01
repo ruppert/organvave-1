@@ -57,12 +57,12 @@ static void dr_init(dr_t *d)
     dr_clear(d);
 }
 
-/* the user's settings: type 0..3, gain 0..10 (0 must not reach here: the caller bypasses), tone 0..8 (4 flat), output 0..8
+/* the user's settings: type 0..3, gain 0..100 (tenths: 10.0 is the top; 0 must not reach here: the caller bypasses), tone 0..8 (4 flat), output 0..8
  * (4 = 0 dB, 2 dB a step: DR_OUT_G, Q12) */
 static void dr_user(dr_t *d, uint32_t type, uint32_t gain, uint32_t tone, uint32_t out)
 {
     static const uint16_t OUT_G[9] = {1630, 2053, 2584, 3254, 4096, 5157, 6492, 8173, 10289};   /* -8 .. +8 dB, Q12 */
-    uint32_t g = gain > 10u ? 10u : gain, t = tone > 8u ? 8u : tone, o = out > 8u ? 8u : out;
+    uint32_t g = gain > 100u ? 100u : gain, t = tone > 8u ? 8u : tone, o = out > 8u ? 8u : out;
     d->type = (int32_t)(type & 3u);
     d->ig = DR_PRE[type & 3u][g];
     d->hc = DR_HP[type & 3u];

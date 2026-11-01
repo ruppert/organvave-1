@@ -865,12 +865,12 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
             oa_vt(v, DRV_NAME[org_patch[OP_DRV_TYPE] & 3u]);
             v->on = org_patch[OP_DRV] != 0;
         } else if (r == 2u) {
-            i = oa_u(OP_DRV_GAIN, 10u);                  /* 0.9.24: 0 .. 10; 0 bypasses the drive */
+            i = oa_u(OP_DRV_GAIN, 100u);                 /* 0.9.25: tenths, 0.0 .. 10.0; 0 bypasses the drive */
             if (i == 0)
                 oa_vt(v, "OFF");
             else
-                oa_vnum(v, i, 0, "");
-            v->mn = 11;
+                oa_vnum(v, i, 1, "");
+            v->mn = 101;
             v->mv = (int8_t)(i + 1);
             v->on = i != 0;
         } else if (r == 3u) {
@@ -990,7 +990,7 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
         else if (r == 1u)
             org_set(OP_DRV_TYPE, (uint32_t)clamp(oa_u(OP_DRV_TYPE, 3u) + d, 0, 3));   /* 0.9.24: TUBE SCREAM .. DISTORTION */
         else if (r == 2u)
-            org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 10u) + d, 0, 10));  /* 0 is the bypass */
+            org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 100u) + d, 0, 100));  /* tenths; 0 is the bypass */
         else
             oa_c9(r == 3u ? OP_DRV_TONE : OP_DRV_OUT, d);
     } else if (pg == 5u) {
