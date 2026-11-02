@@ -124,6 +124,10 @@ static uint8_t org_b_env[8], org_b_xt[6], org_xt_valid;     /* org_b_env: the si
 /* the CPU meter's second figure (0.9.28): TIMER5's time nested in the render (the key scan, USB audio), 1/256 of a half, averaged
  * as song.cpu_q8 (audio.c sets it). The overload check counts both: render + this is what it compares with 93 % */
 static volatile uint32_t audio_t5_q8, audio_t5_rem;
+/* DRAWBAR PRESET MODE (0.9.32, ARP: organ_app.c): the FM-1's keys pick a drawbar set instead of playing. The UI sets
+ * org_dbp_mode; the key scan (seq.c keyboard_block) keeps the keys silent and leaves the key of the middle octave pressed
+ * last in org_dbp_key (1 = its C .. 13 = the C above; 0 = none), which the UI takes */
+static volatile uint8_t org_dbp_mode, org_dbp_key;
 static volatile uint16_t cpu_pop;       /* overload: blocks left of the "Warning: CPU High" popup (0.5 s; audio.c shed_voice arms it) */
 static volatile uint8_t org_shed_req;   /* overload: release the oldest key at the next fragment (org_fragment) */
 

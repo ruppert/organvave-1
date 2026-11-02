@@ -170,6 +170,33 @@ static void chrome(int32_t x, int32_t y, int32_t w, int32_t h)
         cv_rect(x, y + j, w, 1, j == 0 ? C_CHR_HI : j == h - 1 ? C_CHR_LO : mix(C_CHR_HI, C_CHR, j * 256 / h));
 }
 /* the header every screen shares: the wood lid with the page's name engraved left and the patch right, a chrome trim */
+/* DRAWBAR PRESET MODE (0.9.32, owner): ARP opens it; the middle octave's keys pick a set of the upper manual's nine drawbars
+ * (16' .. 1'), the C above brings back the bars of before the mode. ARP or any other button leaves it; the bars picked stay
+ * (a change of the preset playing, as the knobs make: SAVE writes it). The keys sound nothing meanwhile; MIDI plays */
+static const uint8_t OA_DBP[12][9] = {
+    {8, 0, 0, 0, 0, 0, 0, 0, 0}, {8, 2, 8, 0, 0, 0, 0, 0, 0}, {0, 0, 8, 0, 0, 0, 0, 0, 0}, {8, 0, 0, 0, 0, 0, 0, 0, 8},   /* C C# D D# */
+    {8, 8, 8, 0, 0, 0, 0, 0, 0}, {8, 8, 8, 8, 0, 0, 0, 0, 0}, {8, 8, 8, 0, 0, 0, 0, 0, 7}, {8, 0, 0, 0, 0, 8, 8, 8, 8},   /* E F F# G */
+    {8, 0, 8, 0, 0, 0, 0, 0, 8}, {0, 0, 4, 6, 7, 5, 3, 0, 0}, {8, 8, 8, 5, 3, 1, 3, 5, 8}, {8, 8, 8, 8, 8, 8, 8, 8, 8},   /* G# A A# B */
+};
+static uint8_t oa_dbp, oa_dbp_was[9];                    /* the mode is open; the upper bars when it opened */
+static void oa_dbp_set(int on)
+{
+    uint32_t i;
+    if (on) {
+        for (i = 0; i < 9u; i++)
+            oa_dbp_was[i] = org_patch[OP_UB + i];
+        org_dbp_key = 0;
+    }
+    oa_dbp = (uint8_t)on;
+    org_dbp_mode = (uint8_t)on;                           /* the key scan lets the keys held go and keeps them silent */
+}
+static void oa_dbp_key(uint32_t k)                        /* 1 .. 12: a set; 13: the bars of before the mode */
+{
+    uint32_t i;
+    for (i = 0; i < 9u; i++)
+        org_set(OP_UB + i, k <= 12u ? OA_DBP[k - 1u][i] : oa_dbp_was[i]);
+}
+
 /* the drive's types (OP_DRV_TYPE, two since 0.9.30: 2 TUBE DRIVE, 3 DISTORTION; 0 and 1, the removed TUBE SCREAM and TUBE
  * PREAMP, play as TUBE DRIVE): the DRIVE page's TYPE row and its header */
 static const char *const OA_DRV_NAME[4] = {"TUBE DRIVE", "TUBE DRIVE", "TUBE DRIVE", "DISTORTION"};
@@ -1134,13 +1161,42 @@ static void home_knob(int32_t cx, int32_t cy, int32_t a)
               C_AMBER, 2);
 }
 
+/* the upper manual's nine drawbars as HOME draws them (the stems, the step numbers, the heads): HOME and the DRAWBAR PRESET
+ * pop-up */
+static void oa_upper_bars(void)
+{
+    int32_t i, j;
+    uint32_t v;
+    for (i = 0; i < 9; i++) {
+        int32_t cx10 = 677 + 552 * i;                          /* the bar's centre, tenths of a unit */
+        int32_t sx = HU10(cx10 - 155), sw = HU10(309), cx = HU10(cx10);
+        int32_t top = HU10(930 + 217 * 0);                     /* the stem's top (the panel's) */
+        v = org_patch[OP_UB + (uint32_t)i];
+        if (v > 8u)
+            v = 8u;
+        {
+            int32_t headtop = HU10(930 + 217 * (int32_t)v);
+            if (headtop > top) {
+                cv_rect(sx, top, sw, headtop - top, RGB565(0x2a, 0x2a, 0x2a));
+                cv_rect(sx + 1, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
+                cv_rect(sx + sw - 3, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
+            }
+            for (j = 0; j < (int32_t)v; j++) {
+                char dgt[2] = {(char)('0' + (int32_t)v - j), 0};
+                ctext(cx, top + HU10(217) * j + 1, &AF_X, dgt, RGB565(0xff, 0xff, 0xff), RGB565(0x2a, 0x2a, 0x2a));
+            }
+            art_blit(cx - HOME_HEAD_W / 2, headtop, HOME_HEAD_W, HOME_HEAD_H, HOME_HEAD[i]);
+        }
+    }
+}
+
 static void scr_home(void)
 {
     static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x00, 0x00, 0x00);
     static const char *const ROT_POS[6] = {"V3", "C3", "V1", "C1", "V2", "C2"};   /* the selector: from noon, clockwise, 60 degrees */
     static const uint8_t VIB_POS[7] = {0, 2, 4, 0, 3, 5, 1};                     /* OP_VIB 0 off .. 6 C3 -> position */
     char num[8], nm[16];
-    int32_t i, j, pos, vib, sel, lx, ly, lit;
+    int32_t j, pos, vib, sel, lx, ly, lit;
     uint32_t v;
     int32_t pl = oa_page == 9u;                            /* HOME again: the drawbars are the pedal's and the lower's */
     oa_preset_label(num, nm);
@@ -1201,27 +1257,8 @@ static void scr_home(void)
             }
         }
     }
-    for (i = 0; i < (pl ? 0 : 9); i++) {
-        int32_t cx10 = 677 + 552 * i;                          /* the bar's centre, tenths of a unit */
-        int32_t sx = HU10(cx10 - 155), sw = HU10(309), cx = HU10(cx10);
-        int32_t top = HU10(930 + 217 * 0);                     /* the stem's top (the panel's) */
-        v = org_patch[OP_UB + (uint32_t)i];
-        if (v > 8u)
-            v = 8u;
-        {
-            int32_t headtop = HU10(930 + 217 * (int32_t)v);
-            if (headtop > top) {
-                cv_rect(sx, top, sw, headtop - top, RGB565(0x2a, 0x2a, 0x2a));
-                cv_rect(sx + 1, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
-                cv_rect(sx + sw - 3, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
-            }
-            for (j = 0; j < (int32_t)v; j++) {
-                char dgt[2] = {(char)('0' + (int32_t)v - j), 0};
-                ctext(cx, top + HU10(217) * j + 1, &AF_X, dgt, RGB565(0xff, 0xff, 0xff), RGB565(0x2a, 0x2a, 0x2a));
-            }
-            art_blit(cx - HOME_HEAD_W / 2, headtop, HOME_HEAD_W, HOME_HEAD_H, HOME_HEAD[i]);
-        }
-    }
+    if (!pl)
+        oa_upper_bars();
     {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
         static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
         if (pl && oa_home_reg == 0u) {                    /* HOME 2: the pedal's two stems, 16' and 8' */
@@ -1436,6 +1473,13 @@ static void oa_scene(void)
         ctext(120, 104, &AF_M, oa_msg, C_AMBER, C_POP);
     } else if (oa_pp_on())
         oa_pp_draw();
+    if (oa_dbp) {                                         /* DRAWBAR PRESET MODE: over every page, the bars live */
+        cv_rect(2, 2, 236, 236, C_ORANGE);
+        cv_rect(4, 4, 232, 232, RGB565(0x00, 0x00, 0x00));
+        ctext(120, 12, &AF_M, "DRAWBAR PRESET MODE", C_AMBER, RGB565(0x00, 0x00, 0x00));
+        oa_upper_bars();
+        ctext(120, 168, &AF_S, "Press a note to select drawbar preset", C_CREAM, RGB565(0x00, 0x00, 0x00));
+    }
     if (cpu_pop) {                                        /* overload (audio.c): the popup, on top of every page */
         cv_rect(12, 92, 216, 40, C_ORANGE);
         cv_rect(14, 94, 212, 36, C_POP);
@@ -1460,7 +1504,7 @@ static uint32_t oa_signature(void)
     h = (h ^ t->p[P_REV] ^ (uint32_t)t->p[P_DLY] << 8 ^ (uint32_t)song.g[G_RTYPE] << 16 ^ (uint32_t)song.g[G_DTIME] << 20) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_RDAMP] << 7 ^ (uint32_t)song.g[G_DRREV] << 14 ^
          (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
-    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_pop != 0u) << 15) * 16777619u;
+    h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_pop != 0u) << 15 ^ (uint32_t)oa_dbp << 16) * 16777619u;
     if (!oa_gl && (oa_page == 0u || oa_page > 8u))           /* HOME: the CPU meter is redrawn when a figure changes (0.9.28) */
         h = (h ^ song.cpu_q8 * 100u / 256u ^ (audio_t5_q8 * 100u / 256u) << 8) * 16777619u;
     return h;
@@ -1521,6 +1565,13 @@ static void oa_bar(uint32_t i, int32_t s)                 /* bar i (of the page'
 
 static void oa_buttons(uint32_t pressed)
 {
+    if ((pressed >> panel.btn[B_ARP]) & 1u) {             /* ARP: DRAWBAR PRESET MODE, open or closed (0.9.32) */
+        oa_close_all();
+        oa_dbp_set(!oa_dbp);
+        return;
+    }
+    if (oa_dbp && pressed)                                /* any other button leaves the mode, then does its own work */
+        oa_dbp_set(0);
     if ((pressed >> panel.btn[B_HOME]) & 1u) {            /* HOME: the first screen; the pop-ups close. HOME again on HOME: the pedal's and the lower's drawbars (0.10.4); again: HOME */
         oa_close_all();
         oa_page = oa_page == 0u ? 9u : 0u;
@@ -1759,6 +1810,10 @@ static void oa_input(void)
     }
     song.sel = 0;
     oa_buttons(pressed);
+    if (oa_dbp && (k = org_dbp_key) != 0u) {              /* DRAWBAR PRESET MODE: a key of the middle octave */
+        org_dbp_key = 0;
+        oa_dbp_key(k);
+    }
     if (oa_track_preset())                                /* a new preset (the knob, a Program Change, a saved one) */
         oa_sv = 0;
     if (oa_gl) {                                          /* the GLO pop-up (the knobs wait) */
@@ -1868,6 +1923,7 @@ static void oa_leds(void)
     led_put(nl, panel.btn[B_LFO], vib_on() != 0);
     led_put(nl, panel.btn[B_SAVE], oa_sv);
     led_put(nl, panel.btn[B_GLO], oa_gl != 0u);
+    led_put(nl, panel.btn[B_ARP], oa_dbp != 0u);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);
     led_put(nl, panel.btn[B_OCTUP], song.octave > 0);
     c = fm1_in.notes;                                       /* the keys held */

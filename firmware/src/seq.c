@@ -295,7 +295,17 @@ static void key_off(uint32_t k, track_t *t)
 
 static void keyboard_block(void)
 {
+    static uint8_t dbp_was;
     uint32_t cur = fm1_in.notes, ch, k;
+    if (org_dbp_mode != dbp_was) {                /* DRAWBAR PRESET MODE (0.9.32) coming in: the keys held let go, silent */
+        dbp_was = org_dbp_mode;
+        if (dbp_was)
+            for (k = 0; k < 27u; k++)
+                if (((kb_prev >> k) & 1u) && kb_note[k] != KB_SILENT) {
+                    key_off(k, TSEL);
+                    kb_note[k] = KB_SILENT;
+                }
+    }
     ch = cur ^ kb_prev;
     if (!ch)
         return;
@@ -310,6 +320,12 @@ static void keyboard_block(void)
         if (!((ch >> k) & 1u))
             continue;
         if ((cur >> k) & 1u) {
+            if (org_dbp_mode) {                   /* DRAWBAR PRESET MODE: no note; the middle octave's C .. C (keys 7 .. 19: */
+                kb_note[k] = KB_SILENT;           /* the keyboard starts on F) picks a drawbar set, whatever the octave */
+                if (k >= 7u && k <= 19u)
+                    org_dbp_key = (uint8_t)(k - 6u);
+                continue;
+            }
             kb_note[k] = (uint8_t)kb_map(TSEL, k);
             key_on(k, TSEL);
         } else {

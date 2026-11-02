@@ -755,6 +755,82 @@ int main(int argc, char **argv)
         }
         press(B_HOME);
     }
+    {   /* DRAWBAR PRESET MODE (0.9.32): ARP opens it; the keys of the middle octave (C .. C, keys 7 .. 19: the keyboard starts on F)
+         * set the upper drawbars, silently; the C above brings back the bars of before; any other button leaves, the bars stay */
+        static const uint8_t START[9] = {1, 2, 3, 4, 5, 6, 7, 8, 0}, A[9] = {0, 0, 4, 6, 7, 5, 3, 0, 0}, C[9] = {8, 0, 0, 0, 0, 0, 0, 0, 0};
+        uint32_t h0, ok;
+        press(B_HOME);
+        for (i = 0; i < 9u; i++)
+            org_set(OP_UB + i, START[i]);
+        h0 = frame_hash();
+        fm1_in.notes = 1u << 12;                          /* a key held before the mode */
+        keyboard_block();
+        bad += check("DRAWBAR PRESET: a key plays before the mode", kb_note[12] != KB_SILENT);
+        press(B_ARP);
+        keyboard_block();
+        bad += check("  .. ARP opens it, and the key held lets go (silent)",
+                     oa_dbp && org_dbp_mode && kb_note[12] == KB_SILENT);
+        bad += check("  .. the pop-up is drawn over the page", frame_hash() != h0);
+        fm1_in.notes = (1u << 12) | (1u << 16);           /* A of the middle octave */
+        keyboard_block();
+        oa_input();
+        for (ok = 1, i = 0; i < 9u; i++)
+            ok &= org_patch[OP_UB + i] == A[i];
+        bad += check("  .. A sets 004675300 on the upper drawbars, and sounds nothing", ok && kb_note[16] == KB_SILENT);
+        fm1_in.notes = 0;
+        keyboard_block();
+        fm1_in.notes = 1u << 19;                          /* the C above */
+        keyboard_block();
+        oa_input();
+        for (ok = 1, i = 0; i < 9u; i++)
+            ok &= org_patch[OP_UB + i] == START[i];
+        bad += check("  .. the C above brings back the bars of before the mode", ok);
+        fm1_in.notes = 0;
+        keyboard_block();
+        fm1_in.notes = 1u << 3;                           /* a key outside the octave */
+        keyboard_block();
+        oa_input();
+        for (ok = 1, i = 0; i < 9u; i++)
+            ok &= org_patch[OP_UB + i] == START[i];
+        bad += check("  .. a key outside the octave does nothing (and is silent)", ok && kb_note[3] == KB_SILENT);
+        fm1_in.notes = 0;
+        keyboard_block();
+        fm1_in.notes = 1u << 7;                           /* C */
+        keyboard_block();
+        oa_input();
+        fm1_in.notes = 0;
+        keyboard_block();
+        if (shot_dir) {
+            char path[200];
+            FILE *f;
+            (void)frame_hash();
+            snprintf(path, sizeof path, "%s/drawbar_preset.ppm", shot_dir);
+            f = fopen(path, "wb");
+            if (f) {
+                fprintf(f, "P6\n240 240\n255\n");
+                for (i = 0; i < 240u * 240u; i++) {
+                    uint16_t c = (uint16_t)((host_screen[i] >> 8) | (host_screen[i] << 8));
+                    unsigned char px[3] = {(unsigned char)(((c >> 11) & 31) * 255 / 31), (unsigned char)(((c >> 5) & 63) * 255 / 63), (unsigned char)((c & 31) * 255 / 31)};
+                    fwrite(px, 1, 3, f);
+                }
+                fclose(f);
+            }
+        }
+        press(B_FX);
+        for (ok = 1, i = 0; i < 9u; i++)
+            ok &= org_patch[OP_UB + i] == C[i];
+        bad += check("  .. another button (FX) leaves the mode and does its work; the bars picked (C: 800000000) stay",
+                     !oa_dbp && !org_dbp_mode && oa_page == 2u && ok);
+        fm1_in.notes = 1u << 7;
+        keyboard_block();
+        bad += check("  .. the keys play again", kb_note[7] != KB_SILENT);
+        fm1_in.notes = 0;
+        keyboard_block();
+        press(B_ARP);
+        press(B_ARP);
+        bad += check("  .. ARP again closes it", !oa_dbp && !org_dbp_mode);
+        press(B_HOME);
+    }
 
     printf("%s\n", bad ? "ORGAN APP TEST FAILED" : "organ app test passed");
     return bad != 0;
