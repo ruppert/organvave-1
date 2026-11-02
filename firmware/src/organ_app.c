@@ -1161,21 +1161,21 @@ static void home_knob(int32_t cx, int32_t cy, int32_t a)
               C_AMBER, 2);
 }
 
-/* the upper manual's nine drawbars as HOME draws them (the stems, the step numbers, the heads): HOME and the DRAWBAR PRESET
- * pop-up */
-static void oa_upper_bars(void)
+/* the upper manual's nine drawbars as HOME draws them (the stems, the step numbers, the heads), dy pixels lower: HOME (0) and the
+ * DRAWBAR PRESET pop-up. They span x 19 .. 220 and, the heads pulled out, 101 pixels down from the stems' top (HU10(930) + dy) */
+static void oa_upper_bars(int32_t dy)
 {
     int32_t i, j;
     uint32_t v;
     for (i = 0; i < 9; i++) {
         int32_t cx10 = 677 + 552 * i;                          /* the bar's centre, tenths of a unit */
         int32_t sx = HU10(cx10 - 155), sw = HU10(309), cx = HU10(cx10);
-        int32_t top = HU10(930 + 217 * 0);                     /* the stem's top (the panel's) */
+        int32_t top = HU10(930) + dy;                          /* the stem's top (the panel's) */
         v = org_patch[OP_UB + (uint32_t)i];
         if (v > 8u)
             v = 8u;
         {
-            int32_t headtop = HU10(930 + 217 * (int32_t)v);
+            int32_t headtop = HU10(930 + 217 * (int32_t)v) + dy;
             if (headtop > top) {
                 cv_rect(sx, top, sw, headtop - top, RGB565(0x2a, 0x2a, 0x2a));
                 cv_rect(sx + 1, top, 2, headtop - top, RGB565(0xd8, 0xd4, 0xcc));
@@ -1258,7 +1258,7 @@ static void scr_home(void)
         }
     }
     if (!pl)
-        oa_upper_bars();
+        oa_upper_bars(0);
     {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
         static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
         if (pl && oa_home_reg == 0u) {                    /* HOME 2: the pedal's two stems, 16' and 8' */
@@ -1474,11 +1474,13 @@ static void oa_scene(void)
     } else if (oa_pp_on())
         oa_pp_draw();
     if (oa_dbp) {                                         /* DRAWBAR PRESET MODE: over every page, the bars live */
-        cv_rect(2, 2, 236, 236, C_ORANGE);
-        cv_rect(4, 4, 232, 232, RGB565(0x00, 0x00, 0x00));
-        ctext(120, 12, &AF_M, "DRAWBAR PRESET MODE", C_AMBER, RGB565(0x00, 0x00, 0x00));
-        oa_upper_bars();
-        ctext(120, 168, &AF_S, "Press a note to select drawbar preset", C_CREAM, RGB565(0x00, 0x00, 0x00));
+        /* as small as its contents (0.9.33): the title, the bars (x 19 .. 220, 101 px high), the line under; centred */
+        int32_t hgt = 6 + AF_M.h + 4 + 101 + 8 + AF_S.h + 4, y0 = (240 - hgt) / 2, by = y0 + 6 + AF_M.h + 4;
+        cv_rect(11, y0 - 2, 218, hgt + 4, C_ORANGE);
+        cv_rect(13, y0, 214, hgt, RGB565(0x00, 0x00, 0x00));
+        ctext(120, y0 + 6, &AF_M, "DRAWBAR PRESET MODE", C_AMBER, RGB565(0x00, 0x00, 0x00));
+        oa_upper_bars(by - HU10(930));
+        ctext(120, by + 101 + 8, &AF_S, "Press a note to select drawbar preset", C_CREAM, RGB565(0x00, 0x00, 0x00));
     }
     if (cpu_pop) {                                        /* overload (audio.c): the popup, on top of every page */
         cv_rect(12, 92, 216, 40, C_ORANGE);
