@@ -217,11 +217,13 @@ int main(void)
         check("the drive coming in: no step (within 4 times the dry mix's; it adds harmonics, so more is allowed)", dj < 4.0 * d0 + 50);
     }
 
-    /* 4. the drive: a single key, one drawbar: the third harmonic */
+    /* 4. the drive: a single key, one drawbar: the third harmonic. DISTORTION: a single drawbar's note is far under the level
+     * TUBE DRIVE's law is set at (0.9.30: its knob follows its distortion at the organ's level), so it hardly distorts it */
     boot();
     memset(P, 0, sizeof P);
     P[OP_UB + 2] = 8;
     P[OP_DRV_GAIN] = 60;
+    P[OP_DRV_TYPE] = 3;
     patch_set(P);
     input_on(&trk[0], 48, 100);          /* C3, 130.81 Hz at the equal temperament; the 60 Hz gear is near it */
     blocks(44100 * 2);
@@ -502,7 +504,7 @@ int main(void)
         double f0 = 130.81, d1, d2, d3, t1, t2, t3, rd, rt, rt0, rt1;
         boot();
         memset(P, 0, sizeof P);
-        P[OP_UB + 2] = 8; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 60;
+        P[OP_UB + 2] = 8; P[OP_DRV] = 1; P[OP_DRV_GAIN] = 60; P[OP_DRV_TYPE] = 3;   /* DISTORTION (0.9.30: the byte 3; 0 is TUBE DRIVE) */
         patch_set(P);
         input_on(&trk[0], 48, 100);
         blocks(44100 * 2);
@@ -517,9 +519,9 @@ int main(void)
                db(d2 / d1), db(d3 / d1), rd, db(t2 / t1), db(t3 / t1), rt);
         check("TUBE: it saturates (the third harmonic above -50 dB) but is gentler than DISTORTION (at least 8 dB lower)",
               db(t3 / t1) > -50.0 && db(d3 / d1) - db(t3 / t1) > 8.0);
-        /* the levels agree on the calibration chord (-20 dBFS, tools/gen_drive_tables.py); on the organ's hotter signal the
-         * two-stage DISTORTION compresses harder: about 5 dB under TUBE DRIVE at GAIN 6 (known: not yet matched per type) */
-        check("TUBE at the default gain is about as loud as DISTORTION (within 6 dB on the organ's signal)", db(rt / rd) > -6.0 && db(rt / rd) < 6.0);
+        /* the levels agree within 1 dB on the calibration chord at the organ's level (tests/drive_test.c); a single drawbar's note
+         * is far under it, where DISTORTION, which compresses, comes out about 10 dB louder than TUBE DRIVE (still linear there) */
+        check("TUBE at GAIN 6 against DISTORTION on a single drawbar's note: DISTORTION louder, by at most 12 dB", db(rt / rd) > -12.0 && db(rt / rd) < 0.0);
         check("TUBE: the triode's even harmonics (the second above -40 dB re the fundamental)", db(t2 / t1) > -40.0);
         check("TUBE: it sounds (rms above 500) and is bounded", rt > 500.0 && rt < 20000.0);
         /* the tone (a tilt around 1 kHz): on C5 (523 Hz) a bright setting lifts the third harmonic (1570 Hz) against the first,
@@ -530,6 +532,7 @@ int main(void)
             blocks(44100);
             f0 = 523.25;
             P[OP_DRV_TONE] = 0;
+            P[OP_DRV_TYPE] = 3;                         /* DISTORTION: its own harmonics dominate the organ's on a single drawbar */
             patch_set(P);
             input_on(&trk[0], 72, 100);
             blocks(44100 * 2);
@@ -542,11 +545,13 @@ int main(void)
             patch_set(P);
             blocks(44100 * 2);
             dk = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
-            printf("effects: C5, TUBE H3 re H1: flat %.1f dB, BRIGHT %.1f dB, DARK %.1f dB\n", db(fl), db(br), db(dk));
-            check("TONE: bright lifts and dark lowers the third harmonic against flat (more than 2.5 dB each way)",
-                  db(br) - db(fl) > 2.5 && db(fl) - db(dk) > 2.5);
+            printf("effects: C5, DISTORTION H3 re H1: flat %.1f dB, BRIGHT %.1f dB, DARK %.1f dB\n", db(fl), db(br), db(dk));
+            /* (the darkest step cuts at 1.5 kHz: 2.6 dB between 1570 and 523 Hz in the drive alone, a little less after the master) */
+            check("TONE: bright lifts and dark lowers the third harmonic against flat (more than 2 dB each way)",
+                  db(br) - db(fl) > 2.0 && db(fl) - db(dk) > 2.0);
             input_off(&trk[0], 72);
             blocks(44100);
+            P[OP_DRV_TYPE] = 2;
             input_on(&trk[0], 48, 100);
         }
         /* the output: -4 dB is 0.63 in rms */

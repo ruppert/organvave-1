@@ -46,7 +46,7 @@ second core taken out; the credits for those parts stay below, marked "(Felucca:
   [jasonpersinger](https://github.com/jasonpersinger) (the ROOM reverb click fix, #121),
   [renebohne](https://github.com/renebohne) (MIDI Program Change, #179),
   [gospodindilly-ops](https://github.com/gospodindilly-ops) (the second core, #247)
-- Drive (0.9.24, `src/eng_drive.c`, `tools/gen_drive_tables.py`): TUBE SCREAM inspired by [TS-808-Ultra](https://github.com/JamesStubbsEng/TS-808-Ultra)
+- Drive (0.9.24 .. 0.9.29; the type was removed in 0.9.30, the credit is kept for its history): TUBE SCREAM inspired by [TS-808-Ultra](https://github.com/JamesStubbsEng/TS-808-Ultra)
   by James Stubbs (GPL-3.0; its diode-clipper and tone-stage behaviour, fitted here as tanh curves: no code copied)
-- Drive (0.9.24): TUBE PREAMP inspired by [ValveLord](https://github.com/D4p0up/ValveLord) by D4p0up (a 12AU7 overdrive circuit; the
+- Drive (0.9.24 .. 0.9.29; removed in 0.9.30): TUBE PREAMP inspired by [ValveLord](https://github.com/D4p0up/ValveLord) by D4p0up (a 12AU7 overdrive circuit; the
   repository has schematics and PCB only, no licence and no code: only the circuit's topology was used as a reference)

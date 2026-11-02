@@ -1052,7 +1052,7 @@ bars are played over MIDI since 0.4.0 (channel 2 and 3, or the GLO channel + 1 a
 
 From 0.9.2: `OP_DRV_FAT` 42 (the drive's character) is gone: the byte is stored and ignored, and the drive uses setBfree's
 default character (a stored patch with a character other than 0 sounds a little different). The drive has a type, a tone and an
-output level: `OP_DRV_TYPE` 48: 0 DISTORTION (setBfree's preamp, what the drive was), 1 TUBE (a valve's soft saturation, gentler);
+output level: `OP_DRV_TYPE` 48: since 0.9.30 2 TUBE DRIVE, 3 DISTORTION (0 and 1 play as TUBE DRIVE; their history: below);
 `OP_DRV_TONE` 49 and `OP_DRV_OUT` 50: 0..8, and the Leslie's own settings, `OP_ROT_HSLOW` 51, `OP_ROT_HFAST` 52, `OP_ROT_DSLOW` 53,
 `OP_ROT_DFAST` 54 (the horn's and the drum's slow and fast speeds), `OP_ROT_HRAMP` 55 and `OP_ROT_DRAMP` 56 (how long each rotor
 takes to speed up; it slows down 2 times (horn) and 0.33 times (drum) of that as setBfree does): all these seven are nine-step
@@ -1378,3 +1378,9 @@ for records made before 0.9.24 (last byte 0x5E marks 0.9.24, 0x5D marks 0.9.23);
 gain multiplied by 10 and clamped to 10.0 (100). The new marker is 0x5F. Sound files and editor patches that store the drive are not
 migrated: their type and gain are read as the new numbers, so re-check them. The factory bank: presets with a drive use TUBE DRIVE (type 2)
 or DISTORTION (type 3) with GAIN 10 * (4 + gain_db/2) in tenths, clamped to 1.0..10.0.
+
+Version 0.9.30 keeps two drive types: `OP_DRV_TYPE` 2 TUBE DRIVE and 3 DISTORTION. The values 0 and 1 (TUBE SCREAM and TUBE PREAMP)
+are not migrated: they play as TUBE DRIVE, and the device and the editor show and write 2 for them on the next change. TUBE DRIVE's
+GAIN (byte 41, tenths) changed meaning: it follows the harmonic distortion (0.15 % at 1, 3.4 % at 20, 10 % at 50, 27 % at 100), so a
+stored TUBE DRIVE patch is far cleaner than before at the same byte (the old 1 already gave about 26 %). DISTORTION's GAIN keeps
+its law. Nothing is migrated: re-check stored drive settings.

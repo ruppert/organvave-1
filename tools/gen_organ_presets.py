@@ -47,9 +47,9 @@ def effects(p, fx):
         p[OP_ROT_BAL] = 4 + int(round(hdb / 1.5))
     if "drv" in fx:
         gdb, typ, tone, odb = fx["drv"]
-        # 0.9.24: the drive's types are TUBE SCREAM 0, TUBE PREAMP 1, TUBE DRIVE 2, DISTORTION 3; the bank's "tube" is
-        # TUBE DRIVE and "distortion" DISTORTION. Its gain_db (2 dB steps re the old setBfree default) maps to the 0..10 knob
-        # (approximate: the old scale is gone; 4 is the middle of the new one)
+        # the drive's types (0.9.30): TUBE DRIVE 2, DISTORTION 3 (0 and 1 play as TUBE DRIVE); the bank's "tube" is TUBE DRIVE
+        # and "distortion" DISTORTION. Its gain_db (2 dB steps re the old setBfree default) maps to the 0..10 knob (approximate:
+        # 4 is the middle; TUBE DRIVE's knob follows its distortion since 0.9.30: 2.0 about 3 %, 4.0 about 7.5 %, 5.0 10 %)
         assert -12 <= gdb <= 12 and typ in ("distortion", "tube") and -4 <= tone <= 4 and -8 <= odb <= 8 and odb % 2 == 0
         p[OP_DRV] = 1
         p[OP_DRV_GAIN] = max(10, min(100, 10 * (4 + int(round(gdb / 2)))))   # tenths (0.9.25)

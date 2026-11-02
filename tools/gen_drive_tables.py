@@ -3,16 +3,23 @@
 # Copyright (C) 2026 Guilherme Ruppert (OrganVave-1)
 """Generates firmware/src/eng_drive_tables.h: the drive's shaping curves and gain tables (integer, for the firmware).
 
-The drive (0.9.24) has four types, each a short chain: an input high-pass (one pole), a pre-gain (0..10 on the GAIN
-knob, 0 is bypass), a waveshaper table (tanh-like curves on -8..8, 512 steps), an optional second stage (DISTORTION),
-a tone (dark low-pass / bright tilt) and an output trim. Gain compensation: the trim is measured here, so that the level
-stays at the same value across the GAIN knob, rising a little (+2.5 dB over the range) so the drive sounds stronger.
+The drive (0.9.24, two types since 0.9.30) is a short chain: an input high-pass (one pole), a pre-gain (the GAIN knob,
+0.0 .. 10.0 in tenths; 0 is the bypass), a waveshaper table (tanh-like curves on -8..8, 512 steps), an optional second
+stage (DISTORTION), a tone (dark low-pass / bright tilt) and an output trim.
 
-Inspired by (no code copied; the TS-808 is GPL-3.0, its curves are a tanh fit of the diode pair's asinh behaviour):
-  TUBE SCREAM   James Stubbs' TS-808-Ultra (GPL-3.0): the op-amp gain stage, the diode clipper, the tone stage.
-  TUBE PREAMP   D4p0up's ValveLord (no licence, hardware only): a 12AU7 gain stage, asymmetric (grid bias offset).
-  TUBE DRIVE    a warm overdrive, made here: mild, odd-harmonic soft clip, good at both low and high gain.
-  DISTORTION    a high-gain two-stage clip, Marshall JCM900 style (the second stage clipping the first's output).
+  TUBE DRIVE    a warm overdrive, made here: a mild, slightly asymmetric soft clip. Its GAIN follows the harmonic
+                distortion, not the pre-gain (0.9.30, the owner's law): a 441 Hz sine at the organ's level comes out with
+                THD(g) = 14.29 (e^(0.1061 g) - 1) %: 0.15 % at 0.1, 0.8 % at 0.5, 3.4 % at 2.0, 10 % at 5.0, 27 % at 10.0.
+                The pre-gain of every step is solved here for that THD (bisection on the float model).
+  DISTORTION    a high-gain two-stage clip, Marshall JCM900 style (the second stage clipping the first's output): 3 dB
+                of pre-gain a GAIN unit, as since 0.9.24.
+
+The organ's level at the drive's input (fx.c takes the mix down by 12 dB first, so that a chord's peaks fit): a five-note
+chord at velocity 100 has RMS 0.73 (1.0 = 8192 in Q13; measured on the host). The THD and the trims are measured at it.
+The trims: the output at the dry level, rising 1 % a GAIN unit (+10 % at 10.0), with the output's peak held under its
+clamp (4.0: the output is Q15 up to 4.0 since 0.9.30).
+
+TUBE SCREAM and TUBE PREAMP (0.9.24 .. 0.9.29, inspired by TS-808-Ultra and ValveLord) were removed in 0.9.30 (owner).
 The floats are here only: the firmware is integer.
 Run: python3 tools/gen_drive_tables.py
 """
@@ -22,13 +29,15 @@ FS = 44100.0
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "firmware", "src", "eng_drive_tables.h")
 NWS = 512                                   # table steps over -8 .. +8 (1/32 each)
+NG = 101                                    # the GAIN knob: 0.0 .. 10.0 in tenths (index 0 is the bypass)
+OP_RMS = 0.73                               # the organ at the drive's input (above)
+OUT_CLAMP = 4.0                             # the output's clamp (Q15, +-131071)
+PRE_Q = 1024                                # the pre-gain's unit (Q10)
 
-# (name, HP cutoff Hz, pre-gain dB per GAIN step, [stage shapes: (A, B, C)], second stage gain)
+# (name, HP cutoff Hz, [stage shapes: (A, B, C)], second stage gain)
 TYPES = [
-    ("TUBE SCREAM", 720.0, 4.5, [(0.80, 1.60, 0.00)], 0.0),
-    ("TUBE PREAMP", 120.0, 3.5, [(0.90, 1.10, 0.35)], 0.0),
-    ("TUBE DRIVE", 60.0, 2.5, [(0.90, 0.75, 0.10)], 0.0),
-    ("DISTORTION", 180.0, 3.0, [(0.95, 1.80, 0.20), (0.90, 1.50, -0.05)], 2.0),   # s2: the gain into stage 2
+    ("TUBE DRIVE", 60.0, [(0.90, 0.75, 0.10)], 0.0),
+    ("DISTORTION", 180.0, [(0.95, 1.80, 0.20), (0.90, 1.50, -0.05)], 2.0),   # s2: the gain into stage 2
 ]
 
 def shape(a, b, c, x):
@@ -47,89 +56,105 @@ def hp_coef(fc):
 def lp_coef(fc):
     return int(round((1 - math.exp(-2 * math.pi * fc / FS)) * 32768))
 
-BASE_DB = {"TUBE SCREAM": 0.0, "TUBE PREAMP": 0.0, "TUBE DRIVE": 0.0, "DISTORTION": -10.0}   # the pre-gain at step 0 (the first step is nearly linear)
+def thd_target(g):
+    """the TUBE DRIVE law (owner, 0.9.30): THD in % at GAIN g (units)"""
+    return 14.29 * (math.exp(0.1061 * g) - 1.0)
 
-NG = 101                                    # the GAIN knob: 0.0 .. 10.0 in tenths (index 0 is the bypass)
+def dist_pre_db(g):
+    """DISTORTION: its 0.9.24 law (-10 dB + 3 dB a unit), +12 dB for the input taken down by 12 dB in 0.9.30"""
+    return 2.0 + 3.0 * g
 
-def pre_db(ty, g):
-    """g: the GAIN in units (0.0 .. 10.0)"""
-    return BASE_DB[ty[0]] + ty[2] * g
-
-def pre_gain_q8(ty, gi):
-    return int(round(10 ** (pre_db(ty, gi / 10.0) / 20.0) * 256))
-
-def float_chain(ty, g, x):
-    """the float model of one GAIN step, sample by sample: HP, pre-gain, the stages, output (for the trims)"""
-    name, fc, dbstep, stages, s2 = ty
+def chain(ty, G, x):
+    """the float model: HP, pre-gain G, the stages (the firmware's clamps: the shaper's input at +-8)"""
+    name, fc, stages, s2 = ty
     a = math.exp(-2 * math.pi * fc / FS)
-    G = 10 ** (pre_db(ty, g) / 20.0) if g else 1.0          # g in units
     y = 0.0; xp = 0.0; out = []
     for v in x:
         y = a * (y + v - xp); xp = v
         s = max(-8.0, min(8.0, y * G))
         for si, (A, B, C) in enumerate(stages):
-            s = max(-8.0, min(8.0, shape(A, B, C, s)))
-            if si == 0 and s2:                               # DISTORTION: the second stage is driven 4x
-                s = s * s2
+            s = shape(A, B, C, s)
+            if si == 0 and s2:
+                s = max(-8.0, min(8.0, s * s2))
         out.append(s)
     return out
+
+SETTLE, NTHD = 2000, 4000                           # a 441 Hz sine: 100 samples a period, 40 periods measured
+SINE = [OP_RMS * math.sqrt(2) * math.sin(2 * math.pi * 441.0 * i / FS) for i in range(SETTLE + NTHD)]
+
+def harm(y, k):
+    re = im = 0.0
+    w = 2 * math.pi * 441.0 * k / FS
+    for i, v in enumerate(y):
+        re += v * math.cos(w * i); im += v * math.sin(w * i)
+    return 2 * math.hypot(re, im) / len(y)
+
+def thd(ty, G):
+    y = chain(ty, G, SINE)[SETTLE:]
+    f1 = harm(y, 1)
+    return 100.0 * math.sqrt(sum(harm(y, k) ** 2 for k in range(2, 10))) / f1
+
+def solve_pre(ty, target):
+    lo, hi = math.log(0.005), math.log(40.0)           # the THD rises with the pre-gain: bisection on log G
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if thd(ty, math.exp(mid)) < target:
+            lo = mid
+        else:
+            hi = mid
+    return math.exp(0.5 * (lo + hi))
 
 def rms(v):
     return math.sqrt(sum(t * t for t in v) / len(v))
 
 def main():
-    n = 4096
-    # the calibration: an organ-like chord (bass fundamentals, the drawbars' partials) at -18 dBFS RMS. A chord of treble
-    # notes lost its bass in the high-pass of TUBE SCREAM and PREAMP, and the level dropped when the drive was switched on.
-    freqs = [110.0, 165.0, 220.0, 330.0, 440.0, 660.0, 880.0]
-    a = 10 ** (-18.0 / 20) * math.sqrt(2) / math.sqrt(len(freqs))
-    sig = [a * sum(math.sin(2 * math.pi * f * i / FS) for f in freqs) for i in range(n)]
-    trims = []
+    pre = []
     for ty in TYPES:
-        row = []
-        ref = rms(sig[n // 2:])                              # the dry level (the bypass)
-        for gi in range(NG):
-            if gi == 0:
-                row.append(1.0)
-                continue
+        row = [1.0]
+        for gi in range(1, NG):
             g = gi / 10.0
-            r = rms(float_chain(ty, g, sig)[n // 2:])
-            # the target: the dry level, rising 0.25 dB per unit of GAIN (+2.5 dB at 10): the same level across the knob
-            target = ref * 10 ** (0.25 * g / 20.0)
-            row.append(min(4.0, target / r))
+            row.append(solve_pre(ty, thd_target(g)) if ty[0] == "TUBE DRIVE" else 10 ** (dist_pre_db(g) / 20.0))
+        pre.append(row)
+    # the trims, on an organ-like chord (bass fundamentals, the drawbars' partials) at the organ's level
+    n = int(FS * 0.5)
+    freqs = [110.0, 165.0, 220.0, 330.0, 440.0, 660.0, 880.0]
+    a = OP_RMS * math.sqrt(2) / math.sqrt(len(freqs))
+    sig = [a * sum(math.sin(2 * math.pi * f * i / FS) for f in freqs) for i in range(n)]
+    ref = rms(sig[n // 2:])
+    trims = []
+    for ti, ty in enumerate(TYPES):
+        row = [1.0]
+        for gi in range(1, NG):
+            g = gi / 10.0
+            y = chain(ty, pre[ti][gi], sig)[n // 2:]
+            target = ref * (1.0 + 0.01 * g)
+            pk = max(abs(v) for v in y)
+            row.append(min(target / rms(y), 0.95 * OUT_CLAMP / pk))
         trims.append(row)
     cut = [1500.0 * 2 ** (t * 0.6) for t in range(4)] + [1500.0] * 5   # dark steps 0..3; 4..8 use the bright emphasis
     lines = []
-    lines.append("/* GENERATED by tools/gen_drive_tables.py: do not edit (0.9.24). The drive's curves, gains and trims. */")
+    lines.append("/* GENERATED by tools/gen_drive_tables.py: do not edit (0.9.30). The drive's curves, gains and trims. */")
     lines.append("#ifndef ENG_DRIVE_TABLES_H\n#define ENG_DRIVE_TABLES_H")
     lines.append("#include <stdint.h>")
     lines.append("#define DR_NWS 512")
-    lines.append("#define DR_TYPES 4")
+    lines.append("#define DR_TYPES 2                             /* 0 TUBE DRIVE, 1 DISTORTION (the patch byte: 2, 3) */")
     lines.append("#define DR_NG 101                             /* the GAIN knob: 0.0 .. 10.0 in tenths */")
-    stage_tabs = []
-    for ti, ty in enumerate(TYPES):
-        for si, (A, B, C) in enumerate(ty[3]):
-            stage_tabs.append((ti, si, table(A, B, C)))
-    lines.append("/* the waveshapers: 512 steps over -8 .. +8, Q15 out (see the stage list below) */")
-    lines.append("static const int16_t DR_WS[5][DR_NWS] = {")
-    names = []
-    order = [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1)]
-    for (ti, si) in order:
-        tab = [t for (a, b, c) in [TYPES[ti][3][si]] for t in table(a, b, c)]
-        lines.append("  {" + ",".join(str(v) for v in tab) + "},")
-        names.append("%s stage %d" % (TYPES[ti][0], si + 1))
+    lines.append("/* the waveshapers: 512 steps over -8 .. +8, Q15 out: 0 TUBE DRIVE, 1 DISTORTION stage 1, 2 DISTORTION stage 2 */")
+    lines.append("static const int16_t DR_WS[3][DR_NWS] = {")
+    for (ti, si) in [(0, 0), (1, 0), (1, 1)]:
+        A, B, C = TYPES[ti][2][si]
+        lines.append("  {" + ",".join(str(v) for v in table(A, B, C)) + "},")
     lines.append("};")
-    lines.append("/* the stages: index 0 TS, 1 PREAMP, 2 DRIVE, 3 DISTORTION stage 1, 4 DISTORTION stage 2 (" + "; ".join(names) + ") */")
-    lines.append("static const uint16_t DR_HP[4] = {%s};" % ",".join(str(hp_coef(ty[1])) for ty in TYPES))
-    lines.append("/* the pre-gain, Q8, per type and GAIN (tenths 0..100; index 0 is the bypass, unused) */")
-    lines.append("static const uint16_t DR_PRE[4][DR_NG] = {")
-    for ty in TYPES:
-        lines.append("  {" + ",".join(str(pre_gain_q8(ty, g)) for g in range(NG)) + "},")
+    lines.append("static const uint16_t DR_HP[2] = {%s};" % ",".join(str(hp_coef(ty[1])) for ty in TYPES))
+    lines.append("/* the pre-gain, Q10, per type and GAIN (tenths 0..100; index 0 is the bypass, unused). TUBE DRIVE: solved for its THD law */")
+    lines.append("static const uint16_t DR_PRE[2][DR_NG] = {")
+    for row in pre:
+        lines.append("  {" + ",".join(str(max(1, min(65535, int(round(G * PRE_Q))))) for G in row) + "},")
     lines.append("};")
-    lines.append("/* the output trim, Q12, per type and GAIN (tenths): the drive stays at the dry level (organ chord) and rises 0.25 dB a unit */")
-    lines.append("static const uint16_t DR_TRIM[4][DR_NG] = {")
+    lines.append("/* the output trim, Q8, per type and GAIN (tenths): the dry level at the organ's level, +1 % a unit (+10 % at 10.0) */")
+    lines.append("static const uint16_t DR_TRIM[2][DR_NG] = {")
     for row in trims:
-        lines.append("  {" + ",".join(str(int(round(t * 4096))) for t in row) + "},")
+        lines.append("  {" + ",".join(str(min(65535, int(round(t * 256)))) for t in row) + "},")
     lines.append("};")
     lines.append("/* the tone: the dark cutoff (Hz) per TONE step 0..8 (the low-pass), and the bright emphasis's own low-pass (Hz) */")
     lines.append("static const uint16_t DR_TONE_LP[9] = {%s};" % ",".join(str(lp_coef(c)) for c in cut))
@@ -139,7 +164,10 @@ def main():
         f.write("\n".join(lines) + "\n")
     print("wrote", os.path.normpath(OUT))
     for ti, ty in enumerate(TYPES):
-        print(ty[0], "trims", ["%.2f" % t for t in trims[ti]])
+        print(ty[0], "pre-gain", ["%.3f" % pre[ti][g] for g in (1, 5, 10, 20, 50, 100)])
+        print(ty[0], "trims", ["%.2f" % trims[ti][g] for g in (1, 5, 10, 20, 50, 100)])
+    t = TYPES[0]
+    print("TUBE DRIVE THD check", ["%.1f:%.2f%%" % (g / 10, thd(t, pre[0][g])) for g in (1, 5, 20, 50, 100)])
 
 if __name__ == "__main__":
     main()

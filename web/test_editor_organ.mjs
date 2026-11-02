@@ -126,7 +126,7 @@ byId("rmic").value = "3";
 byId("rbal").value = "6";
 byId("drv").checked = true;
 byId("dgain").value = "9";
-byId("dtype").value = "1";
+byId("dtype").value = "3";
 byId("dtone").value = "6";                   // index 6 (+2, bright): the byte (6 + 5) % 9 = 2
 byId("dout").value = "2";                    // index 2 (-4 dB): the byte 7
 byId("rhs").value = "6";                     // the horn's slow speed, index 6: the byte 2
@@ -138,7 +138,7 @@ await wait(120);
 const got3 = (await direct(85, [0, 0])).slice(3, 3 + 64);
 ok(got3[P.OP_ROT] === 1 && got3[P.OP_ROT_MODEL] === 1 && got3[P.OP_ROT_SPEED] === 2 && got3[P.OP_ROT_HORN] === 1 &&
    got3[P.OP_ROT_MIC] === 3 && got3[P.OP_ROT_BAL] === 6, "send: the rotary (on, CLASSIC 2, FAST, sharp horn, 90 degrees, horn level 6) reaches the instrument");
-ok(got3[P.OP_DRV] === 1 && got3[P.OP_DRV_GAIN] === 9 && got3[P.OP_DRV_TYPE] === 1 && got3[P.OP_DRV_TONE] === 2 && got3[P.OP_DRV_OUT] === 7,
+ok(got3[P.OP_DRV] === 1 && got3[P.OP_DRV_GAIN] === 9 && got3[P.OP_DRV_TYPE] === 3 && got3[P.OP_DRV_TONE] === 2 && got3[P.OP_DRV_OUT] === 7,
    "send: the drive (on, gain 9, TUBE, tone +2, output -4 dB) reaches the instrument (the second frame, bytes 48 and on, too)");
 ok(got3[P.OP_ROT_HSLOW] === 2 && got3[P.OP_ROT_DFAST] === 5 && got3[P.OP_ROT_HRAMP] === 4 && got3[P.OP_ROT_DRAMP] === 0 &&
    got3[P.OP_ROT_HFAST] === 0 && got3[P.OP_ROT_DSLOW] === 0, "send: the Leslie's speeds and ramps (horn slow 6, drum fast 0, horn ramp 8, drum ramp 4) reach the instrument");
@@ -150,7 +150,7 @@ await P.readPatch();
 await wait(120);
 ok(byId("rot").checked === true && byId("rmodel").value === "1" && byId("rmic").value === "3" && byId("drv").checked === true &&
    Number(byId("dgain").value) === 9, "read: the page shows the rotary and the drive the instrument holds");
-ok(byId("dtype").value === "1" && Number(byId("dtone").value) === 6 && Number(byId("dout").value) === 2 && Number(byId("rhs").value) === 6 &&
+ok(byId("dtype").value === "3" && Number(byId("dtone").value) === 6 && Number(byId("dout").value) === 2 && Number(byId("rhs").value) === 6 &&
    Number(byId("rdf").value) === 0 && Number(byId("rhr").value) === 8, "read: ... and the drive's type, tone and output and the Leslie's speeds and ramps");
 
 

@@ -170,8 +170,9 @@ static void chrome(int32_t x, int32_t y, int32_t w, int32_t h)
         cv_rect(x, y + j, w, 1, j == 0 ? C_CHR_HI : j == h - 1 ? C_CHR_LO : mix(C_CHR_HI, C_CHR, j * 256 / h));
 }
 /* the header every screen shares: the wood lid with the page's name engraved left and the patch right, a chrome trim */
-/* the drive's types (OP_DRV_TYPE, 0.9.24): the DRIVE page's TYPE row and its header */
-static const char *const OA_DRV_NAME[4] = {"TUBE SCREAM", "TUBE PREAMP", "TUBE DRIVE", "DISTORTION"};
+/* the drive's types (OP_DRV_TYPE, two since 0.9.30: 2 TUBE DRIVE, 3 DISTORTION; 0 and 1, the removed TUBE SCREAM and TUBE
+ * PREAMP, play as TUBE DRIVE): the DRIVE page's TYPE row and its header */
+static const char *const OA_DRV_NAME[4] = {"TUBE DRIVE", "TUBE DRIVE", "TUBE DRIVE", "DISTORTION"};
 static void header(const char *page, const char *right)
 {
     wood(0, 0, 240, 22);
@@ -986,7 +987,7 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
         if (r == 0u)
             org_set(OP_DRV, on);
         else if (r == 1u)
-            org_set(OP_DRV_TYPE, (uint32_t)clamp(oa_u(OP_DRV_TYPE, 3u) + d, 0, 3));   /* 0.9.24: TUBE SCREAM .. DISTORTION */
+            org_set(OP_DRV_TYPE, 2u + (uint32_t)clamp((int32_t)((org_patch[OP_DRV_TYPE] & 3u) == 3u) + d, 0, 1));   /* 0.9.30: TUBE DRIVE (2), DISTORTION (3) */
         else if (r == 2u)
             org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 100u) + d, 0, 100));  /* tenths; 0 is the bypass */
         else

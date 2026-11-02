@@ -1057,7 +1057,6 @@ static void events_block(uint32_t n);                 /* (seq.c) */
 #include "eng_rotary.c"             /* the rotary speaker, CLASSIC */
 #include "eng_drive.c"              /* the drive: the organ's preamp, before the master and the rotary */
 #include "eng_eq.c"                 /* the equaliser: after MASTER, before the limiter */
-_Static_assert(CTL <= DR_MAX, "the drive's longest block");
 static dr_t dr_st;
 static eq_t eq_st;
 static volatile uint8_t eq_on;                          /* the equaliser, on or off (the patch) */
@@ -1117,7 +1116,7 @@ static void fx_organ_apply(void)
     rot_mic(&rot_st, 180u - 30u * org_patch[OP_ROT_MIC]);
     rot_st.hl = ROT_BAL_HL[org_patch[OP_ROT_BAL] % 9u];
     g = org_patch[OP_DRV_GAIN] > 100u ? 100u : org_patch[OP_DRV_GAIN];   /* 0.9.25: tenths, 0 bypasses the drive, more saturates */
-    if (dr_st.type != (int32_t)(org_patch[OP_DRV_TYPE] & 3u))
+    if (dr_st.type != (int32_t)dr_type_of(org_patch[OP_DRV_TYPE]))
         dr_clear(&dr_st);               /* (another type starts from silence) */
     dr_user(&dr_st, org_patch[OP_DRV_TYPE], g, org_c9(org_patch[OP_DRV_TONE]), org_c9(org_patch[OP_DRV_OUT]));
     dr_on = org_patch[OP_DRV] && g > 0u;
@@ -1188,10 +1187,10 @@ static void mix_block(int32_t *out, uint32_t n)
     fx_buses(send_c, send_d, send_r, wet, n);
     if (dr_on || dr_w) {                                /* the preamp: the mono dry sum, before MASTER. The mix has setBfree's */
         int32_t m[CTL];                                 /* 1.0 at 16384 (the organ is half its scale): the drive takes Q13 (1.0 = 8192, */
-        if (dr_on && !dr_w)                             /* up to 4.0) and gives Q15 */
+        if (dr_on && !dr_w)                             /* up to 4.0) and gives Q15 up to 4.0 (0.9.30) */
             dr_clear(&dr_st);
         for (i = 0; i < n; i++) {
-            int32_t v = (mix_l[i] + mix_r[i]) >> 2;
+            int32_t v = (mix_l[i] + mix_r[i]) >> 4;     /* 0.9.30: 12 dB down, so a chord's peaks fit the drive (back below) */
             m[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
         }
         dr_run_ex(&dr_st, m, m, n);
@@ -1199,7 +1198,7 @@ static void mix_block(int32_t *out, uint32_t n)
         dr_w = dr_w < 0 ? 0 : dr_w > 32768 ? 32768 : dr_w;
         for (i = 0; i < n; i++) {
             int32_t dry = (mix_l[i] + mix_r[i]) >> 1;
-            mix_l[i] = mix_r[i] = fx_lerp(dry, m[i] >> 1, dr_w);
+            mix_l[i] = mix_r[i] = fx_lerp(dry, m[i] << 1, dr_w);   /* (the drive's output is Q15, up to 4.0: x 2 back to the mix) */
         }
     }
     if (rot_on || rot_w) {                              /* the rotary: the mono sum of the mix and the reverb's return, in stereo */

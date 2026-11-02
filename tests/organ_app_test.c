@@ -462,11 +462,11 @@ int main(int argc, char **argv)
         bad += check("  .. five rows, no character", OA_NR[4] == 5 && !strcmp(OA_LB[4][1], "TYPE") && !strcmp(OA_LB[4][2], "GAIN") &&
                      !strcmp(OA_LB[4][3], "TONE") && !strcmp(OA_LB[4][4], "OUTPUT"));
         turn(EN_K2, 1);
-        bad += check("  .. KNOB 2: the type TUBE PREAMP", org_patch[OP_DRV_TYPE] == 1);
+        bad += check("  .. KNOB 2: from the patch's 0 (played as TUBE DRIVE) to DISTORTION (0.9.30: two types, bytes 2 and 3)", org_patch[OP_DRV_TYPE] == 3);
         turn(EN_K2, -1);
-        bad += check("  .. and back to TUBE SCREAM", org_patch[OP_DRV_TYPE] == 0);
+        bad += check("  .. and back to TUBE DRIVE (2)", org_patch[OP_DRV_TYPE] == 2);
         turn(EN_K2, -1);
-        bad += check("  .. the bottom stays TUBE SCREAM", org_patch[OP_DRV_TYPE] == 0);
+        bad += check("  .. the bottom stays TUBE DRIVE", org_patch[OP_DRV_TYPE] == 2);
         turn(EN_K2, 9);
         bad += check("  .. the top is DISTORTION", org_patch[OP_DRV_TYPE] == 3);
         org_set(OP_DRV_GAIN, 60);

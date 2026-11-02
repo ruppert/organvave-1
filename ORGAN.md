@@ -157,17 +157,20 @@ standard libraries, Pd's standard objects or Csound's opcodes.
 - **Drawbar law**: **(owner)** linear, as setBfree (8 -> 4 = -6 dB).
 - **Scanner vibrato / chorus** (`vibrato.c`): write-side interpolated variable delay, 7.25 Hz, depths 3 / 6 / 9 samples;
   chorus = the same mixed with the dry signal at 0.707. (Not the original's 16-stage LC line.)
-- **Drive** (0.9.24, GAIN in tenths since 0.9.25, rewritten from scratch; `src/eng_drive.c`, the tables from `tools/gen_drive_tables.py`): the setBfree port of
-  0.3.0 is gone. Four types, each a short integer chain (input high-pass, pre-gain, waveshaper table, tone, output trim):
-  **TUBE SCREAM** (inspired by [TS-808-Ultra](https://github.com/JamesStubbsEng/TS-808-Ultra), GPL-3.0: the diode clipper's tanh fit,
-  high-passed at 720 Hz), **TUBE PREAMP** (inspired by [ValveLord](https://github.com/D4p0up/ValveLord), a 12AU7 circuit: an asymmetric
-  curve from the grid bias), **TUBE DRIVE** (made here: warm, mild, good at low and high gain) and **DISTORTION** (a JCM900-style
-  two-stage clip). GAIN 0.0..10.0 in steps of 0.1 (0 bypasses the drive). The output trim is measured on an organ-like chord (seven partials, bass
-  included, at -18 dBFS), so the level stays near the dry level at low gain and rises by 2.5 to 4.5 dB over the knob, by type. TONE: dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a 2 kHz-pivot treble lift);
-  OUTPUT +-8 dB. Cost: 78 loop instructions a block (the old port: about 250), host measurement about 75 instructions a sample for
-  the two-stage DISTORTION at GAIN 10 (the old one about 166). Known: on the organ's hotter signal the types differ by about 5 dB (the
-  two-stage DISTORTION compresses harder), not yet matched per type. Nothing here is tested on a real FM-1, and the sound is a
-  first design (it has not been listened to).
+- **Drive** (0.9.24, rewritten from scratch; two types since 0.9.30; `src/eng_drive.c`, the tables from `tools/gen_drive_tables.py`):
+  the setBfree port of 0.3.0 is gone. Each type is a short integer chain (input high-pass, pre-gain, waveshaper table, a 10 Hz DC
+  blocker, tone, output trim): **TUBE DRIVE** (made here: a warm, slightly asymmetric soft clip) and **DISTORTION** (a JCM900-style
+  two-stage clip). TUBE SCREAM and TUBE PREAMP (0.9.24 .. 0.9.29) were removed (owner); their type bytes play as TUBE DRIVE.
+  GAIN 0.0..10.0 in steps of 0.1, 0 bypasses the drive. **(owner, 0.9.30)** TUBE DRIVE's GAIN follows its harmonic distortion on an
+  exponential law, THD(g) = 14.29 (e^(0.1061 g) - 1) % for a sine at the organ's level: 0.15 % at 0.1 (inaudible), 0.8 % at 0.5,
+  3.4 % at 2.0, 10 % at 5.0, 27 % at 10.0; the pre-gain of every tenth is solved for it in the generator, and the firmware's chain
+  follows it (tests/drive_test.c). DISTORTION keeps 3 dB of pre-gain a unit. The organ comes into the drive 12 dB down (fx.c: a
+  five-note chord at velocity 100 is RMS 0.73 there, peaks under the input's 4.0) and the output, Q15 up to 4.0, is brought back;
+  the trims hold the dry level on an organ-like chord at that level, +1 % a unit (+10 % at 10.0). Every shift rounds to the nearest:
+  with TUBE DRIVE's trim at 39x at GAIN 0.1, truncation was a DC of 9 %. TONE: dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a
+  2 kHz-pivot treble lift); OUTPUT +-8 dB. Cost: 90 loop instructions a block (78 before 0.9.30: the rounding and the DC blocker). Known: well under the organ's level (a single
+  drawbar's note) DISTORTION, which compresses, is about 10 dB louder than TUBE DRIVE. Nothing here is tested on a real FM-1, and the
+  sound has not been listened to.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 
