@@ -875,6 +875,22 @@ int main(int argc, char **argv)
         press(B_HOME);
     }
 
+    {   /* HOME's DRIVE and REVERB knobs keep to their travel (0.9.37: the DRIVE knob was on the old 0..12 scale, REVERB over 100) */
+        int32_t a0, a1, a2, r0, r1;
+        org_set(OP_DRV, 1);
+        org_set(OP_DRV_GAIN, 0);   a0 = home_ang_drv();
+        org_set(OP_DRV_GAIN, 50);  a1 = home_ang_drv();
+        org_set(OP_DRV_GAIN, 100); a2 = home_ang_drv();
+        TSEL->p[P_REV] = 0;   r0 = home_ang_rev();
+        TSEL->p[P_REV] = 127; r1 = home_ang_rev();
+        printf("organ app: HOME knobs: DRIVE %d / %d / %d degrees, REVERB %d / %d\n", a0, a1, a2, r0, r1);
+        bad += check("HOME: the DRIVE knob runs -135 .. +135 over GAIN 0.0 .. 10.0 (0 at 5.0), REVERB over its send 0 .. 127",
+                     a0 == -135 && a1 == 0 && a2 == 135 && r0 == -135 && r1 == 135);
+        org_set(OP_DRV, 0);
+        org_set(OP_DRV_GAIN, 0);
+        TSEL->p[P_REV] = 0;
+    }
+
     printf("%s\n", bad ? "ORGAN APP TEST FAILED" : "organ app test passed");
     return bad != 0;
 }

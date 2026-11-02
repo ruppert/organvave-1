@@ -1195,6 +1195,18 @@ static void oa_upper_bars(int32_t dy)
     }
 }
 
+/* HOME's DRIVE and REVERB knobs, -135 (min) .. +135 degrees (max): the GAIN in tenths, 0.0 .. 10.0 (0.9.25; the knob was still on
+ * the 0..12 scale), and the reverb's send, 0 .. 127 (it was over 100; 0.9.37) */
+static int32_t home_ang_drv(void)
+{
+    int32_t g = org_patch[OP_DRV] ? (int32_t)org_patch[OP_DRV_GAIN] : 0;
+    return -135 + (g > 100 ? 100 : g) * 270 / 100;
+}
+static int32_t home_ang_rev(void)
+{
+    int32_t r = TSEL->p[P_REV];
+    return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
+}
 static void scr_home(void)
 {
     static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x00, 0x00, 0x00);
@@ -1334,8 +1346,7 @@ static void scr_home(void)
     disc(lx, 219, 6, RGB565(0x55, 0x55, 0x55));
     disc(lx - 2, 217, 2, RGB565(0x9a, 0x9a, 0x9a));
     {
-        int32_t dg = org_patch[OP_DRV] ? -135 + (int32_t)org_patch[OP_DRV_GAIN] * 270 / 12 : -135;
-        int32_t rv = -135 + (int32_t)TSEL->p[P_REV] * 270 / 100;
+        int32_t dg = home_ang_drv(), rv = home_ang_rev();
         int32_t cl = -135 + oa_ai(OP_CLICK_GAIN) * 270 / 40;   /* the step the knob moves (ADVANCED coding: byte 0 is the 100 % index 20) */
         home_knob(HU(291), HU(506), dg);
         home_knob(HU(365), HU(506), rv);
