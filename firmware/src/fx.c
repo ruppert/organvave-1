@@ -158,10 +158,22 @@ static void track_dist(track_t *t, int32_t *b, uint32_t n)
     }
 }
 
-/* master: peak limiter in front of the soft clipper. Fast attack (~0.1 ms),
- * ~150 ms release, threshold where tanh is still nearly linear, so chords
- * get quieter instead of crushed. */
+/* master: peak limiter in front of a soft knee. 0.9.38: the attack is ~6 ms (it was ~0.1 ms: following every peak of a chord,
+ * its gain moved with the notes' beats, about 5 % of intermodulation), ~150 ms release; the knee (master_knee) is linear up to
+ * 0.8 of full scale and bends towards 0.9 above (it was a tanh over the whole range: the signal the limiter holds at 0.55 was
+ * already bent by it), so it only takes the start of a note the slower attack lets through. */
 #define LIM_T 18000
+#define LIM_ATK 8                         /* the attack: the envelope moves 1 / 2^8 of the way a sample (~5.8 ms) */
+#define LIM_KNEE 26214                    /* 0.8 of full scale: linear under it */
+#define LIM_CEIL 29491                    /* 0.9: the knee never reaches it (the health checks' 30000 stays free) */
+static inline int32_t master_knee(int32_t x)
+{
+    int32_t a = x < 0 ? -x : x, y;
+    if (a <= LIM_KNEE)
+        return x;
+    y = LIM_KNEE + ((softclip((a - LIM_KNEE) * 10) * (LIM_CEIL - LIM_KNEE)) >> 15);   /* tanh of the excess, x 10: 0.8 .. 0.9 */
+    return x < 0 ? -y : y;
+}
 static int32_t lim_env = LIM_T;
 /* MENU > USB LEVEL FIXED (for #42: record over USB with the speaker turned down): the mix goes to master_out at the
  * full MASTER level, USB audio takes that (audio.c uac_tap), and only then does MASTER scale what the DAC gets
@@ -246,7 +258,7 @@ static inline void master_out(int32_t *l, int32_t *r)
     ar = *r < 0 ? -*r : *r;
     a = al > ar ? al : ar;
     if (a > lim_env)
-        lim_env += (a - lim_env) >> 2;
+        lim_env += (a - lim_env) >> LIM_ATK;
     else if (lim_env > LIM_T)
         lim_env -= ((lim_env - LIM_T) >> 12) + 1;
     if (lim_env > LIM_T) {
@@ -254,8 +266,8 @@ static inline void master_out(int32_t *l, int32_t *r)
         *l = ((*l >> 4) * g) >> 11;                      /* >> 4 first: |l| may be far above Q15 */
         *r = ((*r >> 4) * g) >> 11;
     }
-    *l = softclip(*l);
-    *r = softclip(*r);
+    *l = master_knee(*l);
+    *r = master_knee(*r);
 }
 
 /* length of one division (N_DIV order) in samples at the song tempo */
@@ -1215,8 +1227,9 @@ static void mix_block(int32_t *out, uint32_t n)
             rot_dc += v;                                /* into a tone (a one-pole high-pass, 7 Hz) */
             a = v < 0 ? -v : v;
             pk = a > pk ? a : pk;
-            xin[i] = v >> 2;                            /* the cabinet takes at most 1.0 (32767): a chord is several times that, and the dry */
-        }                                               /* path leaves it to the limiter; a hard clip here was the distortion. Back x4 below */
+            xin[i] = v >> 4;                            /* the cabinet takes at most 1.0 (32767): a chord is several times that, and the dry */
+        }                                               /* path leaves it to the limiter; a hard clip here was the distortion. Back x16 below:
+                                                         * 0.9.38, 12 dB more headroom (x4 was a high chord's crackle: 4 full wheels clipped) */
         /* the rounding of the cabinet's filters leaves a faint tone (up to 20 / 32768) running after the last sound: once the
          * input has been below 8 for 1.1 s (the cabinet's tail is long gone) its states are emptied: silence is silence */
         if (pk >= 8)
@@ -1232,8 +1245,8 @@ static void mix_block(int32_t *out, uint32_t n)
         rot_w += rot_on ? FX_FADE : -FX_FADE;
         rot_w = rot_w < 0 ? 0 : rot_w > 32768 ? 32768 : rot_w;
         for (i = 0; i < n; i++) {
-            ol[i] = (ol[i] * mg) >> 10;                 /* (x4: the input was taken down by 4) */
-            orr[i] = (orr[i] * mg) >> 10;
+            ol[i] = ((ol[i] * mg) >> 10) << 2;          /* (x16: the input was taken down by 16) */
+            orr[i] = ((orr[i] * mg) >> 10) << 2;
         }
         if (rot_w == 32768) {
             for (i = 0; i < n; i++)

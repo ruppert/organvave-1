@@ -168,7 +168,8 @@ int main(void)
     blocks(44100 * 16);                   /* the drum coasts: setBfree has no brake, the speed decays e^-t/1.37 s to 0.05 rpm: about 12 s */
     s = swing(oL, pos - 44100, pos);
     printf("effects: rotary STOP: left level swing %.2f dB\n", s);
-    check("the rotary STOP: the level holds (under 1 dB in the last second)", s < 1.0);
+    /* (under 1.5 dB since 0.9.38: the master's limiter no longer follows every peak, so the chord's own beats show, about 1 dB) */
+    check("the rotary STOP: the level holds (under 1.5 dB in the last second)", s < 1.5);
     P[OP_ROT_MIC] = 6; P[OP_ROT_SPEED] = 2;
     patch_set(P);
     blocks(44100 * 3);
@@ -263,6 +264,37 @@ int main(void)
             if (pk > worst) worst = pk;
         }
         check("every effect on, no key: silence out (|y| < 4)", worst < 4);
+    }
+    /* 5b. 0.9.38 (owner: "preset 001, the percussion off, a C major triad high up: the sound cracks"): the cabinet's input keeps
+     * 12 dB more headroom (it clipped at 4 full wheels), and the master's knee is linear to 0.8 of full scale, never past it */
+    {
+        int32_t x, prev = 0, worst = 0, lin = 1, mono = 1, top = 1;
+        uint32_t b;
+        for (x = 0; x <= 200000; x += 37) {
+            int32_t y = master_knee(x);
+            lin &= x > LIM_KNEE || y == x;
+            mono &= y >= prev;
+            top &= y < LIM_CEIL && master_knee(-x) == -y;
+            prev = y;
+        }
+        check("master: the knee is linear up to 0.8 of full scale, rises, stays under 0.9, and is odd", lin && mono && top);
+        boot();
+        host_preset(&trk[0], ENGI_ORGAN, 0);         /* 001: JAZZ B3 */
+        org_set(OP_PERC, 0);
+        song.master_q12 = 2048;
+        blocks(CTL * 40);
+        input_on(&trk[0], 84, 100); input_on(&trk[0], 88, 100); input_on(&trk[0], 91, 100);   /* C6 E6 G6 */
+        for (b = 0; b < 44100u * 2u / CTL; b++) {
+            blocks(CTL);
+            for (i = 0; i < CTL; i++) {
+                int32_t v = (((mix_l[i] + mix_r[i]) >> 1) + wet[i]) >> 4, a2 = v < 0 ? -v : v;   /* the cabinet's input (fx.c) */
+                worst = a2 > worst ? a2 : worst;
+            }
+        }
+        input_off(&trk[0], 84); input_off(&trk[0], 88); input_off(&trk[0], 91);
+        printf("effects: preset 001, the percussion off, C6 triad: the cabinet's input peaks at %.2f of its 1.0\n", worst / 32768.0);
+        check("  .. preset 001's high C major triad stays inside the cabinet's input (it clipped before 0.9.38)", worst < 32767);
+        song.master_q12 = 4096;
     }
     /* 6. after the keys: the cabinet and the drive go quiet (no limit cycle: at most 1 LSB), and MASTER 0 is silent */
     {

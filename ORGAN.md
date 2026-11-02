@@ -73,6 +73,14 @@ interpolation (`ORG_FAINT`): under -80 dB of a full wheel on a crosstalk chord. 
 312), 3 keys 1,148 -> 541, 10 keys 2,330 -> 1,254, changing chords -35 .. -42 %; with 30 keys or more every wheel sounds anyway
 (little or no change). The nine cases against setBfree: within 0.24 dB rms, 0.31 dB on the attack.
 
+**0.9.38, the crack of a high chord (owner: preset 001, the percussion off, a C major triad high up).** Two stages bent it. The
+Leslie's input took the mix / 4 and clipped at 1.0, four full wheels: a high triad (its notes share wheels, which add in phase) went
+past it in thousands of samples (C6: 14.6 % of added distortion against an all-linear chain). It now takes the mix / 16 and gives
+the 12 dB back after the cabinet. The master's limiter followed every peak (attack ~0.1 ms): on a chord its gain moved with the
+notes' beats (about 5 %), and a tanh over the whole range bent the signal it held at 0.55 of full scale. Now the attack is ~6 ms and
+the tanh is a knee, linear up to 0.8 of full scale and bending towards 0.9 above (it takes the start of a note the slower attack
+lets through; the health checks' 30000 stays free): C4 / C5 / C6 triads 6.1 / 4.8 / 14.6 % -> 2.0 / 1.8 / 1.4 %.
+
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
 worst case about 2,900 (FMUG at 12 voices: 2,724; Felucca's ANALOG at 8 voices: 4,912), before the rotary: with CLASSIC
