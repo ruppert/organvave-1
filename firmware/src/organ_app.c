@@ -170,6 +170,8 @@ static void chrome(int32_t x, int32_t y, int32_t w, int32_t h)
         cv_rect(x, y + j, w, 1, j == 0 ? C_CHR_HI : j == h - 1 ? C_CHR_LO : mix(C_CHR_HI, C_CHR, j * 256 / h));
 }
 /* the header every screen shares: the wood lid with the page's name engraved left and the patch right, a chrome trim */
+/* the drive's types (OP_DRV_TYPE, 0.9.24): the DRIVE page's TYPE row and its header */
+static const char *const OA_DRV_NAME[4] = {"TUBE SCREAM", "TUBE PREAMP", "TUBE DRIVE", "DISTORTION"};
 static void header(const char *page, const char *right)
 {
     wood(0, 0, 240, 22);
@@ -858,8 +860,7 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
         if (r == 0u)
             oa_vsw(v, OP_DRV, "OFF", "ON");
         else if (r == 1u) {
-            static const char *const DRV_NAME[4] = {"TUBE SCREAM", "TUBE PREAMP", "TUBE DRIVE", "DISTORTION"};
-            oa_vt(v, DRV_NAME[org_patch[OP_DRV_TYPE] & 3u]);
+            oa_vt(v, OA_DRV_NAME[org_patch[OP_DRV_TYPE] & 3u]);
             v->on = org_patch[OP_DRV] != 0;
         } else if (r == 2u) {
             i = oa_u(OP_DRV_GAIN, 100u);                 /* 0.9.25: tenths, 0.0 .. 10.0; 0 bypasses the drive */
@@ -1418,7 +1419,7 @@ static void oa_scene(void)
         scr_drawbars();
     else if (oa_page >= 2u && oa_page <= 8u)
         oa_rows(oa_page, oa_page == 2u || oa_page == 8u ? "" : oa_page == 3u ? (org_patch[OP_ROT] ? ROT_SPD[oa_u(OP_ROT_SPEED, 2u)] : "OFF") :
-                         oa_page == 4u ? (org_patch[OP_DRV] ? (org_patch[OP_DRV_TYPE] ? "TUBE" : "DIST") : "OFF") :
+                         oa_page == 4u ? (org_patch[OP_DRV] && org_patch[OP_DRV_GAIN] ? OA_DRV_NAME[org_patch[OP_DRV_TYPE] & 3u] : "OFF") :
                          oa_page == 5u ? (TSEL->p[P_REV] ? N_RTYPE[clamp(song.g[G_RTYPE], 0, 4)] : "OFF") :
                          oa_page == 6u ? (TSEL->p[P_DLY] ? N_DLYTYPE[clamp(song.g[G_DTIME], 0, 6)] : "OFF") :
                          (org_patch[OP_EQ] ? "ON" : "OFF"));
