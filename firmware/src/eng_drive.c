@@ -7,7 +7,7 @@
  *   (dark: a one-pole low-pass per TONE step 0..3; bright: the treble emphasis (the unfiltered signal plus a share of the
  *   difference to its low-pass) for TONE 5..8; TONE 4 is flat) -> output trim (DR_TRIM: the level compensation of the GAIN
  *   knob, times the OUTPUT level).
- * TUBE DRIVE's GAIN follows its harmonic distortion (0.9.30): from 0.15 % at 0.1 to 27 % at 10.0 on an exponential law, so the
+ * TUBE DRIVE's GAIN follows its harmonic distortion (0.9.30): from 0.2 % at 0.1 to 34 % at 10.0 (0.9.31) on an exponential law, so the
  * pre-gain is tiny at the bottom (0.04) and the trim large (39x): the shaper's output is kept in Q15 and the trim in Q8 for it.
  * Formats: input Q13 (1.0 = 8192), output Q15 up to 4.0 (0.9.30: +-131071 in the 32-bit buffer; the organ's chords come in
  * hot); inside, the shaper's input Q12 (1.0 = 4096), its output Q15. Every shift rounds to the nearest (0.9.30): with the trim

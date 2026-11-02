@@ -9,7 +9,8 @@ stage (DISTORTION), a tone (dark low-pass / bright tilt) and an output trim.
 
   TUBE DRIVE    a warm overdrive, made here: a mild, slightly asymmetric soft clip. Its GAIN follows the harmonic
                 distortion, not the pre-gain (0.9.30, the owner's law): a 441 Hz sine at the organ's level comes out with
-                THD(g) = 14.29 (e^(0.1061 g) - 1) %: 0.15 % at 0.1, 0.8 % at 0.5, 3.4 % at 2.0, 10 % at 5.0, 27 % at 10.0.
+                THD(g) = 25.2 (e^(0.085 g) - 1) % (0.9.31: the top 25 % above 0.9.30's 27 %, a little less exponential):
+                0.21 % at 0.1, 1.1 % at 0.5, 4.7 % at 2.0, 13.4 % at 5.0, 33.75 % at 10.0.
                 The pre-gain of every step is solved here for that THD (bisection on the float model).
   DISTORTION    a high-gain two-stage clip, Marshall JCM900 style (the second stage clipping the first's output): 3 dB
                 of pre-gain a GAIN unit, as since 0.9.24.
@@ -57,8 +58,8 @@ def lp_coef(fc):
     return int(round((1 - math.exp(-2 * math.pi * fc / FS)) * 32768))
 
 def thd_target(g):
-    """the TUBE DRIVE law (owner, 0.9.30): THD in % at GAIN g (units)"""
-    return 14.29 * (math.exp(0.1061 * g) - 1.0)
+    """the TUBE DRIVE law (owner, 0.9.30; 0.9.31): THD in % at GAIN g (units)"""
+    return 25.2 * (math.exp(0.085 * g) - 1.0)          # 0.9.31 (0.9.30: 14.29 (e^(0.1061 g) - 1), 27 % at 10.0)
 
 def dist_pre_db(g):
     """DISTORTION: its 0.9.24 law (-10 dB + 3 dB a unit), +12 dB for the input taken down by 12 dB in 0.9.30"""

@@ -869,8 +869,8 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
                 oa_vt(v, "OFF");
             else
                 oa_vnum(v, i, 1, "");
-            v->mn = 101;
-            v->mv = (int8_t)(i + 1);
+            v->mn = 9;                                   /* nine segments, as the other rows: 0 none, 10.0 all (0.9.31) */
+            v->mv = (int8_t)((i * 9 + 99) / 100);
             v->on = i != 0;
         } else if (r == 3u) {
             i = (int32_t)org_c9(org_patch[OP_DRV_TONE] <= 8u ? org_patch[OP_DRV_TONE] : 0u);

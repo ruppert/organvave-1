@@ -1383,4 +1383,5 @@ Version 0.9.30 keeps two drive types: `OP_DRV_TYPE` 2 TUBE DRIVE and 3 DISTORTIO
 are not migrated: they play as TUBE DRIVE, and the device and the editor show and write 2 for them on the next change. TUBE DRIVE's
 GAIN (byte 41, tenths) changed meaning: it follows the harmonic distortion (0.15 % at 1, 3.4 % at 20, 10 % at 50, 27 % at 100), so a
 stored TUBE DRIVE patch is far cleaner than before at the same byte (the old 1 already gave about 26 %). DISTORTION's GAIN keeps
-its law. Nothing is migrated: re-check stored drive settings.
+its law. Nothing is migrated: re-check stored drive settings. Version 0.9.31 raises TUBE DRIVE's top to 33.75 % and makes the law a
+little less exponential (0.2 % at 1, 4.7 % at 20, 13.4 % at 50, 33.75 % at 100): the same byte is a little more driven than in 0.9.30.

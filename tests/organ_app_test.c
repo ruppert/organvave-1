@@ -469,6 +469,17 @@ int main(int argc, char **argv)
         bad += check("  .. the bottom stays TUBE DRIVE", org_patch[OP_DRV_TYPE] == 2);
         turn(EN_K2, 9);
         bad += check("  .. the top is DISTORTION", org_patch[OP_DRV_TYPE] == 3);
+        {   /* the GAIN row's meter: nine cells as the other rows (0.9.31; it was 101, off the screen) */
+            oa_val_t gv;
+            int ok = 1;
+            static const uint8_t G[5] = {0, 1, 50, 99, 100}, L[5] = {0, 1, 5, 9, 9};
+            for (i = 0; i < 5u; i++) {
+                org_set(OP_DRV_GAIN, G[i]);
+                oa_val(4, 2, &gv);
+                ok &= gv.mn == 9 && gv.mv == (int8_t)L[i];
+            }
+            bad += check("  .. the GAIN meter has nine cells: 0.0 none, 0.1 one, 5.0 five, 9.9 and 10.0 all", ok);
+        }
         org_set(OP_DRV_GAIN, 60);
         turn(EN_K3, 1);
         bad += check("  .. KNOB 3: the gain up a tenth (6.0 to 6.1)", org_patch[OP_DRV_GAIN] == 61);

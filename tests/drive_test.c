@@ -2,8 +2,8 @@
  * Copyright (C) 2026 Guilherme Ruppert (OrganVave-1) */
 /* The drive (src/eng_drive.c; two types since 0.9.30: TUBE DRIVE, DISTORTION) on the host.
  * 1. TUBE DRIVE's law (owner, 0.9.30): the harmonic distortion of a 441 Hz sine at the organ's level (RMS 0.73 at the drive)
- *    grows on an exponential of the GAIN knob: nearly none at 0.1 (< 0.5 %), 0.5 just audible (0.4 .. 1.5 %), about 3 % at 2.0,
- *    10 % at 5.0, 27 % at 10.0, and it never falls from one tenth to the next. Measured on the firmware's integer chain.
+ *    grows on an exponential of the GAIN knob (0.9.31: THD = 25.2 (e^(0.085 g) - 1) %): nearly none at 0.1 (< 0.5 %), 0.5 just
+ *    audible (0.6 .. 1.8 %), about 4.7 % at 2.0, 13.4 % at 5.0, 33.75 % at 10.0, and it never falls from one tenth to the next. Measured on the firmware's integer chain.
  * 2. level: the organ-like chord at that level comes out between the dry level -1.5 dB and +1.5 dB at every GAIN step, both types.
  * 3. bounds: a full-scale square and noise stay inside the output's clamp (4.0 in Q15) at every gain; silence in, silence out.
  * 5. DC: no type leaves a DC (the shifts round; a DC blocker after the shaper): under 1 % of the signal's RMS.
@@ -77,7 +77,7 @@ int main(void)
     const double op = 0.73;                                    /* the organ's RMS at the drive (tools/gen_drive_tables.py) */
     /* 1. the law */
     {
-        static const struct { int g; double lo, hi; } P[] = {{1, 0.0, 0.5}, {5, 0.4, 1.5}, {20, 2.5, 4.5}, {50, 8.0, 12.0}, {100, 23.0, 31.0}};
+        static const struct { int g; double lo, hi; } P[] = {{1, 0.0, 0.5}, {5, 0.6, 1.8}, {20, 3.7, 5.7}, {50, 11.4, 15.4}, {100, 30.0, 37.5}};
         double prev = 0, d[101];
         int mono = 1;
         size_t k;

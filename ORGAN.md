@@ -162,8 +162,8 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   blocker, tone, output trim): **TUBE DRIVE** (made here: a warm, slightly asymmetric soft clip) and **DISTORTION** (a JCM900-style
   two-stage clip). TUBE SCREAM and TUBE PREAMP (0.9.24 .. 0.9.29) were removed (owner); their type bytes play as TUBE DRIVE.
   GAIN 0.0..10.0 in steps of 0.1, 0 bypasses the drive. **(owner, 0.9.30)** TUBE DRIVE's GAIN follows its harmonic distortion on an
-  exponential law, THD(g) = 14.29 (e^(0.1061 g) - 1) % for a sine at the organ's level: 0.15 % at 0.1 (inaudible), 0.8 % at 0.5,
-  3.4 % at 2.0, 10 % at 5.0, 27 % at 10.0; the pre-gain of every tenth is solved for it in the generator, and the firmware's chain
+  exponential law, THD(g) = 25.2 (e^(0.085 g) - 1) % for a sine at the organ's level (0.9.31: the top 25 % above 0.9.30's 27 %, a
+  little less exponential): 0.2 % at 0.1 (inaudible), 1.1 % at 0.5, 4.7 % at 2.0, 13.4 % at 5.0, 33.75 % at 10.0; the pre-gain of every tenth is solved for it in the generator, and the firmware's chain
   follows it (tests/drive_test.c). DISTORTION keeps 3 dB of pre-gain a unit. The organ comes into the drive 12 dB down (fx.c: a
   five-note chord at velocity 100 is RMS 0.73 there, peaks under the input's 4.0) and the output, Q15 up to 4.0, is brought back;
   the trims hold the dry level on an organ-like chord at that level, +1 % a unit (+10 % at 10.0). Every shift rounds to the nearest:
