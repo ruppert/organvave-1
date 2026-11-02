@@ -1385,3 +1385,7 @@ GAIN (byte 41, tenths) changed meaning: it follows the harmonic distortion (0.15
 stored TUBE DRIVE patch is far cleaner than before at the same byte (the old 1 already gave about 26 %). DISTORTION's GAIN keeps
 its law. Nothing is migrated: re-check stored drive settings. Version 0.9.31 raises TUBE DRIVE's top to 33.75 % and makes the law a
 little less exponential (0.2 % at 1, 4.7 % at 20, 13.4 % at 50, 33.75 % at 100): the same byte is a little more driven than in 0.9.30.
+
+Version 0.9.36 reduces the crosstalk (for the CPU): with `OP_XTALK` on, a key keeps only its contributions within 40 dB of its
+strongest, in the default table and in the one the crosstalk bytes 64..69 build. The bytes keep their meaning; a patch with the
+crosstalk on sounds a little cleaner than before (the faint leakage is gone; within 0.3 dB of level).

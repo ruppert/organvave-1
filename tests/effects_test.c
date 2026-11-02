@@ -522,7 +522,20 @@ int main(void)
         /* the levels agree within 1 dB on the calibration chord at the organ's level (tests/drive_test.c); a single drawbar's note
          * is far under it, where DISTORTION, which compresses, comes out about 10 dB louder than TUBE DRIVE (still linear there) */
         check("TUBE at GAIN 6 against DISTORTION on a single drawbar's note: DISTORTION louder, by at most 12 dB", db(rt / rd) > -12.0 && db(rt / rd) < 0.0);
-        check("TUBE: the triode's even harmonics (the second above -40 dB re the fundamental)", db(t2 / t1) > -40.0);
+        {   /* the curve's asymmetry: even harmonics. At GAIN 10 (a single drawbar's note is quiet: at 6 TUBE DRIVE is nearly clean;
+             * the second harmonic seen there before 0.9.36 was the crosstalk's 4' leakage, pruned since) */
+            double u1, u2;
+            P[OP_DRV_GAIN] = 100;
+            patch_set(P);
+            blocks(44100 * 2);
+            u1 = tone(oL, pos - 44100, 44100, f0); u2 = tone(oL, pos - 44100, 44100, 2 * f0);
+            printf("effects: TUBE at GAIN 10: H2 %.1f dB re H1 (at 6: %.1f)\n", db(u2 / u1), db(t2 / t1));
+            check("TUBE: the curve's even harmonics (at GAIN 10 the second rises above -40 dB re the fundamental, over GAIN 6's)",
+                  db(u2 / u1) > -40.0 && db(u2 / u1) > db(t2 / t1));
+            P[OP_DRV_GAIN] = 60;
+            patch_set(P);
+            blocks(44100);
+        }
         check("TUBE: it sounds (rms above 500) and is bounded", rt > 500.0 && rt < 20000.0);
         /* the tone (a tilt around 1 kHz): on C5 (523 Hz) a bright setting lifts the third harmonic (1570 Hz) against the first,
          * a dark one lowers it, against flat */

@@ -63,6 +63,16 @@ of a manual on the scanner computed its sine twice (the dry sum and the scanner'
 the total fell from 8,233 to 6,511 (10 keys) and from 8,634 to 6,735 (every wheel), the goldens unchanged. HOME's CPU meter shows
 the render and, after a plus, TIMER5's time nested in it ("CPU 72+5%"): the overload check counts both against 93 %.
 
+**0.9.36, a much reduced crosstalk (owner).** The crosstalk cost the render, not the key events: each key woke about 10 more
+wheels (its neighbours, at -40 .. -60 dB of its main contribution) and gave the wheels of the drawbars at 0 a faint gain, so they
+were all rendered (10 keys, 80 8800 000: 83 wheels against 23 without it, 2,330 against 911 x86 instructions a sample). Two
+changes: (A) a key keeps only its entries within 40 dB of its strongest (the flash table from `tools/gen_organ_tables.py`, 10,687
+entries -> 2,267, and the same rule in `org_xt_build` for ADVANCED EDIT's RAM table; `org_xt_prune` 0 builds setBfree's full model,
+which the tests still compare exactly); (D) a wheel under -30 dB of a full one (in practice the leakage) takes the sine without its
+interpolation (`ORG_FAINT`): under -80 dB of a full wheel on a crosstalk chord. Measured on the host: 1 key 627 -> 316 (no crosstalk:
+312), 3 keys 1,148 -> 541, 10 keys 2,330 -> 1,254, changing chords -35 .. -42 %; with 30 keys or more every wheel sounds anyway
+(little or no change). The nine cases against setBfree: within 0.24 dB rms, 0.31 dB on the attack.
+
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
 worst case about 2,900 (FMUG at 12 voices: 2,724; Felucca's ANALOG at 8 voices: 4,912), before the rotary: with CLASSIC

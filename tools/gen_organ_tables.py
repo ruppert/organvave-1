@@ -11,7 +11,8 @@ DIR/sbf_ref dump tools/setbfree_ref/tonegen_dump.txt (glibc's rand(): the click 
 
 The tables (FS 44100, the firmware's and the reference's rate):
   ORG_WINC[3][91]    the wheels' 32-bit DDS increments: [0] gear 60 Hz, [1] gear 50 Hz, [2] equal temperament
-  ORG_KC, ORG_KC_OFF the keys' contributions, crosstalk on (setBfree's default model): for key k the entries
+  ORG_KC, ORG_KC_OFF the keys' contributions, crosstalk on (setBfree's default model, 0.9.36: a key's entries more than 40 dB
+                     under its strongest dropped, a much reduced crosstalk for the CPU): for key k the entries
                      ORG_KC[ORG_KC_OFF[k] .. ORG_KC_OFF[k + 1] - 1]; keys 0..63 the upper manual (the lower manual is
                      the same on buses + 9), 64..95 the pedals (setBfree's keys 128..159)
   ORG_KCX, ORG_KCX_OFF the same with the crosstalk off (compartment, terminal strip and wiring at 0)
@@ -103,8 +104,12 @@ def check_envelopes(d):
         p += 2 + rb
 
 
-def pack(contrib):
-    """setBfree key numbers 0..63 and 128..159 -> table keys 0..95; returns (entries, offsets)"""
+XT_PRUNE = 100        # 0.9.36 (owner: a much reduced crosstalk): ORG_KC keeps a key's entries within 40 dB of its strongest
+
+
+def pack(contrib, prune=False):
+    """setBfree key numbers 0..63 and 128..159 -> table keys 0..95; returns (entries, offsets). prune: drop a key's entries more
+    than 40 dB under its strongest (q * 100 < its max: the same rule as eng_organ.c org_xt_build)"""
     by = [[] for _ in range(96)]
     for k, w, b, v in contrib:
         if k < 64:
@@ -119,6 +124,9 @@ def pack(contrib):
         by[kk].append((w << 25) | (b << 20) | q)
     ent, off = [], [0]
     for lst in by:
+        if prune and lst:
+            qmax = max(e & 0xFFFFF for e in lst)
+            lst = [e for e in lst if (e & 0xFFFFF) * XT_PRUNE >= qmax]
         ent += lst
         off.append(len(ent))
     return ent, off
@@ -162,7 +170,7 @@ def main():
     for w in range(1, 92):
         assert abs(d["wheel"][w][3] - 1.0) < 1e-9, "wheel attenuation is not 1: the firmware assumes setBfree's default"
     for tag, key in (("ORG_KC", "contrib"), ("ORG_KCX", "contribnx")):
-        ent, off = pack(d[key])
+        ent, off = pack(d[key], prune=(tag == "ORG_KC"))
         L.append("")
         L.append("/* %s: %d contributions; an entry: wheel << 25 | bus << 20 | level Q18 */" %
                  ("crosstalk on" if tag == "ORG_KC" else "crosstalk off", len(ent)))

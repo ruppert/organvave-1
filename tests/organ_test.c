@@ -101,6 +101,8 @@ static double freq_zc(const float *y, uint32_t n)
 
 /* render a case as sbf_ref does: key events at fragment starts (times in s); temp 1 gear 60, 2 gear 50, 0 equal
  * (sbf_ref's TEMP); returns the samples written to y (at most cap) */
+static int full_xt;                     /* 0.9.36: 1 setBfree's full crosstalk (the RAM table built without the prune, every wheel
+                                         * interpolated) for the comparison; 0 the firmware's reduced crosstalk */
 static uint32_t render_case(const char *bar, double secs, const char *events, int temp, int xt, double swell, float *y,
                             uint32_t cap)
 {
@@ -111,6 +113,8 @@ static uint32_t render_case(const char *bar, double secs, const char *events, in
     org_init();
     org.temp = (uint8_t)(temp == 1 ? 0 : temp == 2 ? 1 : 2);
     org.xtalk = (uint8_t)xt;
+    org.xt_use = full_xt ? 2u : 1u;
+    org_faint = full_xt ? 0 : 130;
     org.swell = (uint16_t)(swell * 32768);
     org.sw = (int32_t)org.swell << 9;                               /* (the reference starts at its swell) */
     bars(bar);
@@ -260,6 +264,12 @@ int main(int argc, char **argv)
         p = rep_ev;
         for (i = 0; i < 12; i++)
             p += sprintf(p, "%s%.3f:+33,%.3f:-33", i ? "," : "", 0.02 * i, 0.02 * i + 0.01);
+        static const uint8_t ZP[ORG_PSIZE];
+        double wr = 0, wa = 0;
+        org_xt_prune = 0;                       /* setBfree's full model in the RAM table, for the exact comparison */
+        (void)org_xt_build(ZP);
+        org_xt_prune = 1;
+        full_xt = 1;
         for (i = 0; i < NELEM(C); i++) {
             char what[140];
             double r, ra, dr, da;
@@ -271,6 +281,23 @@ int main(int argc, char **argv)
             da = 20 * log10(ra / C[i].atk);
             snprintf(what, sizeof what, "%-28s rms %+.4f dB, attack fragment %+.3f dB from setBfree's", C[i].name, dr, da);
             check(what, fabs(dr) < 0.01 && fabs(da) < 0.05);
+        }
+        full_xt = 0;                            /* the firmware's reduced crosstalk (0.9.36): near setBfree's */
+        for (i = 0; i < NELEM(C); i++) {
+            double r, ra, dr, da;
+            n = render_case(C[i].bars, C[i].secs, C[i].ev ? C[i].ev : i == 6 ? run_ev : rep_ev, C[i].temp, C[i].xt,
+                            C[i].swell, y, NELEM(y));
+            r = rms(y, n);
+            ra = rms(y, 128);
+            dr = fabs(20 * log10(r / C[i].rms));
+            da = fabs(20 * log10(ra / C[i].atk));
+            wr = dr > wr ? dr : wr;
+            wa = da > wa ? da : wa;
+        }
+        {
+            char what[160];
+            snprintf(what, sizeof what, "the reduced crosstalk (0.9.36) in the nine cases: rms within %.3f dB, attack within %.3f dB of setBfree's (0.5 allowed)", wr, wa);
+            check(what, wr < 0.5 && wa < 0.5);
         }
     }
 

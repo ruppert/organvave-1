@@ -46,6 +46,10 @@
 #define ORG_PERC_SLOW 65454u            /* the same, 60 dB in 4 s (10^(-24/44100)) */
 #define ORG_PERC_GAIN 19829u            /* the mix's gain while the percussion is on, normal: 0.60512, Q15 */
 #define ORG_VIB_INC 706122u             /* the scanner's phase step: 7.25 Hz at 44.1 kHz, 2^32 * 7.25 / 44100 */
+/* 0.9.36: a wheel held at a gain under -30 dB of a full wheel (Q12; in practice the crosstalk's leakage) takes the sine without its
+ * interpolation (org_sine_n): its error, about -55 dB of the wheel, is under -85 dB of a full one, and the sine costs half */
+#define ORG_FAINT org_faint
+static int32_t org_faint = 130;                 /* (tests set 0: every wheel interpolated) */
 #define ORG_XT_CAP 10752u               /* the RAM crosstalk table's entries (setBfree's default needs 10687) */
 #define ORG_VIB_N 1024u                 /* the delay line: 1024 samples (setBfree's BUF_SIZE) */
 #define ORG_VIB_CLAMP 65535             /* the delay line's input: x >> 3, clamped */
@@ -393,6 +397,8 @@ static __attribute__((noinline)) void org_vib(const int32_t *x, int32_t *o, uint
     org.vst = st;
 }
 
+static inline int32_t org_sine_n(uint32_t ph) { return SINE[ph >> 22]; }   /* the faint wheels' sine (ORG_FAINT) */
+
 /* a wheel on the percussion's bus: its sine once per sample, into the organ (y) and the contact (p) with their own gains
  * (the same ramps as the organ's), and the phase advanced. Not inlined (tests/target_budget.py counts it) */
 static __attribute__((noinline)) void org_wheel_pc(org_wheel_t *w, uint32_t inc, uint32_t off, uint32_t n, int32_t *y, int32_t *p)
@@ -406,6 +412,13 @@ static __attribute__((noinline)) void org_wheel_pc(org_wheel_t *w, uint32_t inc,
             int32_t s = sine_i(ph), ee = (int32_t)e[i];
             y[i] += (s * (g + ((ee * gd) >> 14))) >> 12;
             p[i] += (s * (pg + ((ee * pgd) >> 14))) >> 12;
+            ph += inc;
+        }
+    } else if (g < ORG_FAINT && pg < ORG_FAINT) {
+        for (i = 0; i < n; i++) {
+            int32_t s = org_sine_n(ph);
+            y[i] += (s * g) >> 12;
+            p[i] += (s * pg) >> 12;
             ph += inc;
         }
     } else {
@@ -436,6 +449,13 @@ static __attribute__((noinline)) void org_wheel_sc(org_wheel_t *w, uint32_t inc,
             ys[i] += (s * (sg + ((ee * sgd) >> 14))) >> 12;
             ph += inc;
         }
+    } else if (w->gs < ORG_FAINT) {
+        for (i = 0; i < n; i++) {
+            int32_t s = org_sine_n(ph);
+            y[i] += (s * g) >> 12;
+            ys[i] += (s * sg) >> 12;
+            ph += inc;
+        }
     } else {
         for (i = 0; i < n; i++) {
             int32_t s = sine_i(ph);
@@ -459,6 +479,14 @@ static __attribute__((noinline)) void org_wheel_scp(org_wheel_t *w, uint32_t inc
             y[i] += (s * (g + ((ee * gd) >> 14))) >> 12;
             ys[i] += (s * (sg + ((ee * sgd) >> 14))) >> 12;
             p[i] += (s * (pg + ((ee * pgd) >> 14))) >> 12;
+            ph += inc;
+        }
+    } else if (w->gs < ORG_FAINT && pg < ORG_FAINT) {
+        for (i = 0; i < n; i++) {
+            int32_t s = org_sine_n(ph);
+            y[i] += (s * g) >> 12;
+            ys[i] += (s * sg) >> 12;
+            p[i] += (s * pg) >> 12;
             ph += inc;
         }
     } else {
@@ -518,10 +546,16 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
                 *yp++ += (sine_i(ph) * gg) >> 12;
                 ph += inc;
             }
-        } else if (g) {
+        } else if (g >= ORG_FAINT) {
             int32_t *yp = y;
             for (i = n; i; i--) {
                 *yp++ += (sine_i(ph) * g) >> 12;
+                ph += inc;
+            }
+        } else if (g) {                                               /* a faint wheel (the crosstalk's leakage): no interpolation */
+            int32_t *yp = y;
+            for (i = n; i; i--) {
+                *yp++ += (org_sine_n(ph) * g) >> 12;
                 ph += inc;
             }
         } else {
@@ -891,6 +925,10 @@ static void org_xt_term(uint32_t term, uint32_t b, int32_t lev, int32_t comp, in
         org_xt_add(ORG_XT_TSW[term], b, lev, tstrip);
     }
 }
+/* 0.9.36 (owner: a much reduced crosstalk): a key keeps only its entries within 40 dB of its strongest (v * 100 >= the max, in
+ * Q18), as tools/gen_organ_tables.py does for the flash table: the faint leakage woke whole wheels for nothing audible. 0 builds
+ * setBfree's full model (tests/organ_adv_test.c compares it with setBfree's) */
+static uint8_t org_xt_prune = 1;
 /* the build; returns the floor it ended with (Q24; higher than asked when the table would not fit, ORG_XT_CAP) */
 static uint32_t org_xt_build(const uint8_t *p)
 {
@@ -902,6 +940,7 @@ static uint32_t org_xt_build(const uint8_t *p)
     memset(org_xt_acc, 0, sizeof org_xt_acc);
     for (attempt = 0; attempt < 24u; attempt++) {
         uint32_t kk, n = 0, over = 0;
+        int32_t prune_max = 0;
         for (kk = 0; kk < 96u && !over; kk++) {
             uint32_t j, nt = 0, w, b, base = kk < 64u ? 0u : 18u;
             uint32_t tt[9], tb[9];
@@ -925,6 +964,20 @@ static uint32_t org_xt_build(const uint8_t *p)
                             int32_t xl = (int32_t)(((((int64_t)wire * tl[j]) >> 24) * RD[d]) >> 16);
                             org_xt_term(tt[j], b, xl, comp, trans, tstrip);
                         }
+            {
+                int32_t vmax = 0;                                          /* the key's strongest entry, Q18 (the prune's reference) */
+                for (w = 1; w < 92u; w++)
+                    for (b = 0; b < 9u; b++) {
+                        int32_t v = org_xt_acc[w][b];
+                        if (v < fl)
+                            continue;
+                        v = (v < mn ? mn : v) + 32;
+                        v >>= 6;
+                        vmax = v > vmax ? v : vmax;
+                    }
+                vmax = vmax > 0xFFFFF ? 0xFFFFF : vmax;
+                prune_max = org_xt_prune ? vmax : 0;
+            }
             for (w = 1; w < 92u; w++)
                 for (b = 0; b < 9u; b++) {
                     int32_t v = org_xt_acc[w][b];
@@ -938,7 +991,7 @@ static uint32_t org_xt_build(const uint8_t *p)
                     v = (v + 32) >> 6;                                       /* Q24 -> Q18 */
                     if (v > 0xFFFFF)
                         v = 0xFFFFF;
-                    if (v <= 0)
+                    if (v <= 0 || (int64_t)v * 100 < prune_max)              /* (the 40 dB prune, 0.9.36) */
                         continue;
                     if (n >= ORG_XT_CAP) {
                         over = 1;

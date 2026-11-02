@@ -82,8 +82,25 @@ static void defaults(void)
         printf("organ adv: default crosstalk table: %u entries (flash %u), floor %u, levels off by more than 2 LSB: %u, missing %u, extra %u\n",
                org_xt_off[96], (unsigned)ORG_KC_OFF[96], fl, lv, miss, extra);
         check("the default crosstalk table has setBfree's entries (those above 8 / 2^18 all there, none more)", miss == 0 && extra == 0);
-        check("  .. with their levels within 2 LSB of Q18", lv == 0 && tot > 10000u);
+        check("  .. with their levels within 2 LSB of Q18 (0.9.36: both pruned at 40 dB under each key's strongest)", lv == 0 && tot == ORG_KC_OFF[96] && tot > 2000u);
         check("  .. and nothing was cut for room", fl == ORG_XT_G[org_ci(OP_XT_FLOOR, 0)]);
+        {   /* the prune (0.9.36): every key keeps exactly its entries within 40 dB of its strongest; off, setBfree's full model */
+            uint32_t bad40 = 0, full;
+            for (k = 0; k < 96u; k++) {
+                uint32_t j, mx = 0;
+                for (j = org_xt_off[k]; j < org_xt_off[k + 1]; j++)
+                    mx = (org_xt_tab[j] & 0xFFFFF) > mx ? (org_xt_tab[j] & 0xFFFFF) : mx;
+                for (j = org_xt_off[k]; j < org_xt_off[k + 1]; j++)
+                    bad40 += (uint64_t)(org_xt_tab[j] & 0xFFFFF) * 100u < mx;
+            }
+            org_xt_prune = 0;
+            (void)org_xt_build(z);
+            full = org_xt_off[96];
+            org_xt_prune = 1;
+            printf("organ adv: the prune: %u entries kept of setBfree's %u\n", (unsigned)ORG_KC_OFF[96], full);
+            check("  .. the prune: no entry kept more than 40 dB under its key's strongest, and setBfree's full model without it (over 10000 entries)",
+                  bad40 == 0 && full > 10000u);
+        }
     }
 }
 
@@ -96,6 +113,7 @@ static int near_(int64_t a, int64_t b, int64_t tol_abs, double tol_rel)
 }
 static void reference(void)
 {
+    org_xt_prune = 0;                           /* setBfree's full model: its counts and sums (the prune is checked in 1.) */
     FILE *f = fopen("tests/organ_adv_ref.txt", "r");
     char line[8192], name[64] = "";
     uint8_t p[ORG_PSIZE];
@@ -541,6 +559,38 @@ int main(void)
     org_init();
     defaults();
     reference();
+    org_xt_prune = 1;                           /* (the firmware's: the 40 dB prune, 0.9.36) */
+    {   /* 0.9.36: the faint wheels (under -30 dB: the crosstalk's leakage) take the sine without interpolation; against every wheel
+         * interpolated, a held chord with the crosstalk on differs by less than -80 dB of one full wheel */
+        static int32_t ya[2][44100];
+        static const uint8_t CH[10] = {12, 16, 19, 24, 28, 31, 36, 40, 43, 48};
+        uint32_t run, i, b;
+        double e = 0, s2 = 0;
+        for (run = 0; run < 2u; run++) {
+            org_init();
+            org.xtalk = 1;
+            for (i = 0; i < 27u; i++)
+                org.bars[i] = 0;
+            org.bars[0] = org.bars[2] = org.bars[3] = 8;
+            org_faint = run ? 0 : 130;
+            for (i = 0; i < 10u; i++)
+                org_key(CH[i], 1);
+            for (b = 0; b < 44100u / CTL; b++) {
+                memset(ya[run] + b * CTL, 0, CTL * sizeof(int32_t));
+                org_render(ya[run] + b * CTL, CTL);
+            }
+        }
+        org_faint = 130;
+        for (i = 4410; i < 44100u / CTL * CTL; i++) {
+            double d = ya[0][i] - ya[1][i];
+            e += d * d;
+            s2 += (double)ya[1][i] * ya[1][i];
+        }
+        e = 10 * log10(e / (44100 - 4410) / (32768.0 * 32768.0 / 2) + 1e-30);
+        printf("organ adv: the faint wheels without interpolation: the difference %.1f dB re one full wheel (the chord %.1f dB)\n", e,
+               10 * log10(s2 / (44100 - 4410) / (32768.0 * 32768.0 / 2)));
+        check("the faint wheels' sine (no interpolation under -30 dB) changes a crosstalk chord by less than -80 dB of a full wheel", e < -80.0);
+    }
     engine();
     params();
     audible();
