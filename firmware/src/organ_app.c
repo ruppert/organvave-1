@@ -1474,13 +1474,15 @@ static void oa_scene(void)
     } else if (oa_pp_on())
         oa_pp_draw();
     if (oa_dbp) {                                         /* DRAWBAR PRESET MODE: over every page, the bars live */
-        /* as small as its contents (0.9.33): the title, the bars (x 19 .. 220, 101 px high), the line under; centred */
-        int32_t hgt = 6 + AF_M.h + 4 + 101 + 8 + AF_S.h + 4, y0 = (240 - hgt) / 2, by = y0 + 6 + AF_M.h + 4;
-        cv_rect(11, y0 - 2, 218, hgt + 4, C_ORANGE);
-        cv_rect(13, y0, 214, hgt, RGB565(0x00, 0x00, 0x00));
+        /* as small as its contents (0.9.33): the title, the bars (x 19 .. 220, 101 px high), two lines under (0.9.34, the longer
+         * 210 px); centred */
+        int32_t hgt = 6 + AF_M.h + 4 + 101 + 8 + AF_X.h + 2 + AF_X.h + 4, y0 = (240 - hgt) / 2, by = y0 + 6 + AF_M.h + 4;
+        cv_rect(7, y0 - 2, 226, hgt + 4, C_ORANGE);
+        cv_rect(9, y0, 222, hgt, RGB565(0x00, 0x00, 0x00));
         ctext(120, y0 + 6, &AF_M, "DRAWBAR PRESET MODE", C_AMBER, RGB565(0x00, 0x00, 0x00));
         oa_upper_bars(by - HU10(930));
-        ctext(120, by + 101 + 8, &AF_S, "Press a note to select drawbar preset", C_CREAM, RGB565(0x00, 0x00, 0x00));
+        ctext(120, by + 101 + 8, &AF_X, "Press a note to select drawbar preset (middle octave)", C_CREAM, RGB565(0x00, 0x00, 0x00));
+        ctext(120, by + 101 + 8 + AF_X.h + 2, &AF_X, "Other keys: various functions", C_CREAM, RGB565(0x00, 0x00, 0x00));
     }
     if (cpu_pop) {                                        /* overload (audio.c): the popup, on top of every page */
         cv_rect(12, 92, 216, 40, C_ORANGE);
