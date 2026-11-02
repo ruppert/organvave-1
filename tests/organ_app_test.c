@@ -787,12 +787,55 @@ int main(int argc, char **argv)
         bad += check("  .. the C above brings back the bars of before the mode", ok);
         fm1_in.notes = 0;
         keyboard_block();
-        fm1_in.notes = 1u << 3;                           /* a key outside the octave */
+        fm1_in.notes = 1u << 2;                           /* the lowest G: no function yet */
         keyboard_block();
         oa_input();
         for (ok = 1, i = 0; i < 9u; i++)
             ok &= org_patch[OP_UB + i] == START[i];
-        bad += check("  .. a key outside the octave does nothing (and is silent)", ok && kb_note[3] == KB_SILENT);
+        bad += check("  .. a key with no function (the lowest G) does nothing (and is silent)", ok && kb_note[2] == KB_SILENT && !oa_fl_on());
+        fm1_in.notes = 0;
+        keyboard_block();
+        {   /* the switches (0.9.35): the key, then the state and the quick message */
+            static const struct { uint8_t key; const char *msg1, *msg2; } SW[] = {
+                {0, "FAST", "SLOW"}, {1, 0, 0}, {3, 0, 0}, {21, 0, 0}, {23, 0, 0}, {24, 0, 0}, {26, 0, 0}, {25, 0, 0},
+                {20, "OVERDRIVE ON", "OVERDRIVE OFF"}, {22, "HIGH-GAIN ON", "HIGH-GAIN OFF"}};
+            uint32_t n;
+            uint8_t perc0 = org_patch[OP_PERC], soft0 = org_patch[OP_PERC_SOFT], fast0 = org_patch[OP_PERC_FAST], sel0 = org_patch[OP_PERC_SEL];
+            uint32_t up0 = vib_up(), lo0 = vib_lo(), rev0 = TSEL->p[P_REV];
+            org_set(OP_ROT, 1); org_set(OP_ROT_SPEED, 1); org_set(OP_DRV, 0);
+            for (n = 0; n < sizeof SW / sizeof SW[0]; n++) {
+                uint32_t r;
+                for (r = 0; r < 2u; r++) {
+                    char what[120];
+                    int good = 1;
+                    fm1_in.notes = 1u << SW[n].key;
+                    keyboard_block();
+                    oa_input();
+                    fm1_in.notes = 0;
+                    keyboard_block();
+                    switch (SW[n].key) {
+                    case 0: good = org_patch[OP_ROT] && org_patch[OP_ROT_SPEED] == (r ? 1u : 2u); break;
+                    case 1: good = vib_up() == (r ? up0 : !up0) && !strcmp(oa_fl, vib_up() ? "Upper C/V ON" : "Upper C/V OFF"); break;
+                    case 3: good = vib_lo() == (r ? lo0 : !lo0) && !strcmp(oa_fl, vib_lo() ? "Lower C/V ON" : "Lower C/V OFF"); break;
+                    case 21: good = org_patch[OP_PERC] == (r ? perc0 : !perc0) && !strcmp(oa_fl, org_patch[OP_PERC] ? "Percussion ON" : "Percussion OFF"); break;
+                    case 23: good = org_patch[OP_PERC_SOFT] == (r ? soft0 : !soft0) && !strcmp(oa_fl, org_patch[OP_PERC_SOFT] ? "Percussion SOFT" : "Percussion NORMAL"); break;
+                    case 24: good = org_patch[OP_PERC_FAST] == (r ? fast0 : !fast0) && !strcmp(oa_fl, org_patch[OP_PERC_FAST] ? "Percussion FAST" : "Percussion SLOW"); break;
+                    case 26: good = org_patch[OP_PERC_SEL] == (r ? sel0 : !sel0) && !strcmp(oa_fl, org_patch[OP_PERC_SEL] ? "Percussion 3rd" : "Percussion 2nd"); break;
+                    case 25: good = (TSEL->p[P_REV] != 0) == (r ? rev0 != 0 : rev0 == 0) && !strcmp(oa_fl, TSEL->p[P_REV] ? "Reverb ON" : "Reverb OFF") &&
+                                    (!r || TSEL->p[P_REV] == rev0 || !rev0); break;
+                    case 20: good = r ? !org_patch[OP_DRV] : org_patch[OP_DRV] && org_patch[OP_DRV_TYPE] == 2u && org_patch[OP_DRV_GAIN] == 25u; break;
+                    case 22: good = r ? !org_patch[OP_DRV] : org_patch[OP_DRV] && org_patch[OP_DRV_TYPE] == 2u && org_patch[OP_DRV_GAIN] == 80u; break;
+                    }
+                    if (SW[n].msg1)
+                        good &= !strcmp(oa_fl, r ? SW[n].msg2 : SW[n].msg1);
+                    good &= oa_fl_on() && oa_dbp;
+                    snprintf(what, sizeof what, "  .. key %u, %s: %s", SW[n].key, r ? "again" : "once", oa_fl);
+                    bad += check(what, good);
+                }
+            }
+            fm1_ms += 600;                                /* (host.h's clock) */
+            bad += check("  .. the message is gone after 0.5 s", !oa_fl_on());
+        }
         fm1_in.notes = 0;
         keyboard_block();
         fm1_in.notes = 1u << 7;                           /* C */

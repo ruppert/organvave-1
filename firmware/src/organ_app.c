@@ -190,11 +190,16 @@ static void oa_dbp_set(int on)
     oa_dbp = (uint8_t)on;
     org_dbp_mode = (uint8_t)on;                           /* the key scan lets the keys held go and keeps them silent */
 }
-static void oa_dbp_key(uint32_t k)                        /* 1 .. 12: a set; 13: the bars of before the mode */
+/* a quick message over everything, 0.5 s (0.9.35: the DRAWBAR PRESET MODE's switches) */
+static char oa_fl[24];
+static uint32_t oa_fl_until;
+static int oa_fl_on(void) { return oa_fl_until && (int32_t)(fm1_ms - oa_fl_until) < 0; }
+static void oa_flash(const char *t)
 {
-    uint32_t i;
-    for (i = 0; i < 9u; i++)
-        org_set(OP_UB + i, k <= 12u ? OA_DBP[k - 1u][i] : oa_dbp_was[i]);
+    str_cpy(oa_fl, t, sizeof oa_fl);
+    oa_fl_until = fm1_ms + 500u;
+    if (!oa_fl_until)
+        oa_fl_until = 1;
 }
 
 /* the drive's types (OP_DRV_TYPE, two since 0.9.30: 2 TUBE DRIVE, 3 DISTORTION; 0 and 1, the removed TUBE SCREAM and TUBE
@@ -1484,6 +1489,12 @@ static void oa_scene(void)
         ctext(120, by + 101 + 8, &AF_X, "Press a note to select drawbar preset (middle octave)", C_CREAM, RGB565(0x00, 0x00, 0x00));
         ctext(120, by + 101 + 8 + AF_X.h + 2, &AF_X, "Other keys: various functions", C_CREAM, RGB565(0x00, 0x00, 0x00));
     }
+    if (oa_fl_on()) {                                     /* a quick message (0.5 s), over the DRAWBAR PRESET pop-up */
+        int32_t w = text_w(&AF_M, oa_fl) + 28;
+        cv_rect(120 - w / 2 - 2, 102, w + 4, 36, C_ORANGE);
+        cv_rect(120 - w / 2, 104, w, 32, C_POP);
+        ctext(120, 111, &AF_M, oa_fl, C_AMBER, C_POP);
+    }
     if (cpu_pop) {                                        /* overload (audio.c): the popup, on top of every page */
         cv_rect(12, 92, 216, 40, C_ORANGE);
         cv_rect(14, 94, 212, 36, C_POP);
@@ -1509,6 +1520,7 @@ static uint32_t oa_signature(void)
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_RDAMP] << 7 ^ (uint32_t)song.g[G_DRREV] << 14 ^
          (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_pop != 0u) << 15 ^ (uint32_t)oa_dbp << 16) * 16777619u;
+    h = (h ^ (oa_fl_on() ? oa_fl_until : 0u)) * 16777619u;   /* a quick message: drawn, then gone */
     if (!oa_gl && (oa_page == 0u || oa_page > 8u))           /* HOME: the CPU meter is redrawn when a figure changes (0.9.28) */
         h = (h ^ song.cpu_q8 * 100u / 256u ^ (audio_t5_q8 * 100u / 256u) << 8) * 16777619u;
     return h;
@@ -1565,6 +1577,89 @@ static void oa_bar(uint32_t i, int32_t s)                 /* bar i (of the page'
         return;
     op = oa_bar_op(i);
     org_set(op, (uint32_t)clamp((int32_t)org_patch[op] + s, 0, 8));
+}
+
+/* DRAWBAR PRESET MODE: key k (0 the lowest F .. 26 the highest G). The middle octave, C .. C (7 .. 19), sets the upper bars
+ * (the C above: the bars of before the mode); the others switch (0.9.35, owner), with a message for 0.5 s; what they change
+ * stays after the mode, as a change of the preset */
+static void home_route(uint32_t lo, int32_t s);
+static uint8_t oa_rev_last = 36;                          /* the reverb's send when it was on (the factory default before) */
+static void oa_drv_toggle(uint32_t gain, const char *name)    /* TUBE DRIVE at a fixed GAIN, or off if it is already that */
+{
+    char t[24];
+    int on = !(org_patch[OP_DRV] && (org_patch[OP_DRV_TYPE] & 3u) != 3u && org_patch[OP_DRV_GAIN] == gain);
+    if (on) {
+        org_set(OP_DRV_TYPE, 2u);
+        org_set(OP_DRV_GAIN, gain);
+    }
+    org_set(OP_DRV, (uint32_t)on);
+    str_cpy(t, name, 14);
+    str_cpy(t + str_len(t), on ? " ON" : " OFF", 5);
+    oa_flash(t);
+}
+static void oa_pc_toggle(uint32_t op, const char *on, const char *off)
+{
+    org_set(op, !org_patch[op]);
+    oa_flash(org_patch[op] ? on : off);
+}
+static void oa_dbp_key(uint32_t k)
+{
+    uint32_t i;
+    if (k >= 7u && k <= 19u) {
+        for (i = 0; i < 9u; i++)
+            org_set(OP_UB + i, k < 19u ? OA_DBP[k - 7u][i] : oa_dbp_was[i]);
+        return;
+    }
+    switch (k) {
+    case 0:                                               /* lowest F: the Leslie, SLOW / FAST (on if it was off) */
+        if (org_patch[OP_ROT] && org_patch[OP_ROT_SPEED] == 2u) {
+            org_set(OP_ROT_SPEED, 1u);
+            oa_flash("SLOW");
+        } else {
+            org_set(OP_ROT, 1u);
+            org_set(OP_ROT_SPEED, 2u);
+            oa_flash("FAST");
+        }
+        break;
+    case 1:                                               /* lowest F#: the UP tab (the upper manual through the scanner) */
+        home_route(0, vib_up() ? -1 : 1);
+        oa_flash(vib_up() ? "Upper C/V ON" : "Upper C/V OFF");
+        break;
+    case 3:                                               /* lowest G#: the LO tab */
+        home_route(1, vib_lo() ? -1 : 1);
+        oa_flash(vib_lo() ? "Lower C/V ON" : "Lower C/V OFF");
+        break;
+    case 20:                                              /* highest C#: TUBE DRIVE at 25 % (GAIN 2.5) */
+        oa_drv_toggle(25u, "OVERDRIVE");
+        break;
+    case 21:                                              /* highest D: the percussion */
+        oa_pc_toggle(OP_PERC, "Percussion ON", "Percussion OFF");
+        break;
+    case 22:                                              /* highest D#: TUBE DRIVE at 80 % (GAIN 8.0) */
+        oa_drv_toggle(80u, "HIGH-GAIN");
+        break;
+    case 23:
+        oa_pc_toggle(OP_PERC_SOFT, "Percussion SOFT", "Percussion NORMAL");
+        break;
+    case 24:
+        oa_pc_toggle(OP_PERC_FAST, "Percussion FAST", "Percussion SLOW");
+        break;
+    case 25:                                              /* highest F#: the reverb (its send; back to the last level) */
+        if (TSEL->p[P_REV]) {
+            oa_rev_last = (uint8_t)TSEL->p[P_REV];
+            TSEL->p[P_REV] = 0;
+            oa_flash("Reverb OFF");
+        } else {
+            TSEL->p[P_REV] = oa_rev_last ? oa_rev_last : 36u;
+            oa_flash("Reverb ON");
+        }
+        break;
+    case 26:
+        oa_pc_toggle(OP_PERC_SEL, "Percussion 3rd", "Percussion 2nd");
+        break;
+    default:                                              /* the others: nothing yet */
+        break;
+    }
 }
 
 static void oa_buttons(uint32_t pressed)
@@ -1814,9 +1909,9 @@ static void oa_input(void)
     }
     song.sel = 0;
     oa_buttons(pressed);
-    if (oa_dbp && (k = org_dbp_key) != 0u) {              /* DRAWBAR PRESET MODE: a key of the middle octave */
+    if (oa_dbp && (k = org_dbp_key) != 0u) {              /* DRAWBAR PRESET MODE: a key (key + 1) */
         org_dbp_key = 0;
-        oa_dbp_key(k);
+        oa_dbp_key(k - 1u);
     }
     if (oa_track_preset())                                /* a new preset (the knob, a Program Change, a saved one) */
         oa_sv = 0;

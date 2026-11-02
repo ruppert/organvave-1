@@ -320,10 +320,9 @@ static void keyboard_block(void)
         if (!((ch >> k) & 1u))
             continue;
         if ((cur >> k) & 1u) {
-            if (org_dbp_mode) {                   /* DRAWBAR PRESET MODE: no note; the middle octave's C .. C (keys 7 .. 19: */
-                kb_note[k] = KB_SILENT;           /* the keyboard starts on F) picks a drawbar set, whatever the octave */
-                if (k >= 7u && k <= 19u)
-                    org_dbp_key = (uint8_t)(k - 6u);
+            if (org_dbp_mode) {                   /* DRAWBAR PRESET MODE: no note; the key (0 the lowest F .. 26 the highest G, */
+                kb_note[k] = KB_SILENT;           /* whatever the octave) goes to the UI: a drawbar set or a switch */
+                org_dbp_key = (uint8_t)(k + 1u);
                 continue;
             }
             kb_note[k] = (uint8_t)kb_map(TSEL, k);
