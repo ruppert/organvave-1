@@ -56,6 +56,13 @@ Static loop-instruction cost (method of `tests/target_budget.py`, probe kernels 
 | rotary CLASSIC, economy variant: 1024 angles, nearest coefficients | ~767 |
 | rotary LIGHT: minimal physical model (stereo), + HORN tone filter (removed in 0.9.23) | 210 + ~10 |
 
+**0.9.28, measured on the host (callgrind, x86 instructions a sample, 10 keys, every upper bar out, vibrato C3, percussion,
+drive, HALL, delay, CLASSIC 4 FAST):** the tonewheels were 62 % of the render, the rotary 26 %, the reverb 5 %, the rest 7 %. A wheel
+of a manual on the scanner computed its sine twice (the dry sum and the scanner's share, taken out again after the scanner);
+`org_wheel_sc` / `org_wheel_scp` now compute it once and add the dry share, the scanner's share and the percussion's in one loop:
+the total fell from 8,233 to 6,511 (10 keys) and from 8,634 to 6,735 (every wheel), the goldens unchanged. HOME's CPU meter shows
+the render and, after a plus, TIMER5's time nested in it ("CPU 72+5%"): the overload check counts both against 93 %.
+
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
 worst case about 2,900 (FMUG at 12 voices: 2,724; Felucca's ANALOG at 8 voices: 4,912), before the rotary: with CLASSIC

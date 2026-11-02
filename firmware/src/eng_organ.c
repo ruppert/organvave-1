@@ -121,6 +121,9 @@ static int16_t org_atk_ram[8][128] __attribute__((section(".pool")));
 static int16_t org_rel_ram[8][128] __attribute__((section(".pool")));
 /* what the tables were built from (0: setBfree's defaults, the flash tables) */
 static uint8_t org_b_env[8], org_b_xt[6], org_xt_valid;     /* org_b_env: the six click bytes 58..63, the attack gain (84), the release gain (85) */
+/* the CPU meter's second figure (0.9.28): TIMER5's time nested in the render (the key scan, USB audio), 1/256 of a half, averaged
+ * as song.cpu_q8 (audio.c sets it). The overload check counts both: render + this is what it compares with 93 % */
+static volatile uint32_t audio_t5_q8, audio_t5_rem;
 static volatile uint16_t cpu_pop;       /* overload: blocks left of the "Warning: CPU High" popup (0.5 s; audio.c shed_voice arms it) */
 static volatile uint8_t org_shed_req;   /* overload: release the oldest key at the next fragment (org_fragment) */
 
@@ -412,26 +415,58 @@ static __attribute__((noinline)) void org_wheel_pc(org_wheel_t *w, uint32_t inc,
     w->ph = ph;
 }
 
-/* a wheel's share of the scanner's input (the manuals routed through it): the same sine and gains as its share of y,
- * added to ys; ph is the wheel's phase at the block's start (the caller advances the wheel). Not inlined */
-static __attribute__((noinline)) void org_wheel_scan(const org_wheel_t *w, uint32_t ph, uint32_t inc, uint32_t off, uint32_t n, int32_t *ys)
+/* a wheel on the scanner's bus (0.9.28): its sine once per sample, into the dry organ (y: its share that is not on the scanner,
+ * sum - ssum), the scanner's input (ys: ssum) and, with p, the percussion's contact; the phase advanced. Before 0.9.28 the
+ * scanner's share was a second pass with its own sine (org_wheel_scan) and y held the whole sum (the scanner's share taken
+ * out again after it): twice the sines for every wheel of a manual on the scanner. Not inlined (tests/target_budget.py) */
+static __attribute__((noinline)) void org_wheel_sc(org_wheel_t *w, uint32_t inc, uint32_t off, uint32_t n, int32_t *y, int32_t *ys)
 {
-    uint32_t i;
-    int32_t g = w->sgs;
+    uint32_t ph = w->ph, i;
+    int32_t g = w->gs - w->sgs, sg = w->sgs;
     if (w->env) {
         const int16_t *e = w->env + off;
-        int32_t gd = w->sgd;
+        int32_t gd = w->gd - w->sgd, sgd = w->sgd;
         for (i = 0; i < n; i++) {
-            int32_t gg = g + (((int32_t)e[i] * gd) >> 14);
-            ys[i] += (sine_i(ph) * gg) >> 12;
+            int32_t s = sine_i(ph), ee = (int32_t)e[i];
+            y[i] += (s * (g + ((ee * gd) >> 14))) >> 12;
+            ys[i] += (s * (sg + ((ee * sgd) >> 14))) >> 12;
             ph += inc;
         }
     } else {
         for (i = 0; i < n; i++) {
-            ys[i] += (sine_i(ph) * g) >> 12;
+            int32_t s = sine_i(ph);
+            y[i] += (s * g) >> 12;
+            ys[i] += (s * sg) >> 12;
             ph += inc;
         }
     }
+    w->ph = ph;
+}
+static __attribute__((noinline)) void org_wheel_scp(org_wheel_t *w, uint32_t inc, uint32_t off, uint32_t n, int32_t *y, int32_t *ys,
+                                                   int32_t *p)
+{
+    uint32_t ph = w->ph, i;
+    int32_t g = w->gs - w->sgs, sg = w->sgs, pg = w->pgs;
+    if (w->env) {
+        const int16_t *e = w->env + off;
+        int32_t gd = w->gd - w->sgd, sgd = w->sgd, pgd = w->pgd;
+        for (i = 0; i < n; i++) {
+            int32_t s = sine_i(ph), ee = (int32_t)e[i];
+            y[i] += (s * (g + ((ee * gd) >> 14))) >> 12;
+            ys[i] += (s * (sg + ((ee * sgd) >> 14))) >> 12;
+            p[i] += (s * (pg + ((ee * pgd) >> 14))) >> 12;
+            ph += inc;
+        }
+    } else {
+        for (i = 0; i < n; i++) {
+            int32_t s = sine_i(ph);
+            y[i] += (s * g) >> 12;
+            ys[i] += (s * sg) >> 12;
+            p[i] += (s * pg) >> 12;
+            ph += inc;
+        }
+    }
+    w->ph = ph;
 }
 
 /* add n (= CTL) samples to out[] (not inlined: tests/target_budget.py counts it) */
@@ -460,8 +495,13 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
         org_wheel_t *w = &org.w[wn];
         uint32_t ph = w->ph, inc = winc[wn - 1u];
         int32_t g = w->gs;
-        if (vr && (w->sgs | w->sgd))                                  /* the scanner's share, from the same phase */
-            org_wheel_scan(w, ph, inc, off, n, ys);
+        if (vr && (w->sgs | w->sgd)) {                                /* on the scanner: the sine once, y the dry share */
+            if (w->pgs | w->pgd)
+                org_wheel_scp(w, inc, off, n, y, ys, p);
+            else
+                org_wheel_sc(w, inc, off, n, y, ys);
+            continue;
+        }
         if (w->pgs | w->pgd) {                                        /* on the percussion's bus: the sine once, both sums */
             org_wheel_pc(w, inc, off, n, y, p);
             continue;
@@ -488,7 +528,7 @@ static __attribute__((noinline)) void org_render(int32_t *out, uint32_t n)
     if (vr) {                                                         /* the scanner: its manuals' sound, replaced by its wet; the rest stays dry */
         org_vib(ys, v, n);
         for (i = 0; i < n; i++)
-            v[i] += y[i] - ys[i];
+            v[i] += y[i];                                             /* (y holds only the dry share since 0.9.28) */
         vv = v;
     }
     if (org.perc_cur) {                                               /* setBfree's first difference, then the envelope */

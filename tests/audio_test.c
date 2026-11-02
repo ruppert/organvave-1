@@ -122,6 +122,13 @@ static void dma(void)
     for (i = 0; i < 512u; i++) fm1_alnk0_irq();
     expected = host_us * 256u / (HALF_FRAMES * 1000000u / FS);
     acheck("steady CPU load converges without integer smoothing bias", song.cpu_q8 >= expected - 1u && song.cpu_q8 <= expected);
+    fresh();
+    audio_t5_q8 = audio_t5_rem = 0;
+    host_us = 900; host_nest = 120;
+    for (i = 0; i < 512u; i++) fm1_alnk0_irq();
+    expected = host_nest * 256u / (HALF_FRAMES * 1000000u / FS);
+    acheck("the meter's second figure: TIMER5 nested in the render converges to its share (0.9.28)",
+           audio_t5_q8 >= expected - 1u && audio_t5_q8 <= expected && song.cpu_q8 <= (host_us - host_nest) * 256u / (HALF_FRAMES * 1000000u / FS));
 }
 /* MENU > USB LEVEL (fx.c fx_usb_fixed, audio.c audio_block): MASTER (default) as before, USB = the DAC's signal and
  * follows the knob; FIXED: USB at the full level whatever MASTER is (MASTER 0: USB still plays, the DAC is silent),

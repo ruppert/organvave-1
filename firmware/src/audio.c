@@ -21,6 +21,7 @@ struct felucca_dbg {
     uint32_t prev_stage, prev_page, prev_home, prev_rst, prev_frames;   /* as found at boot */
 } felucca_dbg __attribute__((section(".noinit")));
 static volatile uint32_t audio_halves, audio_max_us;
+/* audio_t5_q8 (eng_organ.c): the CPU meter's second figure, set at the end of every half below */
 static volatile uint32_t t5_nested_ticks;              /* TIMER4 ticks TIMER5 spent nested in this ISR (main.c) */
 static uint32_t audio_cpu_rem;                         /* keep the fractional IIR step: no low-load bias */
 
@@ -39,7 +40,7 @@ static void audio_block(int32_t *out, uint32_t n)       /* mix (fx.c), then Q15 
     }
 }
 
-/* Overload: two halves in a row above 85 % (the render plus TIMER5 nested in it), fade one voice over the
+/* Overload: two halves in a row above 93 % (the render plus TIMER5 nested in it), fade one voice over the
  * next block, and one more each half while it lasts. Keep each part's
  * lowest POLY note and MONO / LEGATO / UNISON lead, as the shared budget does. */
 static volatile uint8_t shed_req;
@@ -124,6 +125,9 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
             uint32_t load = song.cpu_q8 * (CPU_AVG - 1u) + (us * 256u) / (HALF_FRAMES * 1000000u / FS) + audio_cpu_rem;
             song.cpu_q8 = load / CPU_AVG;
             audio_cpu_rem = load % CPU_AVG;
+            load = audio_t5_q8 * (CPU_AVG - 1u) + (t5_nested_ticks / FM1_TICKS_PER_US * 256u) / (HALF_FRAMES * 1000000u / FS) + audio_t5_rem;
+            audio_t5_q8 = load / CPU_AVG;
+            audio_t5_rem = load % CPU_AVG;
         }
         if (fm1_audio_free_half() != half)
             felucca_dbg.late++;                         /* the DMA moved on while we rendered */

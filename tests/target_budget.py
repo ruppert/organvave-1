@@ -15,7 +15,7 @@ import re
 import sys
 
 FUNCS = ["rot_samples", "dr_chain",   #
-         "org_render", "org_fragment", "org_msg", "org_wheel_pc", "org_vib",   # the organ (eng_organ.c): the wheels, a fragment's start, a key, the percussion's wheel, the vibrato
+         "org_render", "org_fragment", "org_msg", "org_wheel_pc", "org_wheel_sc", "org_wheel_scp", "org_vib",   # the organ (eng_organ.c): the wheels, a fragment's start, a key, the percussion's wheel, a wheel on the scanner (and the percussion), the vibrato
          "eq_block", "fm1_alnk0_irq", "fm1_timer5_irq",               # the audio ISR (the mix and DRIVE inlined); TIMER5: the key / LED scan
          "uac_tap48",                                       # the USB audio input at 48 kHz: the 44.1 -> 48 resampler (usb.c)
          "rev_room", "rev_spring", "rev_hall", "rev_side_mix",   # the reverb bus (fx.c) and its stereo

@@ -3,10 +3,12 @@
 # Rewritten by BUDGET_UPDATE=1.
 rot_samples 2837
 dr_chain 78
-org_render 308
+org_render 310
 org_fragment 281
 org_msg 48
 org_wheel_pc 57
+org_wheel_sc 57
+org_wheel_scp 70
 org_vib 59
 eq_block 629
 fm1_alnk0_irq 6612
