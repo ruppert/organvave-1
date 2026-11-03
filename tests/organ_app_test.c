@@ -459,8 +459,9 @@ int main(int argc, char **argv)
         h_d = frame_hash();
         turn(EN_K1, 1);
         bad += check("DRIVE: KNOB 1 switches it on", org_patch[OP_DRV] == 1);
-        bad += check("  .. five rows, no character", OA_NR[4] == 5 && !strcmp(OA_LB[4][1], "TYPE") && !strcmp(OA_LB[4][2], "GAIN") &&
-                     !strcmp(OA_LB[4][3], "TONE") && !strcmp(OA_LB[4][4], "OUTPUT"));
+        bad += check("  .. seven rows (0.9.44: TREBLE, MIDDLE, BASS in place of TONE)", OA_NR[4] == 7 && !strcmp(OA_LB[4][1], "TYPE") &&
+                     !strcmp(OA_LB[4][2], "GAIN") && !strcmp(OA_LB[4][3], "TREBLE") && !strcmp(OA_LB[4][4], "MIDDLE") &&
+                     !strcmp(OA_LB[4][5], "BASS") && !strcmp(OA_LB[4][6], "OUTPUT"));
         turn(EN_K2, 1);
         bad += check("  .. KNOB 2: from the patch's 0 (played as TUBE DRIVE) to DISTORTION (0.9.30: two types, bytes 2 and 3)", org_patch[OP_DRV_TYPE] == 3);
         turn(EN_K2, -1);
@@ -502,14 +503,50 @@ int main(int argc, char **argv)
         turn(EN_K3, -1);
         bad += check("  .. the bottom stays at 0", org_patch[OP_DRV_GAIN] == 0);
         turn(EN_K4, 1);
-        bad += check("  .. KNOB 4: the tone up a step (byte 1, index 5)", org_patch[OP_DRV_TONE] == 1 && org_c9(org_patch[OP_DRV_TONE]) == 5);
+        bad += check("  .. KNOB 4: the TREBLE up a step (+1, byte 1)", org_patch[OP_DRV_TREB] == 1 && org_c11(org_patch[OP_DRV_TREB]) == 1);
+        {   /* TREBLE, MIDDLE, BASS: -5 .. +5, the ends hold, the value as "+3" / "-5" / "0", an 11-cell meter */
+            oa_val_t tv;
+            int ok = 1;
+            for (i = 0; i < 9u; i++)
+                turn(EN_K4, 1);
+            ok &= org_c11(org_patch[OP_DRV_TREB]) == 5;
+            oa_val(4, 3, &tv);
+            ok &= !strcmp(tv.t, "+5") && tv.mn == 11 && tv.mv == 11;
+            for (i = 0; i < 14u; i++)
+                turn(EN_K4, -1);
+            ok &= org_c11(org_patch[OP_DRV_TREB]) == -5 && org_patch[OP_DRV_TREB] == 6;
+            oa_val(4, 3, &tv);
+            ok &= !strcmp(tv.t, "-5") && tv.mv == 1;
+            org_set(OP_DRV_TREB, 0);
+            oa_val(4, 3, &tv);
+            ok &= !strcmp(tv.t, "0") && tv.mv == 6;
+            bad += check("  .. TREBLE -5 .. +5: the ends hold, shown \"+5\", \"-5\", \"0\", an 11-cell meter", ok);
+        }
         for (i = 0; i < 4u; i++)
             turn(EN_SELECT, 1);
-        bad += check("  .. SELECT picks the fifth row, the output", oa_row[4] == 4);
+        bad += check("  .. SELECT picks the fifth row, MIDDLE", oa_row[4] == 4);
+        turn(EN_ALGO, 2);
+        bad += check("  .. ALGORITHM: MIDDLE up two (+2)", org_c11(org_patch[OP_DRV_MID]) == 2);
+        turn(EN_SELECT, 1);
+        turn(EN_ALGO, -3);
+        bad += check("  .. the sixth, BASS: down three (-3, byte 8)", org_c11(org_patch[OP_DRV_BASS]) == -3 && org_patch[OP_DRV_BASS] == 8);
+        turn(EN_SELECT, 1);
+        bad += check("  .. SELECT picks the seventh row, the output", oa_row[4] == 6);
         turn(EN_ALGO, -2);
         bad += check("  .. ALGORITHM: the output down two steps (-4 dB, index 2)", org_c9(org_patch[OP_DRV_OUT]) == 2);
         bad += check("  .. a different picture", frame_hash() != h_d);
-        org_set(OP_DRV_TONE, 0); org_set(OP_DRV_OUT, 0); org_set(OP_DRV_GAIN, 6);
+        org_set(OP_DRV_MID, 0); org_set(OP_DRV_BASS, 0); org_set(OP_DRV_OUT, 0); org_set(OP_DRV_GAIN, 6);
+        {   /* an old patch's TONE becomes its TREBLE when it is set (0.9.44) */
+            uint8_t pk[ORG_PSIZE];
+            memcpy(pk, org_patch, ORG_PSIZE);
+            pk[OP_DRV_TONE] = (uint8_t)org_b9(8);       /* the brightest TONE */
+            org_set_patch(pk);
+            bad += check("  .. an old patch: TONE bright 8 is TREBLE +5, the TONE byte 0", org_c11(org_patch[OP_DRV_TREB]) == 5 && org_patch[OP_DRV_TONE] == 0);
+            pk[OP_DRV_TONE] = (uint8_t)org_b9(1);
+            org_set_patch(pk);
+            bad += check("  .. TONE dark 1 is TREBLE -4", org_c11(org_patch[OP_DRV_TREB]) == -4 && org_patch[OP_DRV_TONE] == 0);
+            org_set(OP_DRV_TREB, 0);
+        }
         /* EDIT walks the manuals' drawbars: UPPER, LOWER, PEDAL (the last two play over MIDI) */
         {
             uint32_t h_up, h_lo;

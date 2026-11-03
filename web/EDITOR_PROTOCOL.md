@@ -1395,6 +1395,12 @@ Version 0.9.42 raises three tops (owner): SOFT TUBE 30 %, MID DRIVE 40 %, TIGHT 
 is more driven than in 0.9.41.
 Version 0.9.43: TIGHT TUBE's GAIN above 50 gives more pre-gain than in 0.9.42 (1.4x at 100).
 
+Version 0.9.44 replaces the drive's TONE with a tone stack: `OP_DRV_TREB` 90, `OP_DRV_MID` 91, `OP_DRV_BASS` 92, each -5 .. +5 coded
+"zero is flat" (0 flat, 1..5 up, 6..10 down: s - 11), 2 dB a step. `OP_DRV_TONE` (49) is always 0 now (its range is 0): a patch
+with a TONE is migrated when it is set (the device's org_sanitize, and the editor on reading it): if 90..92 are all 0, the TONE's
+index (c9: 0..3 dark, 4 flat, 5..8 bright) becomes the TREBLE (-5, -4, -3, -2, 0, +2, +3, +4, +5), then 49 is written 0. An older
+firmware ignores 90..92 (reserved there) and plays such a patch's tone flat.
+
 Version 0.9.36 reduces the crosstalk (for the CPU): with `OP_XTALK` on, a key keeps only its contributions within 40 dB of its
 strongest, in the default table and in the one the crosstalk bytes 64..69 build. The bytes keep their meaning; a patch with the
 crosstalk on sounds a little cleaner than before (the faint leakage is gone; within 0.3 dB of level).

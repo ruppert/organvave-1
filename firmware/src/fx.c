@@ -1181,7 +1181,8 @@ static void fx_organ_apply(void)
     g = org_patch[OP_DRV_GAIN] > 100u ? 100u : org_patch[OP_DRV_GAIN];   /* 0.9.25: tenths, 0 bypasses the drive, more saturates */
     if (dr_st.type != (int32_t)dr_type_of(org_patch[OP_DRV_TYPE]))
         dr_clear(&dr_st);               /* (another type starts from silence) */
-    dr_user(&dr_st, org_patch[OP_DRV_TYPE], g, org_c9(org_patch[OP_DRV_TONE]), org_c9(org_patch[OP_DRV_OUT]));
+    dr_user(&dr_st, org_patch[OP_DRV_TYPE], g, org_c9(org_patch[OP_DRV_OUT]));
+    dr_tone(&dr_st, org_c11(org_patch[OP_DRV_TREB]), org_c11(org_patch[OP_DRV_MID]), org_c11(org_patch[OP_DRV_BASS]));   /* (0.9.44) */
     dr_on = org_patch[OP_DRV] && g > 0u;
     eq_set(&eq_st, org_patch[OP_EQ_LOW], org_patch[OP_EQ_MID], org_patch[OP_EQ_FREQ], org_patch[OP_EQ_HIGH]);
     eq_on = org_patch[OP_EQ];

@@ -2,8 +2,9 @@
 # function in build/felucca.dis, x4 per nesting level, divides x9. The check allows +10 %.
 # Rewritten by BUDGET_UPDATE=1.
 rot_samples 2837
-dr_chain 95
-dr_chain2 142
+dr_chain 77
+dr_chain2 121
+dr_eq_run 345
 org_render 1083
 org_fragment 281
 org_msg 48

@@ -8,7 +8,11 @@
  *    (TIGHT TUBE, 0.9.43: up to 5.0; past it its pre-gain rises on to 1.4x its law's at 10.0, the THD at the stage's most).
  * 2. level: the organ-like chord at that level comes out between the dry level -1.5 dB and +1.5 dB at every GAIN step, every type.
  * 3. bounds: a full-scale square and noise stay inside the output's clamp (4.0 in Q15) at every gain; silence in, silence out.
- * 4. blocks: the output does not depend on the block length (1, 7, 64: bit-exact).
+ * 4. blocks: the output does not depend on the block length (1, 7, 64: bit-exact), the tone stack on.
+ * 7. the tone stack (0.9.44, owner: TREBLE, MIDDLE, BASS, -5 .. +5 in place of TONE; the equaliser's biquads: a 120 Hz low
+ *    shelf, a 900 Hz peak, a 2.5 kHz high shelf): flat at 0 (bit-exact with no stack); each band moves its own frequencies by
+ *    2 dB a step (+-10 dB at +-5, within 1.5 dB: BASS at 40 Hz, MIDDLE at 900 Hz, TREBLE at 12 kHz) and leaves the others'
+ *    within 2.5 dB; silence after it.
  * 5. DC: no type leaves a DC (the shifts round; a DC blocker after the shaper): under 1 % of the signal's RMS.
  * 6. the bass (owner, 0.9.41): on a C2 + C3 triad organ chord, TIGHT TUBE leaves at least 5.5 dB less new low content (20 .. 250 Hz,
  *    away from the chord's partials: the intermodulation's difference tones, the rumble) than TUBE DRIVE at the same THD: TUBE
@@ -19,6 +23,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+static inline int32_t mul14(int32_t a, int32_t c)               /* (eng_rotary.c's: the tone stack's biquads, eng_eq.c, need it) */
+{
+    return (((a * (c >> 7)) + 64) >> 7) + (((a * (c & 127)) + 8192) >> 14);
+}
 #include "../firmware/src/eng_drive.c"
 
 static int bad;
@@ -61,7 +69,7 @@ static double thd(int t, uint32_t g)                           /* type t at GAIN
     double f1, h = 0;
     int k;
     dr_init(&D);
-    dr_user(&D, (uint32_t)(t + 2), g, 4u, 4u);
+    dr_user(&D, (uint32_t)(t + 2), g, 4u);
     run_drive(&D, in, out, 64);
     f1 = harm(out + 8000, 4000, 1);
     for (k = 2; k < 10; k++) {
@@ -150,7 +158,7 @@ int main(void)
             for (g = 1; g <= 100; g++) {
                 double l;
                 dr_init(&D);
-                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 4u, 4u);
+                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 4u);
                 run_drive(&D, in, out, 64);
                 l = rms_db(out) - dry;
                 lo = l < lo ? l : lo;
@@ -169,7 +177,8 @@ int main(void)
             for (g = 1; g <= 100; g += 3) {
                 size_t k;
                 dr_init(&D);
-                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 8u, 8u);
+                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 8u);
+                dr_tone(&D, 5, 5, 5);                          /* (0.9.44: the tone stack at its most, too) */
                 for (k = 0; k < N; k++)
                     in[k] = (k / 50) % 2 ? 32767 : -32768;
                 run_drive(&D, in, out, 64);
@@ -179,13 +188,14 @@ int main(void)
                 for (k = 0; k < N; k++)
                     in[k] = (int32_t)(rand() % 65536) - 32768;
                 dr_init(&D);
-                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 8u, 8u);
+                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 8u);
+                dr_tone(&D, 5, 5, 5);
                 run_drive(&D, in, out, 64);
                 for (k = 0; k < N; k++)
                     if (out[k] > 131071 || out[k] < -131072)
                         ok = 0;
             }
-        check("bounds: square and noise at full scale stay inside the output's 4.0 (Q15), all six types, every 0.3 of GAIN, the output at +8", ok);
+        check("bounds: square and noise at full scale stay inside the output's 4.0 (Q15), all six types, every 0.3 of GAIN, the output at +8, the tone stack +5", ok);
     }
     /* silence in, silence out */
     {
@@ -195,7 +205,7 @@ int main(void)
         for (t = 0; t < NT; t++)
             for (g = 1; g <= 100; g += 33) {
                 dr_init(&D);
-                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 4u, 4u);
+                dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 4u);
                 run_drive(&D, in, out, 64);
                 for (i = 0; i < N; i++)
                     if (out[i] != 0)
@@ -208,7 +218,7 @@ int main(void)
         int ok = 1;
         for (t = 0; t < NT; t++) {
             dr_init(&D);
-            dr_user(&D, (uint32_t)(2 + t), 100u, 4u, 4u);
+            dr_user(&D, (uint32_t)(2 + t), 100u, 4u);
             for (i = 0; i < N; i++)
                 in[i] = i < N / 4 ? (int32_t)lrint(2.0 * 8192 * sin(2 * M_PI * 220.0 * (double)i / 44100.0)) : 0;
             run_drive(&D, in, out, 64);                        /* a loud quarter second, then silence */
@@ -232,7 +242,7 @@ int main(void)
                 for (g = 1; g <= 100; g += 11) {
                     double m = 0, r = 0, q;
                     dr_init(&D);
-                    dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 4u, 4u);
+                    dr_user(&D, (uint32_t)(2 + t), (uint32_t)g, 4u);
                     run_drive(&D, in, out, 64);
                     for (i = N / 2; i < N; i++) {
                         m += out[i];
@@ -258,11 +268,11 @@ int main(void)
         for (i = 0; i < N; i++)
             in[i] = (int32_t)lrint(0.5 * 8192 * sin(2 * M_PI * 220.0 * (double)i / 44100.0));
         dr_init(&D);
-        dr_user(&D, 2u, 40u, 4u, 4u);
+        dr_user(&D, 2u, 40u, 4u);
         run_drive(&D, in, ref, 64);
         for (t = 0; t < 4; t++) {
             dr_init(&D);
-            dr_user(&D, B[t], 40u, 4u, 4u);
+            dr_user(&D, B[t], 40u, 4u);
             run_drive(&D, in, out, 64);
             if (memcmp(out, ref, sizeof out))
                 ok = 0;
@@ -276,15 +286,18 @@ int main(void)
             in[i] = (int32_t)lrint(0.9 * 8192 * sin(2 * M_PI * 220.0 * (double)i / 44100.0));
         for (t = 0; t < NT; t++) {
             dr_init(&D);
-            dr_user(&D, (uint32_t)(2 + t), 70u, 2u, 6u);
+            dr_user(&D, (uint32_t)(2 + t), 70u, 6u);
+            dr_tone(&D, -3, 2, 4);
             run_drive(&D, in, ref, 64);
             dr_init(&D);
-            dr_user(&D, (uint32_t)(2 + t), 70u, 2u, 6u);
+            dr_user(&D, (uint32_t)(2 + t), 70u, 6u);
+            dr_tone(&D, -3, 2, 4);
             run_drive(&D, in, out, 1);
             if (memcmp(out, ref, sizeof out))
                 ok = 0;
             dr_init(&D);
-            dr_user(&D, (uint32_t)(2 + t), 70u, 2u, 6u);
+            dr_user(&D, (uint32_t)(2 + t), 70u, 6u);
+            dr_tone(&D, -3, 2, 4);
             run_drive(&D, in, out, 7);
             if (memcmp(out, ref, sizeof out))
                 ok = 0;
@@ -324,7 +337,7 @@ int main(void)
                     gg = q;
                 }
                 dr_init(&D);
-                dr_user(&D, (uint32_t)(2 + t), gg, 4u, 4u);
+                dr_user(&D, (uint32_t)(2 + t), gg, 4u);
                 run_drive(&D, in, out, 64);
                 for (i = 0; i < nn; i++) {
                     double hw = 0.5 - 0.5 * cos(2 * M_PI * (double)i / (double)(nn - 1)), v = out[n0 + i] * hw;
@@ -358,6 +371,65 @@ int main(void)
                      mg[gi] / 10.0, gi ? "10.0" : "5.0", mud[5][gi], mud[0][gi]);
             check(what, mud[5][gi] <= mud[0][gi] - 5.5);   /* (the first tenth at the THD can be a little past it: 5.5, not 6) */
         }
+    }
+    /* 7. the tone stack, measured on the chain at a light GAIN (TUBE DRIVE 0.1: nearly linear), sines at the organ's level / 4 */
+    {
+        static const double FQ[3] = {40.0, 900.0, 12000.0};
+        static const char *BN[3] = {"BASS", "MIDDLE", "TREBLE"};
+        double base[3], lv[3][2][3];
+        int b, s2, f, ok = 1, flat = 1;
+        for (f = 0; f < 3; f++) {
+            for (i = 0; i < N; i++)
+                in[i] = (int32_t)lrint(0.18 * sqrt(2.0) * 8192 * sin(2 * M_PI * FQ[f] * (double)i / 44100.0));
+            dr_init(&D);
+            dr_user(&D, 2u, 1u, 4u);
+            run_drive(&D, in, ref, 64);
+            base[f] = rms_db(ref);
+            dr_init(&D);
+            dr_user(&D, 2u, 1u, 4u);
+            dr_tone(&D, 0, 0, 0);
+            run_drive(&D, in, out, 64);
+            if (memcmp(out, ref, sizeof out))
+                flat = 0;
+            for (b = 0; b < 3; b++)
+                for (s2 = 0; s2 < 2; s2++) {
+                    int v = s2 ? 5 : -5;
+                    dr_init(&D);
+                    dr_user(&D, 2u, 1u, 4u);
+                    dr_tone(&D, b == 2 ? v : 0, b == 1 ? v : 0, b == 0 ? v : 0);
+                    run_drive(&D, in, out, 64);
+                    lv[b][s2][f] = rms_db(out) - base[f];
+                }
+        }
+        check("the tone stack: all three at 0 is the chain without it (bit-exact)", flat);
+        for (b = 0; b < 3; b++) {
+            char what[200];
+            int own = fabs(lv[b][1][b] - 10.0) < 1.5 && fabs(lv[b][0][b] + 10.0) < 1.5, oth = 1;
+            for (f = 0; f < 3; f++)
+                if (f != b && (fabs(lv[b][1][f]) > 2.5 || fabs(lv[b][0][f]) > 2.5))
+                    oth = 0;
+            snprintf(what, sizeof what, "the tone stack: %s +5 / -5 at %.0f Hz %+.1f / %+.1f dB (+-10), the other bands' within 2.5 dB (%+.1f %+.1f, %+.1f %+.1f)",
+                     BN[b], FQ[b], lv[b][1][b], lv[b][0][b], lv[b][1][(b + 1) % 3], lv[b][0][(b + 1) % 3], lv[b][1][(b + 2) % 3], lv[b][0][(b + 2) % 3]);
+            check(what, own && oth);
+            ok &= own && oth;
+        }
+        {
+            int z = 1;
+            for (i = 0; i < N; i++)
+                in[i] = i < N / 4 ? (int32_t)lrint(1.5 * 8192 * sin(2 * M_PI * 110.0 * (double)i / 44100.0)) : 0;
+            dr_init(&D);
+            dr_user(&D, 7u, 100u, 4u);
+            dr_tone(&D, 5, -5, 5);
+            run_drive(&D, in, out, 64);
+            for (i = 0; i < N; i++)
+                in[i] = 0;
+            run_drive(&D, in, out, 64);
+            for (i = N / 2; i < N; i++)
+                if (out[i] != 0)
+                    z = 0;
+            check("the tone stack: after a loud note, silence returns to exactly 0", z);
+        }
+        (void)ok;
     }
     printf("drive: %s\n", bad ? "FAILED" : "all ok");
     return bad ? 1 : 0;

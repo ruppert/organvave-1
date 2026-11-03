@@ -542,7 +542,9 @@ static void oa_ctl_cc(uint32_t b, uint32_t v)
         return;
     if (b >= OP_TUNING && b < OP_VIB_UP)
         org_set(b, org_bi(b, idx));
-    else if (b >= OP_DRV_TONE && b <= OP_ROT_DRAMP)
+    else if (b == OP_DRV_TONE)                          /* (0.9.44: the TONE's CC drives the TREBLE, -5 .. +5) */
+        org_set(OP_DRV_TREB, org_b11((int32_t)((v * 10u + 63u) / 127u) - 5));
+    else if (b > OP_DRV_TONE && b <= OP_ROT_DRAMP)
         org_set(b, org_b9(idx));
     else if (b == OP_EQ_LOW || b == OP_EQ_MID || b == OP_EQ_HIGH)
         org_set(b, eq_byte((int32_t)idx - 12));
@@ -689,13 +691,13 @@ static int32_t oa_step(int32_t v, int32_t s, int32_t mx)   /* one detent: 8 on t
  * and the knobs 1 to 4 go straight to the first four rows. A list longer than the screen scrolls with the pick. The rows of a page
  * are what oa_val shows and oa_adj1 changes (one detent). */
 #define OA_VIS 7u                                       /* rows on the screen (AF_M, 24 px apart) */
-static const uint8_t OA_NR[9] = {0, 0, 5, 12, 5, 4, 6, 5, 29};
+static const uint8_t OA_NR[9] = {0, 0, 5, 12, 7, 4, 6, 5, 29};   /* (DRIVE 7 rows since 0.9.44: the tone stack) */
 static const char *const OA_LB[9][29] = {
     {0},
     {0},
     {"PERCUSSION", "VOLUME", "DECAY", "HARMONIC", "VIBRATO"},
     {"ROTARY", "MODEL", "HORN", "SPEED", "WIDTH", "HORN LEVEL", "HORN SLOW", "HORN FAST", "DRUM SLOW", "DRUM FAST", "HORN RAMP", "DRUM RAMP"},
-    {"DRIVE", "TYPE", "GAIN", "TONE", "OUTPUT"},
+    {"DRIVE", "TYPE", "GAIN", "TREBLE", "MIDDLE", "BASS", "OUTPUT"},
     {"SEND", "TYPE", "SIZE", "TONE"},
     {"SEND", "TYPE", "TIME", "FEEDBACK", "COLOUR", "MIX"},
     {"EQ", "LOW", "MID", "HIGH", "MID FREQ"},
@@ -904,13 +906,15 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
             v->mn = 9;                                   /* nine segments, as the other rows: 0 none, 10.0 all (0.9.31) */
             v->mv = (int8_t)((i * 9 + 99) / 100);
             v->on = i != 0;
-        } else if (r == 3u) {
-            i = (int32_t)org_c9(org_patch[OP_DRV_TONE] <= 8u ? org_patch[OP_DRV_TONE] : 0u);
-            oa_vt(v, i == 4 ? "FLAT" : i < 4 ? "DARK" : "BRIGHT");
-            if (i != 4)
-                oa_vnum(v, i - 4, 0, i < 4 ? " (DARK)" : " (BRIGHT)");
-            v->mn = 9;
-            v->mv = (int8_t)(i + 1);
+        } else if (r >= 3u && r <= 5u) {                 /* TREBLE, MIDDLE, BASS (0.9.44): -5 .. +5, 0 flat */
+            i = org_c11(org_patch[OP_DRV_TREB + r - 3u]);
+            if (i > 0) {
+                v->t[0] = '+';
+                fmt_fix(v->t + 1, i, 0u);
+            } else
+                oa_vnum(v, i, 0, "");
+            v->mn = 11;
+            v->mv = (int8_t)(i + 6);
             v->on = 1;
         } else {
             i = (int32_t)org_c9(org_patch[OP_DRV_OUT] <= 8u ? org_patch[OP_DRV_OUT] : 0u);
@@ -1022,8 +1026,10 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
             org_set(OP_DRV_TYPE, 2u + (uint32_t)clamp((int32_t)dr_type_of(org_patch[OP_DRV_TYPE]) + d, 0, DR_TYPES - 1));   /* the bytes 2 .. 7 (0.9.41) */
         else if (r == 2u)
             org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 100u) + d, 0, 100));  /* tenths; 0 is the bypass */
+        else if (r >= 3u && r <= 5u)                    /* TREBLE, MIDDLE, BASS */
+            org_set(OP_DRV_TREB + r - 3u, org_b11(clamp(org_c11(org_patch[OP_DRV_TREB + r - 3u]) + d, -5, 5)));
         else
-            oa_c9(r == 3u ? OP_DRV_TONE : OP_DRV_OUT, d);
+            oa_c9(OP_DRV_OUT, d);
     } else if (pg == 5u) {
         if (r == 0u)
             TSEL->p[P_REV] = (uint8_t)oa_step(TSEL->p[P_REV], d, 127);
@@ -1416,7 +1422,7 @@ static void scr_drawbars(void)
 static const char *const OA_CN[57] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     "PERCUSSION", "PERC SOFT", "PERC DECAY", "PERC HARMONIC", "VIBRATO", "ROTARY", "ROTARY MODEL", "ROTARY SPEED", "HORN", "ROTARY WIDTH",
-    "HORN LEVEL", "DRIVE", "DRIVE GAIN", 0, "EQ", "EQ LOW", "EQ MID", "EQ MID FREQ", "EQ HIGH", "DRIVE TYPE", "DRIVE TONE", "DRIVE OUTPUT",
+    "HORN LEVEL", "DRIVE", "DRIVE GAIN", 0, "EQ", "EQ LOW", "EQ MID", "EQ MID FREQ", "EQ HIGH", "DRIVE TYPE", "DRIVE TREBLE", "DRIVE OUTPUT",
     "HORN SLOW", "HORN FAST", "DRUM SLOW", "DRUM FAST", "HORN RAMP", "DRUM RAMP",
 };
 static void oa_ctl_name(char *out, uint32_t b)

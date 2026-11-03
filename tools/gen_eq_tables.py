@@ -6,6 +6,8 @@ Q14, at 44100 Hz): a low shelf at 120 Hz, a peak with a frequency and a high she
 
    EQ_LS[25][5], EQ_HS[25][5]   {b0, b1, b2, a1, a2} for the gain index g = dB + 12
    EQ_PK[12][25][5]             the peak: frequency index (EQ_FREQ_HZ, ascending), then g
+   EQ_TREB[11][5]               (0.9.44) the drive's TREBLE (eng_drive.c dr_tone): a high shelf at 2.5 kHz, -10 .. +10 dB in
+                                2 dB steps (index v + 5 for TREBLE v; an amp's treble sits lower than the equaliser's HIGH)
 
    python3 tools/gen_eq_tables.py"""
 import math
@@ -15,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(os.path.dirname(HERE), "firmware", "src", "eng_eq_tables.h")
 FS = 44100.0
 LOW_HZ, HIGH_HZ = 120.0, 4000.0
+TREB_HZ = 2500.0                                # (0.9.44) the drive's TREBLE
 FREQS = [160, 225, 320, 450, 640, 900, 1280, 1800, 2560, 3600, 5100, 7200]
 PEAK_Q = 0.8
 
@@ -32,9 +35,9 @@ def low_shelf(db):
                 (A + 1) + (A - 1) * c + t, -2 * ((A - 1) + (A + 1) * c), (A + 1) + (A - 1) * c - t)
 
 
-def high_shelf(db):
+def high_shelf(db, hz=HIGH_HZ):
     A = 10 ** (db / 40.0)
-    w = 2 * math.pi * HIGH_HZ / FS
+    w = 2 * math.pi * hz / FS
     c, al = math.cos(w), math.sin(w) / 2 * math.sqrt(2)
     t = 2 * math.sqrt(A) * al
     return norm(A * ((A + 1) + (A - 1) * c + t), -2 * A * ((A - 1) + (A + 1) * c), A * ((A + 1) + (A - 1) * c - t),
@@ -79,6 +82,12 @@ def main():
             big = max(big, max(abs(v) for v in c))
             L.append("        %s," % row(c))
         L.append("    },")
+    L.append("};")
+    L.append("static const int32_t EQ_TREB[11][5] = {   /* (0.9.44) the drive's TREBLE: a high shelf at %.0f Hz, 2 dB a step */" % TREB_HZ)
+    for v in range(-5, 6):
+        c = high_shelf(2 * v, TREB_HZ)
+        big = max(big, max(abs(x) for x in c))
+        L.append("    %s,%s" % (row(c), "  /* %+d dB */" % (2 * v)))
     L.append("};")
     open(SRC, "w").write("\n".join(L) + "\n")
     print("wrote %s (largest coefficient %.3f)" % (SRC, big))

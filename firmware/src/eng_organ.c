@@ -627,7 +627,8 @@ enum {
     OP_EQ_FREQ = 46,            /* the peak's frequency, 0..11: 0 900 Hz, then 1280 Hz .. 7.2 kHz, 7 is 160 Hz .. 11 is 640 Hz */
     OP_EQ_HIGH = 47,            /* HIGH (4 kHz shelf), the same coding as LOW */
     OP_DRV_TYPE = 48,           /* the drive's type: 2 TUBE DRIVE, 3 DISTORTION (0.9.30), 4 SOFT TUBE, 5 MID DRIVE, 6 HARD CLIP, 7 TIGHT TUBE (0.9.41; 0 and 1, TUBE SCREAM and TUBE PREAMP in 0.9.24 .. 0.9.29, play as TUBE DRIVE; before 0.9.24: 0 DISTORTION, 1 TUBE) */
-    OP_DRV_TONE = 49,           /* its tone: 0..8 "zero is the default" (c9: index (s + 4) % 9, 4 flat, 0 dark .. 8 bright) */
+    OP_DRV_TONE = 49,           /* its tone until 0.9.43: 0..8 "zero is the default" (c9: index (s + 4) % 9, 4 flat, 0 dark .. 8 bright).
+                                 * Since 0.9.44 always 0: a patch with another value is moved to OP_DRV_TREB when it is set (org_sanitize) */
     OP_DRV_OUT = 50,            /* its output level, the same coding: index 4 is 0 dB, 2 dB a step (-8 .. +8 dB) */
     OP_ROT_HSLOW = 51,          /* the rotary's horn SLOW speed (version 0.9.2; 0 in older patches), c9: index 4 is 40 rpm, 12 % a step */
     OP_ROT_HFAST = 52,          /* horn FAST speed, c9: index 4 is 390 rpm (since 0.9.3; setBfree's 423) */
@@ -671,7 +672,10 @@ enum {
     OP_VIB_LO = 87,            /* (0.10.2) the lower manual through the scanner: 0 no, 1 yes; read only when OP_VIB_ROUTE is 1 */
     OP_VIB_ROUTE = 88,         /* (0.10.2) 1: OP_VIB_UP and OP_VIB_LO are set; 0 (older patches): both manuals, as before. The pedals never */
     OP_EXPR = 89,              /* (0.10.3) the output volume, HOME's EXPR knob: 0 full, i = i dB down (0..60); 0 in older patches */
-    OP_NUM                      /* (90..95: reserved: 0 until then) */
+    OP_DRV_TREB = 90,          /* (0.9.44) the drive's TREBLE, -5 .. +5 (c11: 0 flat, 1..5 up, 6..10 down (s - 11)); 0 in older patches */
+    OP_DRV_MID = 91,           /* (0.9.44) its MIDDLE, the same coding */
+    OP_DRV_BASS = 92,          /* (0.9.44) its BASS, the same coding */
+    OP_NUM                      /* (93..95: reserved: 0 until then) */
 };
 /* ADVANCED EDIT's bytes: steps N and the default index D (the index is (byte + D) % N); the temperament and the crosstalk switch
  * are the older bytes 27 and 28 (N 3, D 0 and N 2, D 1: they keep their coding) */
@@ -710,6 +714,9 @@ static uint32_t org_bi(uint32_t op, uint32_t idx)
  * index 0..8 the panel shows, and the byte for an index */
 static inline uint32_t org_c9(uint32_t s) { return (s + 4u) % 9u; }
 static inline uint32_t org_b9(uint32_t idx) { return (idx + 5u) % 9u; }
+/* the drive's tone stack bytes (0.9.44): -5 .. +5, a byte of 0 flat (so older patches, 0 there, are flat) */
+static inline int32_t org_c11(uint32_t s) { return s <= 5u ? (int32_t)s : s <= 10u ? (int32_t)s - 11 : 0; }
+static inline uint32_t org_b11(int32_t v) { return (uint32_t)(v >= 0 ? v : v + 11); }
 static uint8_t org_patch[ORG_PSIZE];             /* main loop writes, then org_pgen */
 static volatile uint8_t org_pgen;
 static uint8_t org_pgen_seen = 0xFF;
@@ -728,13 +735,17 @@ static uint32_t org_pmax(uint32_t i)
         return 1u;
     if (i == OP_EXPR)
         return 60u;
+    if (i >= OP_DRV_TREB && i <= OP_DRV_BASS)
+        return 10u;
     if (i == OP_ROT || i == OP_ROT_HORN || i == OP_DRV)
         return 1u;
     if (i == OP_ROT_MODEL)
         return 4u;
     if (i == OP_ROT_SPEED)
         return 2u;
-    if (i == OP_ROT_BAL || i == OP_DRV_FAT || (i >= OP_DRV_TONE && i <= OP_ROT_DRAMP))
+    if (i == OP_DRV_TONE)
+        return 0u;                      /* (0.9.44: the tone stack's bytes took its place; org_sanitize moves an old value first) */
+    if (i == OP_ROT_BAL || i == OP_DRV_FAT || (i > OP_DRV_TONE && i <= OP_ROT_DRAMP))
         return 8u;
     if (i == OP_DRV_TYPE)
         return 7u;                      /* (0.9.41: six types, the bytes 2 .. 7; 3 before) */
@@ -753,6 +764,12 @@ static uint32_t org_pmax(uint32_t i)
 static void org_sanitize(uint8_t *v)
 {
     uint32_t i;
+    if (v[OP_DRV_TONE]) {   /* (0.9.44) a TONE of before: its TREBLE (dark 0..3 -> -5 .. -2, bright 5..8 -> +2 .. +5), then 0 */
+        static const int8_t T2T[9] = {-5, -4, -3, -2, 0, 2, 3, 4, 5};
+        if (!v[OP_DRV_TREB] && !v[OP_DRV_MID] && !v[OP_DRV_BASS] && v[OP_DRV_TONE] <= 8u)
+            v[OP_DRV_TREB] = (uint8_t)org_b11(T2T[org_c9(v[OP_DRV_TONE])]);
+        v[OP_DRV_TONE] = 0;
+    }
     for (i = 0; i < ORG_PSIZE; i++)
         v[i] = (uint8_t)(v[i] > org_pmax(i) ? org_pmax(i) : v[i]);
 }

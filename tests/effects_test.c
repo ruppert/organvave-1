@@ -137,12 +137,13 @@ int main(void)
     org_set(OP_DRV_GAIN, 250);
     org_set(OP_DRV_TYPE, 99);
     org_set(OP_DRV_TONE, 99);
+    org_set(OP_DRV_TREB, 99);
     org_set(OP_ROT_HSLOW, 99);
     org_set(OP_ROT_BAL, 99);
     org_set(OP_ROT, 5);
-    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 100, TYPE 7 (0.9.41), TONE 8, HSLOW 8, BAL 8, ROT 1)",
+    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 100, TYPE 7 (0.9.41), TONE 0 and TREBLE 10 (0.9.44), HSLOW 8, BAL 8, ROT 1)",
           org_patch[OP_ROT_SPEED] == 2 && org_patch[OP_ROT_MIC] == 6 && org_patch[OP_DRV_GAIN] == 100 &&
-              org_patch[OP_DRV_TYPE] == 7 && org_patch[OP_DRV_TONE] == 8 && org_patch[OP_ROT_HSLOW] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
+              org_patch[OP_DRV_TYPE] == 7 && org_patch[OP_DRV_TONE] == 0 && org_patch[OP_DRV_TREB] == 10 && org_patch[OP_ROT_HSLOW] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
     /* a patch of zeros in the effects bytes leaves the mix dry */
     boot();
     chord_on();
@@ -597,8 +598,8 @@ int main(void)
             blocks(44100);
         }
         check("TUBE: it sounds (rms above 500) and is bounded", rt > 500.0 && rt < 20000.0);
-        /* the tone (a tilt around 1 kHz): on C5 (523 Hz) a bright setting lifts the third harmonic (1570 Hz) against the first,
-         * a dark one lowers it, against flat */
+        /* the TREBLE (0.9.44; TONE before, whose bytes still say it: an old TONE is moved to the TREBLE when the patch is set): on
+         * C5 (523 Hz) TREBLE +5 lifts the seventh harmonic (3663 Hz, near the 4 kHz shelf) against the first, -5 lowers it */
         {
             double fl, br, dk;
             input_off(&trk[0], 48);
@@ -609,19 +610,18 @@ int main(void)
             patch_set(P);
             input_on(&trk[0], 72, 100);
             blocks(44100 * 2);
-            fl = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
+            fl = tone(oL, pos - 44100, 44100, 7 * f0) / tone(oL, pos - 44100, 44100, f0);
             P[OP_DRV_TONE] = (uint8_t)org_b9(8);
             patch_set(P);
             blocks(44100 * 2);
-            br = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
+            br = tone(oL, pos - 44100, 44100, 7 * f0) / tone(oL, pos - 44100, 44100, f0);
             P[OP_DRV_TONE] = (uint8_t)org_b9(0);
             patch_set(P);
             blocks(44100 * 2);
-            dk = tone(oL, pos - 44100, 44100, 3 * f0) / tone(oL, pos - 44100, 44100, f0);
-            printf("effects: C5, DISTORTION H3 re H1: flat %.1f dB, BRIGHT %.1f dB, DARK %.1f dB\n", db(fl), db(br), db(dk));
-            /* (the darkest step cuts at 1.5 kHz: 2.6 dB between 1570 and 523 Hz in the drive alone, a little less after the master) */
-            check("TONE: bright lifts and dark lowers the third harmonic against flat (more than 2 dB each way)",
-                  db(br) - db(fl) > 2.0 && db(fl) - db(dk) > 2.0);
+            dk = tone(oL, pos - 44100, 44100, 7 * f0) / tone(oL, pos - 44100, 44100, f0);
+            printf("effects: C5, DISTORTION H7 re H1: flat %.1f dB, TREBLE +5 %.1f dB, TREBLE -5 %.1f dB\n", db(fl), db(br), db(dk));
+            check("TREBLE (an old patch's TONE, moved): +5 lifts and -5 lowers the seventh harmonic against flat (more than 5 dB each way)",
+                  db(br) - db(fl) > 5.0 && db(fl) - db(dk) > 5.0);
             input_off(&trk[0], 72);
             blocks(44100);
             P[OP_DRV_TYPE] = 2;

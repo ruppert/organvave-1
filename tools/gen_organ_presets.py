@@ -25,6 +25,7 @@ OP_UB, OP_LB, OP_PB, OP_TEMP, OP_XTALK = 0, 9, 18, 27, 28
 OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC, OP_ROT_BAL = 34, 35, 36, 37, 38, 39
 OP_DRV, OP_DRV_GAIN = 40, 41
 OP_DRV_TYPE, OP_DRV_TONE, OP_DRV_OUT = 48, 49, 50     # 0.9.2: the type, the tone and the output (9 steps, "zero is the default")
+OP_DRV_TREB = 90                                    # 0.9.44: the tone stack's TREBLE (MIDDLE 91, BASS 92), -5 .. +5, 0 flat (11 steps)
 OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL = 29, 30, 31, 32   # the percussion (0.2.0)
 RTYPES = {"room": 0, "hall": 1, "plate": 2, "spring": 3, "cloud": 4}   # params.c N_RTYPE
 TEMPS = {"gear60": 0, "gear50": 1, "equal": 2}
@@ -54,7 +55,9 @@ def effects(p, fx):
         p[OP_DRV] = 1
         p[OP_DRV_GAIN] = max(10, min(100, 10 * (4 + int(round(gdb / 2)))))   # tenths (0.9.25)
         p[OP_DRV_TYPE] = 3 if typ == "distortion" else 2
-        p[OP_DRV_TONE] = (tone + 4 + 5) % 9              # the byte for the index (the default 4 is byte 0)
+        # 0.9.44: the bank's tone (-4 dark .. +4 bright) is the TREBLE, as the firmware moves an old TONE (org_sanitize)
+        treb = (-5, -4, -3, -2, 0, 2, 3, 4, 5)[tone + 4]
+        p[OP_DRV_TREB] = treb if treb >= 0 else treb + 11
         p[OP_DRV_OUT] = (odb // 2 + 4 + 5) % 9
     if "perc" in fx:                                      # 0.9.8: the percussion (OP_PERC 29, SEL 32, SOFT 30, FAST 31)
         harm, soft, decay = fx["perc"]

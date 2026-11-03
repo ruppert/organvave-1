@@ -66,10 +66,10 @@ vm.createContext(ctx);
 // export the page's functions and state to the test
 vm.runInContext(script + `
 ;globalThis.__page = {
-  connect, readPatch, sendPatch, get patch() { return patch; }, set patch(v) { patch = v; }, OP_TEMP, OP_XTALK,
+  connect, readPatch, sendPatch, showPatch, get patch() { return patch; }, set patch(v) { patch = v; }, OP_TEMP, OP_XTALK,
   OP_PERC, OP_PERC_SOFT, OP_PERC_FAST, OP_PERC_SEL, OP_VIB, OP_ROT, OP_ROT_MODEL, OP_ROT_SPEED, OP_ROT_HORN, OP_ROT_MIC,
   OP_ROT_BAL, OP_DRV, OP_DRV_GAIN, OP_EQ, OP_EQ_LOW, OP_EQ_MID, OP_EQ_FREQ, OP_EQ_HIGH,
-  OP_DRV_TYPE, OP_DRV_TONE, OP_DRV_OUT, OP_ROT_HSLOW, OP_ROT_HFAST, OP_ROT_DSLOW, OP_ROT_DFAST, OP_ROT_HRAMP, OP_ROT_DRAMP, ADVC
+  OP_DRV_TYPE, OP_DRV_TONE, OP_DRV_TREB, OP_DRV_MID, OP_DRV_BASS, OP_DRV_OUT, OP_ROT_HSLOW, OP_ROT_HFAST, OP_ROT_DSLOW, OP_ROT_DFAST, OP_ROT_HRAMP, OP_ROT_DRAMP, ADVC
 };`, ctx);
 const P = ctx.__page;
 const status = () => byId("status").textContent;
@@ -127,7 +127,9 @@ byId("rbal").value = "6";
 byId("drv").checked = true;
 byId("dgain").value = "9";
 byId("dtype").value = "3";
-byId("dtone").value = "6";                   // index 6 (+2, bright): the byte (6 + 5) % 9 = 2
+byId("dtreb").value = "2";                   // 0.9.44: TREBLE +2: the byte 2
+byId("dmid").value = "-3";                   // MIDDLE -3: the byte 8
+byId("dbass").value = "5";                   // BASS +5: the byte 5
 byId("dout").value = "2";                    // index 2 (-4 dB): the byte 7
 byId("rhs").value = "6";                     // the horn's slow speed, index 6: the byte 2
 byId("rdf").value = "0";                     // the drum's fast speed, index 0: the byte 5
@@ -135,11 +137,12 @@ byId("rhr").value = "8";                     // the horn's ramp, index 8: the by
 byId("rdr").value = "4";                     // the drum's ramp, index 4 (the default): the byte 0
 await P.sendPatch();
 await wait(120);
-const got3 = (await direct(85, [0, 0])).slice(3, 3 + 64);
+const got3 = (await direct(85, [0, 0])).slice(3, 3 + 96);
 ok(got3[P.OP_ROT] === 1 && got3[P.OP_ROT_MODEL] === 1 && got3[P.OP_ROT_SPEED] === 2 && got3[P.OP_ROT_HORN] === 1 &&
    got3[P.OP_ROT_MIC] === 3 && got3[P.OP_ROT_BAL] === 6, "send: the rotary (on, CLASSIC 2, FAST, sharp horn, 90 degrees, horn level 6) reaches the instrument");
-ok(got3[P.OP_DRV] === 1 && got3[P.OP_DRV_GAIN] === 9 && got3[P.OP_DRV_TYPE] === 3 && got3[P.OP_DRV_TONE] === 2 && got3[P.OP_DRV_OUT] === 7,
-   "send: the drive (on, gain 9, TUBE, tone +2, output -4 dB) reaches the instrument (the second frame, bytes 48 and on, too)");
+ok(got3[P.OP_DRV] === 1 && got3[P.OP_DRV_GAIN] === 9 && got3[P.OP_DRV_TYPE] === 3 && got3[P.OP_DRV_TONE] === 0 && got3[P.OP_DRV_OUT] === 7 &&
+   got3[P.OP_DRV_TREB] === 2 && got3[P.OP_DRV_MID] === 8 && got3[P.OP_DRV_BASS] === 5,
+   "send: the drive (on, gain 9, DISTORTION, TREBLE +2, MIDDLE -3, BASS +5, output -4 dB) reaches the instrument (the second frame, bytes 48 and on, too)");
 ok(got3[P.OP_ROT_HSLOW] === 2 && got3[P.OP_ROT_DFAST] === 5 && got3[P.OP_ROT_HRAMP] === 4 && got3[P.OP_ROT_DRAMP] === 0 &&
    got3[P.OP_ROT_HFAST] === 0 && got3[P.OP_ROT_DSLOW] === 0, "send: the Leslie's speeds and ramps (horn slow 6, drum fast 0, horn ramp 8, drum ramp 4) reach the instrument");
 ok(byId("rhso").textContent === "46 rpm" || byId("rhso").textContent.endsWith("rpm"), "the sliders show their speeds in rpm (" + byId("rhso").textContent + ")");
@@ -150,8 +153,14 @@ await P.readPatch();
 await wait(120);
 ok(byId("rot").checked === true && byId("rmodel").value === "1" && byId("rmic").value === "3" && byId("drv").checked === true &&
    Number(byId("dgain").value) === 9, "read: the page shows the rotary and the drive the instrument holds");
-ok(byId("dtype").value === "3" && Number(byId("dtone").value) === 6 && Number(byId("dout").value) === 2 && Number(byId("rhs").value) === 6 &&
-   Number(byId("rdf").value) === 0 && Number(byId("rhr").value) === 8, "read: ... and the drive's type, tone and output and the Leslie's speeds and ramps");
+ok(byId("dtype").value === "3" && Number(byId("dtreb").value) === 2 && Number(byId("dmid").value) === -3 && Number(byId("dbass").value) === 5 &&
+   Number(byId("dout").value) === 2 && Number(byId("rhs").value) === 6 &&
+   Number(byId("rdf").value) === 0 && Number(byId("rhr").value) === 8, "read: ... and the drive's type, TREBLE / MIDDLE / BASS and output and the Leslie's speeds and ramps");
+{ // 0.9.44: an old patch (a file, a library entry) with a TONE: the page moves it to the TREBLE and writes TONE 0
+  const old = P.patch.slice(); old[P.OP_DRV_TONE] = 4; old[P.OP_DRV_TREB] = old[P.OP_DRV_MID] = old[P.OP_DRV_BASS] = 0;   // TONE byte 4: index 8, the brightest
+  P.patch = old; P.showPatch();
+  ok(Number(byId("dtreb").value) === 5 && P.patch[P.OP_DRV_TONE] === 0 && P.patch[P.OP_DRV_TREB] === 5, "an old patch's TONE (brightest) shows as TREBLE +5, TONE written 0");
+}
 
 
 // ---- 3d: ADVANCED EDIT (0.9.4): the bytes 57..83 go to the instrument (the second frame carries bytes 48..83; 0.9.5 adds the split, 82 and 83), and read back

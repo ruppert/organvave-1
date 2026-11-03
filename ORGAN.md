@@ -202,7 +202,7 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   follows it (tests/drive_test.c). DISTORTION keeps 3 dB of pre-gain a unit. The organ comes into the drive 12 dB down (fx.c: a
   five-note chord at velocity 100 is RMS 0.73 there, peaks under the input's 4.0) and the output, Q15 up to 4.0, is brought back;
   the trims hold the dry level on an organ-like chord at that level, +1 % a unit (+10 % at 10.0). Every shift rounds to the nearest:
-  with TUBE DRIVE's trim at 39x at GAIN 0.1, truncation was a DC of 9 %. TONE: dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a
+  with TUBE DRIVE's trim at 39x at GAIN 0.1, truncation was a DC of 9 %. TONE (until 0.9.43): dark (a low-pass, 1.5 kHz to 5.2 kHz) or bright (a
   2 kHz-pivot treble lift); OUTPUT +-8 dB. Cost: 90 loop instructions a block (78 before 0.9.30: the rounding and the DC blocker). Known: well under the organ's level (a single
   drawbar's note) DISTORTION, which compresses, is about 10 dB louder than TUBE DRIVE. Nothing here is tested on a real FM-1, and the
   sound has not been listened to.
@@ -227,6 +227,14 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   **(owner, 0.9.43) TIGHT TUBE 40 % more gain at 10.0**: its THD is at the stage's most there and cannot rise, so past 5.0 its
   pre-gain goes on rising above its law, to 1.4x at 10.0 (11.0 -> 15.3): more saturation and compression; the THD measured eases
   from the peak to about 48 % at 10.0. At the same THD it still leaves about 6 dB less new low content than TUBE DRIVE.
+  **(owner, 0.9.44) TREBLE, MIDDLE, BASS in place of TONE**, each -5 .. +5, 2 dB a step (+-10 dB), after the clipper as an amp's
+  tone stack: three of the equaliser's biquads (eng_eq.c, the cookbook's): BASS its 120 Hz low shelf, MIDDLE its 900 Hz peak
+  (Q 0.8), TREBLE a high shelf at 2.5 kHz (EQ_TREB, made for it: an amp's treble sits lower than the equaliser's 4 kHz HIGH).
+  Measured on the chain (tests/drive_test.c): +-10 dB at 40 Hz, 900 Hz and 12 kHz, the other bands within 0.2 dB. A band at 0
+  is skipped, so all three at 0 is the drive as before bit for bit (TONE's flat); its states are emptied after a quarter second
+  of silence (a biquad this low leaves a faint tone running). Patch bytes 90, 91, 92; an old TONE is moved to the TREBLE when the
+  patch is set (dark 0 .. 3: -5 .. -2, bright 5 .. 8: +2 .. +5) and byte 49 is written 0. The TONE's MIDI CC drives the TREBLE;
+  MIDDLE and BASS have no CC (the CC list is the bytes up to 83). Cost: dr_eq_run, only while a band is not at 0.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 
