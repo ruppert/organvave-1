@@ -1391,6 +1391,8 @@ DISTORTION unchanged, bit for bit). The byte's range is 0..7 (it was 0..3); 0, 1
 type's GAIN (byte 41, tenths) follows TUBE DRIVE's exponential law scaled to its own top: 15 % (SOFT TUBE), 30 % (MID DRIVE), 40 %
 (HARD CLIP), 25 % (TIGHT TUBE) at 100. A patch with 4..7 loaded by an older firmware plays TUBE DRIVE (7 plays DISTORTION there,
 which read the byte's two low bits).
+Version 0.9.42 raises three tops (owner): SOFT TUBE 30 %, MID DRIVE 40 %, TIGHT TUBE 50 % at 100; the same GAIN byte of these types
+is more driven than in 0.9.41.
 
 Version 0.9.36 reduces the crosstalk (for the CPU): with `OP_XTALK` on, a key keeps only its contributions within 40 dB of its
 strongest, in the default table and in the one the crosstalk bytes 64..69 build. The bytes keep their meaning; a patch with the

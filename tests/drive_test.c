@@ -3,14 +3,15 @@
 /* The drive (src/eng_drive.c; two types since 0.9.30, six since 0.9.41) on the host, measured on the firmware's integer chains.
  * 1. the laws: the harmonic distortion of a 441 Hz sine at the organ's level (RMS 0.73 at the drive) follows the GAIN knob on an
  *    exponential. TUBE DRIVE (0.9.31): THD = 25.2 (e^(0.085 g) - 1) %: under 0.5 % at 0.1, 0.6 .. 1.8 % at 0.5, about 4.7 % at
- *    2.0, 13.4 % at 5.0, 33.75 % at 10.0. The four of 0.9.41: the same exponential scaled to each type's top (SOFT TUBE 15 %,
- *    MID DRIVE 30 %, HARD CLIP 40 %, TIGHT TUBE 25 %), within 15 % at 2.0, 5.0 and 10.0. Never falling from one tenth to the next.
+ *    2.0, 13.4 % at 5.0, 33.75 % at 10.0. The four of 0.9.41: the same exponential scaled to each type's top (0.9.42: SOFT TUBE
+ *    30 %, MID DRIVE 40 %, HARD CLIP 40 %, TIGHT TUBE 50 %), within 15 % at 2.0, 5.0 and 10.0. Never falling from one tenth to the next.
  * 2. level: the organ-like chord at that level comes out between the dry level -1.5 dB and +1.5 dB at every GAIN step, every type.
  * 3. bounds: a full-scale square and noise stay inside the output's clamp (4.0 in Q15) at every gain; silence in, silence out.
  * 4. blocks: the output does not depend on the block length (1, 7, 64: bit-exact).
  * 5. DC: no type leaves a DC (the shifts round; a DC blocker after the shaper): under 1 % of the signal's RMS.
  * 6. the bass (owner, 0.9.41): on a C2 + C3 triad organ chord, TIGHT TUBE leaves at least 6 dB less new low content (20 .. 250 Hz,
- *    away from the chord's partials: the intermodulation's difference tones, the rumble) than TUBE DRIVE at GAIN 5.0 and 10.0.
+ *    away from the chord's partials: the intermodulation's difference tones, the rumble) than TUBE DRIVE at the same THD: TUBE
+ *    DRIVE at GAIN 5.0 and 10.0 (13.4 %, 33.75 %), TIGHT TUBE at the tenth its law puts there (0.9.42: its top is 50 %).
  * The input is Q13 (1.0 = 8192), the output Q15 up to 4.0 (+-131071). The type is the patch byte: 2 TUBE DRIVE, 3 DISTORTION,
  * 4 SOFT TUBE, 5 MID DRIVE, 6 HARD CLIP, 7 TIGHT TUBE (0, 1 and others: TUBE DRIVE). */
 #include <stdio.h>
@@ -32,7 +33,7 @@ static void check(const char *what, int ok)
 static int32_t in[N], out[N], ref[N];
 static dr_t D;
 static const char *NAME[NT] = {"TUBE DRIVE", "DISTORTION", "SOFT TUBE", "MID DRIVE", "HARD CLIP", "TIGHT TUBE"};
-static const double TOP[NT] = {33.75, 0, 15.0, 30.0, 40.0, 25.0};
+static const double TOP[NT] = {33.75, 0, 30.0, 40.0, 40.0, 50.0};   /* (0.9.42: SOFT TUBE 15 -> 30, MID DRIVE 30 -> 40, TIGHT TUBE 25 -> 50) */
 
 static void run_drive(dr_t *d, const int32_t *x, int32_t *y, size_t blk)
 {
@@ -276,6 +277,7 @@ int main(void)
     {
         static const double F0[4] = {65.41, 130.81, 164.81, 196.0};
         double fr[12], mud[NT][2];
+        uint32_t mg[2] = {50, 100};
         static double w[N];
         int k, gi;
         double s2 = 0;
@@ -295,8 +297,21 @@ int main(void)
                 double tot = 0, nl = 0;
                 const size_t n0 = N / 4, nn = N - N / 4;
                 int f;
+                uint32_t gg = gi ? 100u : 50u;
+                if (t == 5) {                                  /* TIGHT TUBE: the tenth of TUBE DRIVE's THD on its own law */
+                    double want = 25.2 * (exp(0.085 * gg / 10.0) - 1.0), best = 1e9;
+                    uint32_t q;
+                    for (q = 1; q <= 100; q++) {
+                        double l = TOP[5] * (exp(0.085 * q / 10.0) - 1.0) / (exp(0.85) - 1.0);
+                        if (fabs(l - want) < best) {
+                            best = fabs(l - want);
+                            mg[gi] = q;
+                        }
+                    }
+                    gg = mg[gi];
+                }
                 dr_init(&D);
-                dr_user(&D, (uint32_t)(2 + t), gi ? 100u : 50u, 4u, 4u);
+                dr_user(&D, (uint32_t)(2 + t), gg, 4u, 4u);
                 run_drive(&D, in, out, 64);
                 for (i = 0; i < nn; i++) {
                     double hw = 0.5 - 0.5 * cos(2 * M_PI * (double)i / (double)(nn - 1)), v = out[n0 + i] * hw;
@@ -326,8 +341,8 @@ int main(void)
             for (t = 0; t < NT; t++)
                 printf(" %s %.1f;", NAME[t], mud[t][gi]);
             printf("\n");
-            snprintf(what, sizeof what, "the bass: TIGHT TUBE at least 6 dB less new low content than TUBE DRIVE at GAIN %s (%.1f against %.1f dB)",
-                     gi ? "10.0" : "5.0", mud[5][gi], mud[0][gi]);
+            snprintf(what, sizeof what, "the bass: same THD, TIGHT TUBE at %.1f at least 6 dB less new low content than TUBE DRIVE at %s (%.1f against %.1f dB)",
+                     mg[gi] / 10.0, gi ? "10.0" : "5.0", mud[5][gi], mud[0][gi]);
             check(what, mud[5][gi] <= mud[0][gi] - 6.0);
         }
     }

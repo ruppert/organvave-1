@@ -219,6 +219,11 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   same GAIN (tests/drive_test.c: -26.8 against -18.1 dB re the output at 5.0, -22.0 against -13.8 at 10.0). TUBE DRIVE and
   DISTORTION keep their curves and tables. In both chains the DC blocker and the low-passes carry their rounding remainders now
   (error feedback): rounded to the nearest, the DC blocker stopped at |y| < 349 and left a DC of about -40 dB after the sound.
+  **(owner, 0.9.42) More gain at the top**: SOFT TUBE 30 % at 10.0 (twice; its top pre-gain 2.0 -> 5.6), TIGHT TUBE 50 % (twice;
+  5.8 -> 11.0, near the stage's most: 50.3 % at 12, past it the THD falls, so the generator searches the rising side only), MID
+  DRIVE 40 % (50 % more was asked, 45 %: a symmetric clip cannot pass 42.9 % on this measure, a perfect square's harmonics 2 .. 9;
+  its clipper input and rails taken down by 4 for the room, the pre-gain at the top about 4x 0.9.41's, its fixed low-pass opened
+  from 4 to 6 kHz). At the same THD TIGHT TUBE still leaves 6 .. 7 dB less new low content than TUBE DRIVE.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 

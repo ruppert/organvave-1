@@ -18,10 +18,15 @@ The four of 0.9.41 (owner; dr_chain2: the same steps plus a cathode shelf, a dry
 a DC blocker of the type's own corner (the output coupling capacitor) and a fixed low-pass). Each follows the TUBE DRIVE law's
 exponential scaled to its own top (the THD at 10.0):
   SOFT TUBE     (byte 4) a gentle valve: a triode-like curve, tanh(k x) / k with k 1.0 above zero and 0.55 below (the positive
-                half bends first): mostly the second harmonic; 80 Hz in, a fixed low-pass at 6 kHz; 15 % at 10.0.
+                half bends first): mostly the second harmonic; 80 Hz in, a fixed low-pass at 6 kHz; 30 % at 10.0 (0.9.42, owner:
+                twice 0.9.41's 15 %).
   MID DRIVE     (byte 5) the classic green mid-boost pedal without its clipping diodes: its op-amp stage has unity gain for the
                 lows and the GAIN for what is above 720 Hz (the 4.7 k / 47 nF leg: x + G hp720(x)), and the op-amp's rails clip
-                the sum (x / (1 + x^4)^(1/4), symmetric: odd harmonics, rails at 4 units); a fixed low-pass at 4 kHz; 30 %.
+                the sum (x / (1 + x^4)^(1/4), symmetric: odd harmonics); a fixed low-pass at 6 kHz; 40 % at 10.0. (0.9.42, owner:
+                50 % more than 0.9.41's 30 % was asked; 40 % is what a symmetric clip can give on this measure: the harmonics 2 .. 9
+                of a perfect square are 42.9 % of its fundamental. For it the clipper's input is taken down by 4 with its rails
+                (the dry share 0.25, the rails at 1 unit: the same circuit, 4x the room for the pre-gain under Q10's 64), and the
+                low-pass is opened from 4 to 6 kHz (it held the top at 39 %).)
   HARD CLIP     (byte 6) a flat clip at 0.9 (a square at the top), from 80 Hz up, a fixed low-pass at 5 kHz; 40 %.
   TIGHT TUBE    (byte 7) a circuit model of one 12AX7 common-cathode stage, voiced tight (TUBE DRIVE without its weight in the
                 bass). The plate's transfer curve is solved here from Koren's triode equations (mu 100, ex 1.4, kG1 1060, kp
@@ -36,7 +41,9 @@ exponential scaled to its own top (the THD at 10.0):
                   - the output coupling capacitor into the next stage: a high-pass at 100 Hz.
                 The low notes saturate less and the intermodulation's difference tones (f2 - f1, the low rumble under
                 TUBE DRIVE's chords) are mostly taken off by the output coupling: on a C2 + C3 triad organ chord, 7 .. 8 dB less
-                new low content than TUBE DRIVE at the same THD (the printout below). 25 % at 10.0.
+                new low content than TUBE DRIVE at the same THD (the printout below). 50 % at 10.0 (0.9.42, owner: twice
+                0.9.41's 25 %; near the stage's most, 50.3 % at a pre-gain of 12: the plate's swing cut on both sides, the bias
+                shift's even harmonics on top).
 
 The organ's level at the drive's input (fx.c takes the mix down by 12 dB first, so that a chord's peaks fit): a five-note
 chord at velocity 100 has RMS 0.73 (1.0 = 8192 in Q13; measured on the host). The THD and the trims are measured at it.
@@ -122,7 +129,7 @@ CURVES = [
     ("DISTORTION stage 1", tanh_abc(0.95, 1.80, 0.20)),
     ("DISTORTION stage 2", tanh_abc(0.90, 1.50, -0.05)),
     ("SOFT TUBE", triode(0.55, 1.0, 0.55)),
-    ("MID DRIVE", rails(0.95, 4.0, 4.0)),
+    ("MID DRIVE", rails(0.95, 1.0, 4.0)),          # (0.9.42: the rails at 1 unit, the input / 4; 4 units in 0.9.41)
     ("HARD CLIP", hard(0.90)),
     ("TIGHT TUBE", tube_12ax7),
 ]
@@ -133,10 +140,10 @@ CURVES = [
 TYPES = [
     dict(name="TUBE DRIVE", byte=2, hp=60.0, rows=[0], s2=0.0, top=33.76),
     dict(name="DISTORTION", byte=3, hp=180.0, rows=[1, 2], s2=2.0, top=None),
-    dict(name="SOFT TUBE", byte=4, hp=80.0, rows=[3], s2=0.0, top=15.0, shelf=None, dry=0.0, bias=False, dc=10.0, lp=6000.0),
-    dict(name="MID DRIVE", byte=5, hp=720.0, rows=[4], s2=0.0, top=30.0, shelf=None, dry=1.0, bias=False, dc=10.0, lp=4000.0),
+    dict(name="SOFT TUBE", byte=4, hp=80.0, rows=[3], s2=0.0, top=30.0, shelf=None, dry=0.0, bias=False, dc=10.0, lp=6000.0),
+    dict(name="MID DRIVE", byte=5, hp=720.0, rows=[4], s2=0.0, top=40.0, shelf=None, dry=0.25, bias=False, dc=10.0, lp=6000.0),
     dict(name="HARD CLIP", byte=6, hp=80.0, rows=[5], s2=0.0, top=40.0, shelf=None, dry=0.0, bias=False, dc=10.0, lp=5000.0),
-    dict(name="TIGHT TUBE", byte=7, hp=120.0, rows=[6], s2=0.0, top=25.0, shelf=(400.0, 0.30), dry=0.0, bias=True, dc=100.0,
+    dict(name="TIGHT TUBE", byte=7, hp=120.0, rows=[6], s2=0.0, top=50.0, shelf=(400.0, 0.30), dry=0.0, bias=True, dc=100.0,
          lp=None),
 ]
 LAW_K = 0.085                                # the law's exponent a GAIN unit (0.9.31)
@@ -237,8 +244,15 @@ def thd(ty, G):
     f1 = harm(y, 1)
     return 100.0 * math.sqrt(sum(harm(y, k) ** 2 for k in range(2, 10))) / f1
 
+PEAK = {}
+
 def solve_pre(ty, target):
-    lo, hi = math.log(0.005), math.log(63.9)           # the THD rises with the pre-gain: bisection on log G (Q10: under 64)
+    """bisection on log G (Q10: under 64) on the rising side: the THD of a stage cut on both sides can fall again past its most
+    (TIGHT TUBE: 50.3 % at 12, 44 % at 64), so the search stops at the pre-gain of the most THD (found once on a log grid)"""
+    if ty["name"] not in PEAK:
+        grid = [math.exp(math.log(0.5) + i * (math.log(63.9) - math.log(0.5)) / 48) for i in range(49)]
+        PEAK[ty["name"]] = max(grid, key=lambda G: thd(ty, G))
+    lo, hi = math.log(0.005), math.log(PEAK[ty["name"]] * 1.1 if PEAK[ty["name"]] < 63.9 else 63.9)
     for _ in range(40):
         mid = 0.5 * (lo + hi)
         if thd(ty, math.exp(mid)) < target:
@@ -296,7 +310,7 @@ def main():
     cut = [1500.0 * 2 ** (t * 0.6) for t in range(4)] + [1500.0] * 5   # dark steps 0..3; 4..8 use the bright emphasis
     nt = len(TYPES)
     L = []
-    L.append("/* GENERATED by tools/gen_drive_tables.py: do not edit (0.9.41). The drive's curves, gains and trims. */")
+    L.append("/* GENERATED by tools/gen_drive_tables.py: do not edit (0.9.42). The drive's curves, gains and trims. */")
     L.append("#ifndef ENG_DRIVE_TABLES_H\n#define ENG_DRIVE_TABLES_H")
     L.append("#include <stdint.h>")
     L.append("#define DR_NWS 512")
