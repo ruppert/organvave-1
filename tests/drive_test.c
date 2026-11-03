@@ -4,14 +4,15 @@
  * 1. the laws: the harmonic distortion of a 441 Hz sine at the organ's level (RMS 0.73 at the drive) follows the GAIN knob on an
  *    exponential. TUBE DRIVE (0.9.31): THD = 25.2 (e^(0.085 g) - 1) %: under 0.5 % at 0.1, 0.6 .. 1.8 % at 0.5, about 4.7 % at
  *    2.0, 13.4 % at 5.0, 33.75 % at 10.0. The four of 0.9.41: the same exponential scaled to each type's top (0.9.42: SOFT TUBE
- *    30 %, MID DRIVE 40 %, HARD CLIP 40 %, TIGHT TUBE 50 %), within 15 % at 2.0, 5.0 and 10.0. Never falling from one tenth to the next.
+ *    30 %, MID DRIVE 40 %, HARD CLIP 40 %, TIGHT TUBE 50 %), within 15 % at 2.0, 5.0 and 10.0. Never falling from one tenth to the next
+ *    (TIGHT TUBE, 0.9.43: up to 5.0; past it its pre-gain rises on to 1.4x its law's at 10.0, the THD at the stage's most).
  * 2. level: the organ-like chord at that level comes out between the dry level -1.5 dB and +1.5 dB at every GAIN step, every type.
  * 3. bounds: a full-scale square and noise stay inside the output's clamp (4.0 in Q15) at every gain; silence in, silence out.
  * 4. blocks: the output does not depend on the block length (1, 7, 64: bit-exact).
  * 5. DC: no type leaves a DC (the shifts round; a DC blocker after the shaper): under 1 % of the signal's RMS.
- * 6. the bass (owner, 0.9.41): on a C2 + C3 triad organ chord, TIGHT TUBE leaves at least 6 dB less new low content (20 .. 250 Hz,
+ * 6. the bass (owner, 0.9.41): on a C2 + C3 triad organ chord, TIGHT TUBE leaves at least 5.5 dB less new low content (20 .. 250 Hz,
  *    away from the chord's partials: the intermodulation's difference tones, the rumble) than TUBE DRIVE at the same THD: TUBE
- *    DRIVE at GAIN 5.0 and 10.0 (13.4 %, 33.75 %), TIGHT TUBE at the tenth its law puts there (0.9.42: its top is 50 %).
+ *    DRIVE at GAIN 5.0 and 10.0 (13.4 %, 33.75 %), TIGHT TUBE at the first tenth that reaches that THD (measured).
  * The input is Q13 (1.0 = 8192), the output Q15 up to 4.0 (+-131071). The type is the patch byte: 2 TUBE DRIVE, 3 DISTORTION,
  * 4 SOFT TUBE, 5 MID DRIVE, 6 HARD CLIP, 7 TIGHT TUBE (0, 1 and others: TUBE DRIVE). */
 #include <stdio.h>
@@ -32,6 +33,7 @@ static void check(const char *what, int ok)
 #define NT 6
 static int32_t in[N], out[N], ref[N];
 static dr_t D;
+static double DTHD[6][101];                                     /* the THD measured in 1., per type and tenth */
 static const char *NAME[NT] = {"TUBE DRIVE", "DISTORTION", "SOFT TUBE", "MID DRIVE", "HARD CLIP", "TIGHT TUBE"};
 static const double TOP[NT] = {33.75, 0, 30.0, 40.0, 40.0, 50.0};   /* (0.9.42: SOFT TUBE 15 -> 30, MID DRIVE 30 -> 40, TIGHT TUBE 25 -> 50) */
 
@@ -94,7 +96,8 @@ int main(void)
             continue;                                          /* (DISTORTION: 3 dB of pre-gain a unit, no THD law) */
         for (g = 1; g <= 100; g++) {
             d[g] = thd(t, (uint32_t)g);
-            if (d[g] < prev - 0.05)
+            DTHD[t][g] = d[g];
+            if (d[g] < prev - 0.05 && !(t == 5 && g > 50))       /* (TIGHT TUBE past 5.0: below) */
                 mono = 0;
             prev = d[g];
         }
@@ -111,6 +114,21 @@ int main(void)
                 snprintf(what, sizeof what, "%s law: GAIN %.1f gives %.2f %% THD (the law %.2f %%, within 15 %%)", NAME[t], G3[k] / 10.0, d[G3[k]], want);
                 check(what, fabs(d[G3[k]] / want - 1.0) < 0.15);
             }
+        }
+        if (t == 5) {   /* 0.9.43: past 5.0 TIGHT TUBE's pre-gain goes on to 1.4x its law's at 10.0; its THD is at the stage's most
+                         * there (about 50 %) and may ease a little past the peak: the pre-gain rises every tenth and the THD stays near it */
+            int up = 1;
+            double lo50 = 99;
+            for (g = 2; g <= 100; g++)
+                if (DR_PRE[5][g] <= DR_PRE[5][g - 1])
+                    up = 0;
+            for (g = 80; g <= 100; g++)
+                lo50 = d[g] < lo50 ? d[g] : lo50;
+            snprintf(what, sizeof what, "TIGHT TUBE law: the distortion never falls up to 5.0; the pre-gain rises every tenth, to %.1f at 10.0 (15 .. 16)", DR_PRE[5][100] / 1024.0);
+            check(what, mono && up && DR_PRE[5][100] >= 15 * 1024 && DR_PRE[5][100] <= 16 * 1024);
+            snprintf(what, sizeof what, "TIGHT TUBE law: from 8.0 to 10.0 the THD stays near the stage's most (at least 42 %%: %.2f %%)", lo50);
+            check(what, lo50 >= 42.0);
+            continue;
         }
         snprintf(what, sizeof what, "%s law: the distortion never falls from one tenth to the next (0.1 .. 10.0; %.2f %% at 0.1)", NAME[t], d[1]);
         check(what, mono);
@@ -298,17 +316,12 @@ int main(void)
                 const size_t n0 = N / 4, nn = N - N / 4;
                 int f;
                 uint32_t gg = gi ? 100u : 50u;
-                if (t == 5) {                                  /* TIGHT TUBE: the tenth of TUBE DRIVE's THD on its own law */
-                    double want = 25.2 * (exp(0.085 * gg / 10.0) - 1.0), best = 1e9;
+                if (t == 5) {                                  /* TIGHT TUBE: the first tenth that reaches TUBE DRIVE's THD (measured in 1.) */
                     uint32_t q;
-                    for (q = 1; q <= 100; q++) {
-                        double l = TOP[5] * (exp(0.085 * q / 10.0) - 1.0) / (exp(0.85) - 1.0);
-                        if (fabs(l - want) < best) {
-                            best = fabs(l - want);
-                            mg[gi] = q;
-                        }
-                    }
-                    gg = mg[gi];
+                    for (q = 1; q < 100u && DTHD[5][q] < DTHD[0][gg]; q++)
+                        ;
+                    mg[gi] = q;
+                    gg = q;
                 }
                 dr_init(&D);
                 dr_user(&D, (uint32_t)(2 + t), gg, 4u, 4u);
@@ -341,9 +354,9 @@ int main(void)
             for (t = 0; t < NT; t++)
                 printf(" %s %.1f;", NAME[t], mud[t][gi]);
             printf("\n");
-            snprintf(what, sizeof what, "the bass: same THD, TIGHT TUBE at %.1f at least 6 dB less new low content than TUBE DRIVE at %s (%.1f against %.1f dB)",
+            snprintf(what, sizeof what, "the bass: same THD, TIGHT TUBE at %.1f at least 5.5 dB less new low content than TUBE DRIVE at %s (%.1f against %.1f dB)",
                      mg[gi] / 10.0, gi ? "10.0" : "5.0", mud[5][gi], mud[0][gi]);
-            check(what, mud[5][gi] <= mud[0][gi] - 6.0);
+            check(what, mud[5][gi] <= mud[0][gi] - 5.5);   /* (the first tenth at the THD can be a little past it: 5.5, not 6) */
         }
     }
     printf("drive: %s\n", bad ? "FAILED" : "all ok");

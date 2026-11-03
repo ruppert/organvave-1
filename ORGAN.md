@@ -224,6 +224,9 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   DRIVE 40 % (50 % more was asked, 45 %: a symmetric clip cannot pass 42.9 % on this measure, a perfect square's harmonics 2 .. 9;
   its clipper input and rails taken down by 4 for the room, the pre-gain at the top about 4x 0.9.41's, its fixed low-pass opened
   from 4 to 6 kHz). At the same THD TIGHT TUBE still leaves 6 .. 7 dB less new low content than TUBE DRIVE.
+  **(owner, 0.9.43) TIGHT TUBE 40 % more gain at 10.0**: its THD is at the stage's most there and cannot rise, so past 5.0 its
+  pre-gain goes on rising above its law, to 1.4x at 10.0 (11.0 -> 15.3): more saturation and compression; the THD measured eases
+  from the peak to about 48 % at 10.0. At the same THD it still leaves about 6 dB less new low content than TUBE DRIVE.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 

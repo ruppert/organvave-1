@@ -1393,6 +1393,7 @@ type's GAIN (byte 41, tenths) follows TUBE DRIVE's exponential law scaled to its
 which read the byte's two low bits).
 Version 0.9.42 raises three tops (owner): SOFT TUBE 30 %, MID DRIVE 40 %, TIGHT TUBE 50 % at 100; the same GAIN byte of these types
 is more driven than in 0.9.41.
+Version 0.9.43: TIGHT TUBE's GAIN above 50 gives more pre-gain than in 0.9.42 (1.4x at 100).
 
 Version 0.9.36 reduces the crosstalk (for the CPU): with `OP_XTALK` on, a key keeps only its contributions within 40 dB of its
 strongest, in the default table and in the one the crosstalk bytes 64..69 build. The bytes keep their meaning; a patch with the
