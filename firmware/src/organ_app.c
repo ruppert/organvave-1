@@ -202,9 +202,9 @@ static void oa_flash(const char *t)
         oa_fl_until = 1;
 }
 
-/* the drive's types (OP_DRV_TYPE, two since 0.9.30: 2 TUBE DRIVE, 3 DISTORTION; 0 and 1, the removed TUBE SCREAM and TUBE
- * PREAMP, play as TUBE DRIVE): the DRIVE page's TYPE row and its header */
-static const char *const OA_DRV_NAME[4] = {"TUBE DRIVE", "TUBE DRIVE", "TUBE DRIVE", "DISTORTION"};
+/* the drive's types by dr_t.type (dr_type_of of OP_DRV_TYPE; six since 0.9.41: the bytes 2 .. 7; 0 and 1, the removed TUBE
+ * SCREAM and TUBE PREAMP, play as TUBE DRIVE): the DRIVE page's TYPE row and its header */
+static const char *const OA_DRV_NAME[DR_TYPES] = {"TUBE DRIVE", "DISTORTION", "SOFT TUBE", "MID DRIVE", "HARD CLIP", "TIGHT TUBE"};
 static void header(const char *page, const char *right)
 {
     wood(0, 0, 240, 22);
@@ -893,7 +893,7 @@ static void oa_val(uint32_t pg, uint32_t r, oa_val_t *v)
         if (r == 0u)
             oa_vsw(v, OP_DRV, "OFF", "ON");
         else if (r == 1u) {
-            oa_vt(v, OA_DRV_NAME[org_patch[OP_DRV_TYPE] & 3u]);
+            oa_vt(v, OA_DRV_NAME[dr_type_of(org_patch[OP_DRV_TYPE])]);
             v->on = org_patch[OP_DRV] != 0;
         } else if (r == 2u) {
             i = oa_u(OP_DRV_GAIN, 100u);                 /* 0.9.25: tenths, 0.0 .. 10.0; 0 bypasses the drive */
@@ -1019,7 +1019,7 @@ static void oa_adj1(uint32_t pg, uint32_t r, int32_t d)
         if (r == 0u)
             org_set(OP_DRV, on);
         else if (r == 1u)
-            org_set(OP_DRV_TYPE, 2u + (uint32_t)clamp((int32_t)((org_patch[OP_DRV_TYPE] & 3u) == 3u) + d, 0, 1));   /* 0.9.30: TUBE DRIVE (2), DISTORTION (3) */
+            org_set(OP_DRV_TYPE, 2u + (uint32_t)clamp((int32_t)dr_type_of(org_patch[OP_DRV_TYPE]) + d, 0, DR_TYPES - 1));   /* the bytes 2 .. 7 (0.9.41) */
         else if (r == 2u)
             org_set(OP_DRV_GAIN, (uint32_t)clamp(oa_u(OP_DRV_GAIN, 100u) + d, 0, 100));  /* tenths; 0 is the bypass */
         else
@@ -1473,7 +1473,7 @@ static void oa_scene(void)
         scr_drawbars();
     else if (oa_page >= 2u && oa_page <= 8u)
         oa_rows(oa_page, oa_page == 2u || oa_page == 8u ? "" : oa_page == 3u ? (org_patch[OP_ROT] ? ROT_SPD[oa_u(OP_ROT_SPEED, 2u)] : "OFF") :
-                         oa_page == 4u ? (org_patch[OP_DRV] && org_patch[OP_DRV_GAIN] ? OA_DRV_NAME[org_patch[OP_DRV_TYPE] & 3u] : "OFF") :
+                         oa_page == 4u ? (org_patch[OP_DRV] && org_patch[OP_DRV_GAIN] ? OA_DRV_NAME[dr_type_of(org_patch[OP_DRV_TYPE])] : "OFF") :
                          oa_page == 5u ? (TSEL->p[P_REV] ? N_RTYPE[clamp(song.g[G_RTYPE], 0, 4)] : "OFF") :
                          oa_page == 6u ? (TSEL->p[P_DLY] ? N_DLYTYPE[clamp(song.g[G_DTIME], 0, 6)] : "OFF") :
                          (org_patch[OP_EQ] ? "ON" : "OFF"));
@@ -1598,7 +1598,7 @@ static uint8_t oa_rev_last = 36;                          /* the reverb's send w
 static void oa_drv_toggle(uint32_t gain, const char *name)    /* TUBE DRIVE at a fixed GAIN, or off if it is already that */
 {
     char t[24];
-    int on = !(org_patch[OP_DRV] && (org_patch[OP_DRV_TYPE] & 3u) != 3u && org_patch[OP_DRV_GAIN] == gain);
+    int on = !(org_patch[OP_DRV] && dr_type_of(org_patch[OP_DRV_TYPE]) == 0u && org_patch[OP_DRV_GAIN] == gain);
     if (on) {
         org_set(OP_DRV_TYPE, 2u);
         org_set(OP_DRV_GAIN, gain);

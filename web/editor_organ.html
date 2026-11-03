@@ -152,7 +152,7 @@
     <div class="set row">
       <label class="chk"><input type="checkbox" id="drv"> Drive on</label>
       <label>Type
-        <select id="dtype"><option value="2">Tube Drive (warm)</option><option value="3">Distortion (JCM900 style)</option></select>
+        <select id="dtype"><option value="2">Tube Drive (warm)</option><option value="3">Distortion (JCM900 style)</option><option value="4">Soft Tube (gentle valve)</option><option value="5">Mid Drive (mid-boost pedal, no diodes)</option><option value="6">Hard Clip</option><option value="7">Tight Tube (12AX7 stage model, tight bass)</option></select>
       </label>
       <label>Gain
         <input type="range" id="dgain" min="0" max="100" step="1"> <output id="dgaino"></output>
@@ -438,7 +438,7 @@ function showPatch() {
   $("rbal").value = patch[OP_ROT_BAL] ?? 0; $("rbalo").textContent = balText(patch[OP_ROT_BAL] ?? 0);
   $("drv").checked = !!patch[OP_DRV];
   $("dgain").value = patch[OP_DRV_GAIN] ?? 0; $("dgaino").textContent = gainText(patch[OP_DRV_GAIN] ?? 0);
-  $("dtype").value = ((patch[OP_DRV_TYPE] ?? 2) & 3) === 3 ? "3" : "2";   // 0.9.30: 0 and 1 (removed types) play as Tube Drive
+  { const t = patch[OP_DRV_TYPE] ?? 2; $("dtype").value = t >= 3 && t <= 7 ? String(t) : "2"; }   // 0.9.41: bytes 2 .. 7; 0, 1 (removed types) and others play as Tube Drive
   $("dtone").value = c9(patch[OP_DRV_TONE] ?? 0); $("dout").value = c9(patch[OP_DRV_OUT] ?? 0);
   for (const [id, op, base] of SPEEDS) $(id).value = c9(patch[op] ?? 0);
   for (const [id, op] of RAMPS) $(id).value = c9(patch[op] ?? 0);

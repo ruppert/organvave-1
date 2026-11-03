@@ -50,3 +50,7 @@ second core taken out; the credits for those parts stay below, marked "(Felucca:
   by James Stubbs (GPL-3.0; its diode-clipper and tone-stage behaviour, fitted here as tanh curves: no code copied)
 - Drive (0.9.24 .. 0.9.29; removed in 0.9.30): TUBE PREAMP inspired by [ValveLord](https://github.com/D4p0up/ValveLord) by D4p0up (a 12AU7 overdrive circuit; the
   repository has schematics and PCB only, no licence and no code: only the circuit's topology was used as a reference)
+- Drive, TIGHT TUBE (0.9.41): the 12AX7's plate curves from Norman Koren's triode model ("Improved VT models for SPICE simulations",
+  Glass Audio, 1996; the published equations and the 12AX7 parameters mu 100, ex 1.4, kG1 1060, kp 600, kvb 300), solved on the load
+  line in `tools/gen_drive_tables.py`: equations only, no code. MID DRIVE follows the well-known topology of the classic green
+  mid-boost overdrive pedal (an op-amp stage with a 720 Hz leg), without its diodes: no code or schematic copied.

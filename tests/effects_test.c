@@ -140,9 +140,9 @@ int main(void)
     org_set(OP_ROT_HSLOW, 99);
     org_set(OP_ROT_BAL, 99);
     org_set(OP_ROT, 5);
-    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 100, TYPE 3, TONE 8, HSLOW 8, BAL 8, ROT 1)",
+    check("the bytes are clamped (SPEED 2, MIC 6, GAIN 100, TYPE 7 (0.9.41), TONE 8, HSLOW 8, BAL 8, ROT 1)",
           org_patch[OP_ROT_SPEED] == 2 && org_patch[OP_ROT_MIC] == 6 && org_patch[OP_DRV_GAIN] == 100 &&
-              org_patch[OP_DRV_TYPE] == 3 && org_patch[OP_DRV_TONE] == 8 && org_patch[OP_ROT_HSLOW] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
+              org_patch[OP_DRV_TYPE] == 7 && org_patch[OP_DRV_TONE] == 8 && org_patch[OP_ROT_HSLOW] == 8 && org_patch[OP_ROT_BAL] == 8 && org_patch[OP_ROT] == 1);
     /* a patch of zeros in the effects bytes leaves the mix dry */
     boot();
     chord_on();

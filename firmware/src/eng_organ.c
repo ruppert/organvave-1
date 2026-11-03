@@ -626,7 +626,7 @@ enum {
     OP_EQ_MID = 45,             /* MID (the peak), the same coding */
     OP_EQ_FREQ = 46,            /* the peak's frequency, 0..11: 0 900 Hz, then 1280 Hz .. 7.2 kHz, 7 is 160 Hz .. 11 is 640 Hz */
     OP_EQ_HIGH = 47,            /* HIGH (4 kHz shelf), the same coding as LOW */
-    OP_DRV_TYPE = 48,           /* the drive's type: 2 TUBE DRIVE, 3 DISTORTION (0.9.30; 0 and 1, TUBE SCREAM and TUBE PREAMP in 0.9.24 .. 0.9.29, play as TUBE DRIVE; before 0.9.24: 0 DISTORTION, 1 TUBE) */
+    OP_DRV_TYPE = 48,           /* the drive's type: 2 TUBE DRIVE, 3 DISTORTION (0.9.30), 4 SOFT TUBE, 5 MID DRIVE, 6 HARD CLIP, 7 TIGHT TUBE (0.9.41; 0 and 1, TUBE SCREAM and TUBE PREAMP in 0.9.24 .. 0.9.29, play as TUBE DRIVE; before 0.9.24: 0 DISTORTION, 1 TUBE) */
     OP_DRV_TONE = 49,           /* its tone: 0..8 "zero is the default" (c9: index (s + 4) % 9, 4 flat, 0 dark .. 8 bright) */
     OP_DRV_OUT = 50,            /* its output level, the same coding: index 4 is 0 dB, 2 dB a step (-8 .. +8 dB) */
     OP_ROT_HSLOW = 51,          /* the rotary's horn SLOW speed (version 0.9.2; 0 in older patches), c9: index 4 is 40 rpm, 12 % a step */
@@ -737,7 +737,7 @@ static uint32_t org_pmax(uint32_t i)
     if (i == OP_ROT_BAL || i == OP_DRV_FAT || (i >= OP_DRV_TONE && i <= OP_ROT_DRAMP))
         return 8u;
     if (i == OP_DRV_TYPE)
-        return 3u;
+        return 7u;                      /* (0.9.41: six types, the bytes 2 .. 7; 3 before) */
     if (i == OP_DRV_GAIN)
         return 100u;
     if (i == OP_EQ)

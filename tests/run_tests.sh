@@ -75,7 +75,7 @@ run "the scanner routing (0.10.2): the upper and the lower manual through the on
 $HC -O2 -o "$OUT/rotary_test" tests/rotary_test.c -lm
 run "the rotary CLASSIC against setBfree's: the sidebands, stopped rotors, the speed ramp reaching its targets, bounds at full scale and at the filters' resonances, silence" "$OUT/rotary_test"
 $HC -O2 -o "$OUT/drive_test" tests/drive_test.c -lm
-run "the drive against setBfree's: the odd harmonics of sines at 110 Hz and 1 kHz, no even ones, block-size independence, bounds at the largest gains, silence, a DC step blocked" "$OUT/drive_test"
+run "the drive: its six types (0.9.41) on their THD laws, level, bounds, silence, DC, block independence, TIGHT TUBE's bass" "$OUT/drive_test"
 $HC -O2 -o "$OUT/effects_test" tests/effects_test.c -lm
 $HC -O1 -o "$OUT/midi_organ_test" tests/midi_organ_test.c -lm
 run "the effects section end to end: the patch bytes through mix_block (the rotary: speeds, STOP, CLASSIC 2; the drive; the fades; silence)" "$OUT/effects_test"

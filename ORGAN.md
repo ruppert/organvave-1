@@ -206,6 +206,19 @@ standard libraries, Pd's standard objects or Csound's opcodes.
   2 kHz-pivot treble lift); OUTPUT +-8 dB. Cost: 90 loop instructions a block (78 before 0.9.30: the rounding and the DC blocker). Known: well under the organ's level (a single
   drawbar's note) DISTORTION, which compresses, is about 10 dB louder than TUBE DRIVE. Nothing here is tested on a real FM-1, and the
   sound has not been listened to.
+  **(owner, 0.9.41) Four more types**, on `dr_chain2` (the same steps plus a cathode shelf, a dry share into the clipper, the grid's
+  bias shift, the DC blocker at the type's own corner and a fixed low-pass; 142 loop instructions), each on TUBE DRIVE's
+  exponential law scaled to its own top: **SOFT TUBE** (byte 4: a gentle triode-like curve, the positive half bending first, mostly
+  the second harmonic; 15 % at 10.0), **MID DRIVE** (byte 5: the green mid-boost pedal without its diodes, x + G hp720(x) clipped by
+  the op-amp's rails; 30 %), **HARD CLIP** (byte 6: a flat clip; 40 %) and **TIGHT TUBE** (byte 7: a circuit model of one 12AX7
+  common-cathode stage: Koren's triode equations solved on the load line, B+ 250 V, 100 k plate, 1.5 k cathode, -1.2 V bias and a
+  gain of 60; the input coupling capacitor at 120 Hz, the cathode partly bypassed (the lows at 30 % of the gain below 400 Hz), the
+  grid current's bias shift (1.5 ms charge, 22 ms leak) and the output coupling capacitor into the next stage at 100 Hz; 25 %).
+  The owner asked for TIGHT TUBE as TUBE DRIVE without its weight in the bass: on a C2 + C3 triad organ chord it leaves 8 .. 9 dB
+  less new low content (20 .. 250 Hz away from the chord's partials: the intermodulation's difference tones) than TUBE DRIVE at the
+  same GAIN (tests/drive_test.c: -26.8 against -18.1 dB re the output at 5.0, -22.0 against -13.8 at 10.0). TUBE DRIVE and
+  DISTORTION keep their curves and tables. In both chains the DC blocker and the low-passes carry their rounding remainders now
+  (error feedback): rounded to the nearest, the DC blocker stopped at |y| < 349 and left a DC of about -40 dB after the sound.
 - **Reverb** (`reverb.c`, about 39 KB of lines): not ported; the firmware's own reverb bus is used.
 - **Rotary**: above (CLASSIC from `whirl.c`, and its variants; LIGHT, our own model, was removed in 0.9.23).
 
