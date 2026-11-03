@@ -162,7 +162,7 @@ static void track_dist(track_t *t, int32_t *b, uint32_t n)
  * came (~0.1 ms) and moved with a chord's beats, about 5 % of intermodulation; the knee (master_knee, 0.9.38) is linear up to
  * 0.8 of full scale and bends towards 0.9 above (it was a tanh over the whole range: the signal the limiter holds at 0.55 was
  * already bent by it); with the look-ahead it is only a guard. */
-#define LIM_T 24000                       /* 0.73 of full scale (0.9.39: under the knee; it was 18000, 0.55, with the knee taking the overshoot) */
+#define LIM_T 24000                       /* 0.73 of full scale (0.9.39: under the knee; it was 18000, 0.55, with the knee taking the overshoot); a safety only since 0.9.40 (ORG_TO_MASTER) */
 #define LIM_KNEE 26214                    /* 0.8 of full scale: linear under it */
 #define LIM_CEIL 29491                    /* 0.9: the knee never reaches it (the health checks' 30000 stays free) */
 static inline int32_t master_knee(int32_t x)
@@ -206,6 +206,12 @@ static void master_lim_reset(void)                /* power-on (and the tests) */
  * (usb_fixed_dac). MASTER (0, the default): MASTER before master_out, as always (USB follows the knob) */
 static volatile uint8_t fx_usb_fixed;
 #define MASTER_FULL 4096                /* main.c: the MASTER knob's top, Q12 */
+/* the organ's level into the master (0.9.40, gain staging, owner): -14 dB. Before it, the organ reached the master far above the
+ * limiter's threshold (LIM_T), so the limiter worked as a compressor: at MASTER 2048 a triad lost 6 dB, eight notes 10 dB, and at
+ * the top 8 .. 19 dB, held 300 ms and released over ~370 ms: the level moved by itself as chords changed. With the organ 14 dB
+ * down, at the MASTER's top a note, a triad or a four-note chord with its bass pass untouched; two hands (eight notes) lose about
+ * 2 dB, a high triad without the Leslie about 5 dB. The limiter is a safety again. (setBfree's key compression, before it, stays.) */
+#define ORG_TO_MASTER 817                   /* Q12: 0.1995, -14.0 dB */
 /* the MASTER pot (ADC 0..1023, smoothed in main.c) to its level, square law: 0 .. 4088 (Q12) */
 static inline uint32_t master_of_pot(uint32_t k10) { return (k10 * k10) >> 8; }
 static __attribute__((noinline)) void usb_fixed_dac(int32_t *out, uint32_t n)   /* audio ISR, after uac_tap */
@@ -1229,7 +1235,7 @@ static void fx_eq_apply(int32_t *l, int32_t *r, uint32_t n)
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
-    int32_t mg = fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12;   /* (USB LEVEL FIXED: MASTER after) */
+    int32_t mg = ((fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12) * ORG_TO_MASTER + 2048) >> 12;   /* (USB LEVEL FIXED: MASTER after) */
     int32_t ol[CTL], orr[CTL], eq_a[CTL], eq_b[CTL];
     fx_organ_apply();
     if (cpu_pop)

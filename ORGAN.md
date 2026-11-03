@@ -89,6 +89,15 @@ window needs (LIM_T 24000, 0.73 of full scale) before it plays, holds 300 ms (th
 0.2 .. 0.5 %, the gain's own movement, against 0.5 .. 2.8 % in 0.9.38); the output is 2 .. 3 dB quieter at the same MASTER, and
 MASTER turned up only compresses more. The gain is applied exactly (lim_scale: a truncated >> 4 made a -1 remainder a DC of -16).
 
+**0.9.40, the level moved by itself (owner: "a compressor acting in the sound").** It was the limiter: the organ reached the master far
+above LIM_T, so the limiter compressed all the time (preset 001, the percussion off: at MASTER 2048 a triad lost 6 dB, eight notes
+10 dB; at the top 8 .. 19 dB), and its 300 ms hold and ~370 ms return made the level breathe as chords changed. Gain staging: the
+organ now enters the master 14 dB lower (ORG_TO_MASTER, fx.c; MASTER, the Leslie path, the dry path and USB alike). At MASTER 2048
+nothing is limited; at the top a note, a triad or a four-note chord with its bass pass untouched, two hands (eight notes) lose about
+2 dB, a high triad without the Leslie about 5 dB. The output is quieter at the same MASTER (turn it up); at the top the chords are
+about as loud as before (they were held at LIM_T), single notes about 6 dB quieter (the compression removed). setBfree's key
+compression (up to -5.7 dB with many keys) stays: it is the instrument's own.
+
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
 worst case about 2,900 (FMUG at 12 voices: 2,724; Felucca's ANALOG at 8 voices: 4,912), before the rotary: with CLASSIC

@@ -579,8 +579,9 @@ int main(void)
         check("TUBE: it saturates (the third harmonic above -50 dB) but is gentler than DISTORTION (at least 8 dB lower)",
               db(t3 / t1) > -50.0 && db(d3 / d1) - db(t3 / t1) > 8.0);
         /* the levels agree within 1 dB on the calibration chord at the organ's level (tests/drive_test.c); a single drawbar's note
-         * is far under it, where DISTORTION, which compresses, comes out about 10 dB louder than TUBE DRIVE (still linear there) */
-        check("TUBE at GAIN 6 against DISTORTION on a single drawbar's note: DISTORTION louder, by at most 12 dB", db(rt / rd) > -12.0 && db(rt / rd) < 0.0);
+         * is far under it, where DISTORTION, which compresses, comes out louder than TUBE DRIVE (still linear there): about 18 dB
+         * since 0.9.40 (the organ 14 dB lower into the master: the limiter, which held DISTORTION down before, leaves it alone) */
+        check("TUBE at GAIN 6 against DISTORTION on a single drawbar's note: DISTORTION louder, by at most 20 dB", db(rt / rd) > -20.0 && db(rt / rd) < 0.0);
         {   /* the curve's asymmetry: even harmonics. At GAIN 10 (a single drawbar's note is quiet: at 6 TUBE DRIVE is nearly clean;
              * the second harmonic seen there before 0.9.36 was the crosstalk's 4' leakage, pruned since) */
             double u1, u2;
