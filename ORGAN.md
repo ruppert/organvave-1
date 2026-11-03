@@ -81,6 +81,14 @@ notes' beats (about 5 %), and a tanh over the whole range bent the signal it hel
 the tanh is a knee, linear up to 0.8 of full scale and bending towards 0.9 above (it takes the start of a note the slower attack
 lets through; the health checks' 30000 stays free): C4 / C5 / C6 triads 6.1 / 4.8 / 14.6 % -> 2.0 / 1.8 / 1.4 %.
 
+**0.9.39, still cracking (owner: the same chord, the Leslie on, and more with it off).** The limiter of 0.9.38 still lagged the
+peaks: without the Leslie 1.7 .. 2.4 % of the samples went over 0.8 of full scale into the knee, a clip at audio rate. The limiter
+now looks ahead 32 samples (0.73 ms of latency): the gain comes down over about 16 samples to what the loudest sample in the
+window needs (LIM_T 24000, 0.73 of full scale) before it plays, holds 300 ms (the chord's beats do not move it) and returns over
+~370 ms. On preset 001's C4 .. C6 triads, the Leslie on and off, no sample reaches the knee (the energy left at new frequencies is
+0.2 .. 0.5 %, the gain's own movement, against 0.5 .. 2.8 % in 0.9.38); the output is 2 .. 3 dB quieter at the same MASTER, and
+MASTER turned up only compresses more. The gain is applied exactly (lim_scale: a truncated >> 4 made a -1 remainder a DC of -16).
+
 Active tonewheels measured in setBfree: 1 key 17 (9 without crosstalk), 4 keys 41, 10 keys 49 (33), all 61 keys 91 (the
 ceiling: the cost depends on wheels, not keys, so polyphony is every key). Typical total with every block on about 2,000,
 worst case about 2,900 (FMUG at 12 voices: 2,724; Felucca's ANALOG at 8 voices: 4,912), before the rotary: with CLASSIC

@@ -146,7 +146,7 @@ static double usb_run(uint32_t fixed, uint32_t master, int dac_is_tap_scaled_ok[
     uint32_t b, i;
     double usb = 0, dac = 0;
     fresh();
-    lim_env = LIM_T; dc_l = dc_r = dce_l = dce_r = 0;    /* (the master's state as at power-on: runs compare) */
+    master_lim_reset(); dc_l = dc_r = dce_l = dce_r = 0;    /* (the master's state as at power-on: runs compare) */
     trk[0].p[P_VOICE] = V_POLY;
     trk[0].p[P_DIST] = trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = 0;   /* (no tails between runs) */
     trk[0].p[P_LEVEL] = 40;                            /* (quiet: at the default the full MASTER chord hits the limiter, LIM_T) */
@@ -189,7 +189,7 @@ static void usb_level(void)
 static void boot_fresh(void)
 {
     fresh();
-    lim_env = LIM_T; dc_l = dc_r = dce_l = dce_r = 0;
+    master_lim_reset(); dc_l = dc_r = dce_l = dce_r = 0;
     memset(kb_note, 0, sizeof kb_note); kb_prev = 0;
     trk[0].p[P_VOICE] = V_POLY;
     trk[0].p[P_DIST] = trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = 0;

@@ -52,6 +52,8 @@ static void boot(void)
     rot_init(&rot_st);
     dr_init(&dr_st);
     eq_init(&eq_st);
+    master_lim_reset();                  /* (the master as at power-on, 0.9.39: its look-ahead and hold keep a tail of the last case) */
+    dc_l = dc_r = dce_l = dce_r = 0;
     eq_w = 0; eq_idle = 0; eq_on = 0;
     rot_w = dr_w = 0;
     rot_idle = 0;
@@ -294,6 +296,31 @@ int main(void)
         input_off(&trk[0], 84); input_off(&trk[0], 88); input_off(&trk[0], 91);
         printf("effects: preset 001, the percussion off, C6 triad: the cabinet's input peaks at %.2f of its 1.0\n", worst / 32768.0);
         check("  .. preset 001's high C major triad stays inside the cabinet's input (it clipped before 0.9.38)", worst < 32767);
+        {   /* 0.9.39 (owner: "still cracking, with the Leslie and more without it"): the look-ahead limiter keeps the output under the
+             * knee (0.8 of full scale), the Leslie on and off, so nothing is clipped */
+            uint32_t rot, over[2] = {0, 0};
+            int32_t pk2[2] = {0, 0};
+            for (rot = 0; rot < 2u; rot++) {
+                boot();
+                host_preset(&trk[0], ENGI_ORGAN, 0);
+                org_set(OP_PERC, 0);
+                org_set(OP_ROT, rot);
+                song.master_q12 = 2048;
+                blocks(CTL * 40);
+                input_on(&trk[0], 84, 100); input_on(&trk[0], 88, 100); input_on(&trk[0], 91, 100);
+                blocks(44100 * 2);
+                for (i = pos - 44100 * 2 + 4410; i < pos; i++) {
+                    int32_t a2 = oL[i] < 0 ? -oL[i] : oL[i], b2 = oR[i] < 0 ? -oR[i] : oR[i];
+                    a2 = a2 > b2 ? a2 : b2;
+                    pk2[rot] = a2 > pk2[rot] ? a2 : pk2[rot];
+                    over[rot] += a2 > LIM_KNEE;
+                }
+                input_off(&trk[0], 84); input_off(&trk[0], 88); input_off(&trk[0], 91);
+            }
+            printf("effects: preset 001's C6 triad, MASTER at the middle: output peak %.2f (Leslie off) / %.2f (on) of full scale, over the knee %u / %u\n",
+                   pk2[0] / 32768.0, pk2[1] / 32768.0, over[0], over[1]);
+            check("  .. and its output stays under the master's knee, the Leslie off and on (nothing clipped, 0.9.39)", !over[0] && !over[1]);
+        }
         song.master_q12 = 4096;
     }
     /* 6. after the keys: the cabinet and the drive go quiet (no limit cycle: at most 1 LSB), and MASTER 0 is silent */
