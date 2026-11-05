@@ -60,8 +60,9 @@ Static loop-instruction cost (method of `tests/target_budget.py`, probe kernels 
 drive, HALL, delay, CLASSIC 4 FAST):** the tonewheels were 62 % of the render, the rotary 26 %, the reverb 5 %, the rest 7 %. A wheel
 of a manual on the scanner computed its sine twice (the dry sum and the scanner's share, taken out again after the scanner);
 `org_wheel_sc` / `org_wheel_scp` now compute it once and add the dry share, the scanner's share and the percussion's in one loop:
-the total fell from 8,233 to 6,511 (10 keys) and from 8,634 to 6,735 (every wheel), the goldens unchanged. HOME's CPU meter shows
-the render and, after a plus, TIMER5's time nested in it ("CPU 72+5%"): the overload check counts both against 93 %.
+the total fell from 8,233 to 6,511 (10 keys) and from 8,634 to 6,735 (every wheel), the goldens unchanged. HOME's CPU meter showed
+the render and, after a plus, TIMER5's time nested in it ("CPU 72+5%"; removed in 0.9.45, owner): the overload check counts both
+against 93 %.
 
 **0.9.36, a much reduced crosstalk (owner).** The crosstalk cost the render, not the key events: each key woke about 10 more
 wheels (its neighbours, at -40 .. -60 dB of its main contribution) and gave the wheels of the drawbars at 0 a faint gain, so they

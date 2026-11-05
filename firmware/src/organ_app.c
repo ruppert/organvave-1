@@ -1231,24 +1231,7 @@ static void scr_home(void)
     cv_rect(HU(20), 0, HU(537), HU(62), HEADBG);
     ltext(HU(20), HU(12), &AF_N, num, CREAM_W, HEADBG);                 /* the number and the name: one size, a gap between */
     ltext(HU(20) + text_w(&AF_N, num) + 6, HU(12), text_w(&AF_N, nm) + HU(20) + text_w(&AF_N, num) + 6 > 224 ? &AF_M : &AF_N, nm, CREAM_W, HEADBG);
-    {   /* the CPU load, left of the battery: the audio render's average (song.cpu_q8, 1/256 of a half) + TIMER5's time nested in
-         * it (audio_t5_q8: the key scan, USB audio; 0.9.28), "CPU 72+5%"; red when the two reach 85 % (the cut is at 93 %) */
-        char cb[12] = {'C', 'P', 'U', ' ', '0', '0', '+', '0', '%', 0, 0, 0};
-        uint32_t pct = song.cpu_q8 * 100u / 256u, t5 = audio_t5_q8 * 100u / 256u;
-        if (pct > 99u)
-            pct = 99u;
-        if (t5 > 99u)
-            t5 = 99u;
-        cb[4] = (char)('0' + pct / 10u);
-        cb[5] = (char)('0' + pct % 10u);
-        if (t5 >= 10u) {
-            cb[7] = (char)('0' + t5 / 10u);
-            cb[8] = (char)('0' + t5 % 10u);
-            cb[9] = '%';
-        } else
-            cb[7] = (char)('0' + t5);
-        rtext(196, 11, &AF_X, cb, pct + t5 >= 85u ? RGB565(0xff, 0x50, 0x38) : CREAM_W, HEADBG);
-    }
+    /* (the CPU meter left of the battery, 0.9.28 .. 0.9.44, was removed in 0.9.45: owner; the load is still measured, for the cut and its popup) */
     cv_frame(201, 9, 22, 9, CREAM_W);                                   /* the battery: a pixel right and up */
     cv_rect(223, 11, 2, 4, CREAM_W);
     cv_rect(202, 11, 4, 5, CREAM_W);
@@ -1538,8 +1521,6 @@ static uint32_t oa_signature(void)
          (uint32_t)song.g[G_DFDBK] << 21) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_DCOLOR] ^ (uint32_t)song.g[G_DMIX] << 7 ^ (uint32_t)(cpu_pop != 0u) << 15 ^ (uint32_t)oa_dbp << 16) * 16777619u;
     h = (h ^ (oa_fl_on() ? oa_fl_until : 0u)) * 16777619u;   /* a quick message: drawn, then gone */
-    if (!oa_gl && (oa_page == 0u || oa_page > 8u))           /* HOME: the CPU meter is redrawn when a figure changes (0.9.28) */
-        h = (h ^ song.cpu_q8 * 100u / 256u ^ (audio_t5_q8 * 100u / 256u) << 8) * 16777619u;
     return h;
 }
 
