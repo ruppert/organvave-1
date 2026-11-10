@@ -31,9 +31,11 @@ static void persist_boot(void)
 {
     persist_t p;
     uint32_t f = irq_save();
-    flash_ok = FL_FAR(fl_jedec_ram)() == 0x856014u;       /* the expected 1 MiB part, else stay RAM-only */
+    flash_ok = FL_JEDEC_OK(FL_FAR(fl_jedec_ram)());      /* the expected 1 MiB part, else stay RAM-only */
     irq_restore(f);
     persist_saved.magic = PERSIST_MAGIC;
+    if (flash_ok)
+        st_owner_check();                          /* SMK: never parse the stock or another firmware's store (storage.c) */
     if (flash_ok && st_load(OBJ_SETTINGS, &p, sizeof p) == (int)sizeof p && p.magic == PERSIST_MAGIC) {
         persist_saved = persist_flash = p;
         if (p.panel.magic == PANEL_MAGIC)

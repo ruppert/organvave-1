@@ -206,6 +206,7 @@ static uint32_t irq_save(void) { return 0; }
 static void irq_restore(uint32_t f) { (void)f; }
 static uint32_t fl_jedec_ram(void) { return 0x856014u; }             /* the FM-1's part (settings.c persist_boot) */
 #define FL_FAR(fn) (fn)
+#define FL_JEDEC_OK(id) ((id) == 0x856014u)                          /* as hal/fm1_flash_map.h (FM-1; the SMK-37 port) */
 #include "../../firmware/src/storage.c"
 #include "../../firmware/src/ui.c"
 #include "../../firmware/src/upreset.c"

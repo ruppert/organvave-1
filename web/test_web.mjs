@@ -38,9 +38,10 @@ const UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
 
 /* an FM-1 on WebMIDI: identity, then "device asks, host answers" reads of the image */
 class FakeFM1 {
-  constructor(image, { unplugAfter = Infinity, run = "Felucca", ota = "Felucca Update" } = {}) {
+  constructor(image, { unplugAfter = Infinity, run = "Felucca", ota = "Felucca Update", back = null } = {}) {
     this.image = image; this.unplugAfter = unplugAfter; this.served = 0; this.bad = 0;
     this.runName = run; this.otaName = ota;                    // the USB names: "Felucca" / "Felucca Update" (until v1.4.27), "FMini-1" / "FMini-1 Update" (v1.4.28+)
+    this.back = back || ["FM-1_900", run];                     // (the SMK-37 layer: the identity and name it comes back with)
     this.access = { inputs: new Map(), outputs: new Map() };
     this.boot("FM-1_015", "FM-1");
   }
@@ -77,7 +78,7 @@ class FakeFM1 {
       this.served++;
       if (this.served >= this.unplugAfter) { this.input.state = this.output.state = "disconnected"; return; }
       if (addr === 0xE0000000) setTimeout(() => this.boot("ota-FM-1_900", this.otaName), 300);
-      else if (addr === 0xF0000000) setTimeout(() => this.boot("FM-1_900", this.runName), 300);
+      else if (addr === 0xF0000000) setTimeout(() => this.boot(...this.back), 300);
       else this.next();
     }
   }
@@ -110,7 +111,7 @@ async function updater() {
     ok(gn === "FM-1_900" && dn.bad === 0, `fm1ota.js: install through the ports "${run}" -> "${ota}" -> "${run}" (${gn})`);
     const dr = new FakeFM1(image, { run, ota });
     dr.boot("ota-FM-1_900", ota);
-    ok(await new Updater(dr.access).resume(image) === true, `fm1ota.js: resume finds the loader named "${ota}"`);
+    ok(await new Updater(dr.access).resume(image, null, "FM-1_900") === true, `fm1ota.js: resume finds the loader named "${ota}"`);
   }
 
   /* another custom firmware's USB name: not found by name, found when the player picks the port */
@@ -127,8 +128,29 @@ async function updater() {
   const dev2 = new FakeFM1(image, { unplugAfter: 3 });
   dev2.boot("ota-FM-1_900", "Felucca Update");
   const t0 = Date.now();
-  const done = await new Updater(dev2.access).resume(image);
+  const done = await new Updater(dev2.access).resume(image, null, "FM-1_900");
   ok(done === false && Date.now() - t0 < 6000, "fm1ota.js: unplugged during the write -> stops at once");
+  /* resume() checks the loader's model against the package, as install() checks the running firmware */
+  const smkOta = new FakeFM1(image);
+  smkOta.boot("ota-SMK-37 Pro_900", "Felucca Update");
+  const m1 = await new Updater(smkOta.access).resume(image, null, "FM-1_900").then(() => null, (x) => x);
+  ok(m1 && m1.code === "model" && smkOta.served === 0, "fm1ota.js: an SMK-37 Pro in update mode is never given an FM-1 package ('model')");
+  const fm1Ota = new FakeFM1(image);
+  fm1Ota.boot("ota-FM-1_900", "Felucca Update");
+  const m3 = await new Updater(fm1Ota.access).resume(image, null, "SMK-37 Pro_900").then(() => null, (x) => x);
+  ok(m3 && m3.code === "model" && fm1Ota.served === 0, "fm1ota.js: an FM-1 in update mode is never given an SMK package ('model')");
+  const noPkg = new FakeFM1(image);
+  noPkg.boot("ota-FM-1_900", "Felucca Update");
+  const m2 = await new Updater(noPkg.access).resume(image).then(() => null, (x) => x);
+  ok(m2 && m2.code === "model" && noPkg.served === 0, "fm1ota.js: resume without the package's identity writes nothing");
+  const elite = new FakeFM1(image);
+  elite.boot("ota-SMK-37 Elite_900", "Felucca Update");
+  const m4 = await new Updater(elite.access).resume(image, null, "SMK-37 Pro_900").then(() => null, (x) => x);
+  ok(m4 && m4.code === "model" && elite.served === 0, "fm1ota.js: an SMK-37 Elite in update mode is never given an SMK-37 Pro package ('model')");
+  const smkPro = new FakeFM1(image, { back: ["SMK-37 Pro_900", "Felucca"] });
+  smkPro.boot("ota-SMK-37 Pro_900", "Felucca Update");
+  const r3 = await new Updater(smkPro.access).resume(image, null, "SMK-37 Pro_900");
+  ok(r3 === true && smkPro.served > 0 && smkPro.bad === 0, "fm1ota.js: resume: an SMK-37 Pro in update mode takes an SMK-37 Pro package");
 
   const dev3 = new FakeFM1(image, { unplugAfter: 2 });
   const e = await new Updater(dev3.access).install(image, "FM-1_900").then(() => null, (x) => x);

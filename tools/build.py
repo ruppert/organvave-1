@@ -3,13 +3,21 @@
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 """Build Felucca: the app, the update loader and an installable .fwsc package.
 
-  tools/build.py [--release X.Y[-suffix]]
+  tools/build.py [--release X.Y[-suffix]] [--board fm1|smk37] [--model pro|elite|mke]
 
 Outputs in build/: felucca.bin (app), loader/ota.bin (update loader),
 felucca.fwsc (package), and the same package under its release name organvave-1-vX.Y.Z.fwsc (the version of
 firmware/src/core.h, or --release's). A release build (--release X.Y) writes a folder release-X.Y/ with the package,
 the app, SHA256SUMS and the licence files.
 See BUILDING.md for the toolchain and the SDK.
+
+BOARD=smk37 (or --board smk37) builds OrganVave-1 for the SMK-37 Pro (the port of genkigenki/fm1-to-smk37, its
+Felucca layer): -DBOARD_SMK37=1 for the app and the loader, identity SMK-37 Pro_800 (release SMK-37 Pro_8XY), the
+SMK flash layout (fm1pkg_make.py), and the package build/organvave-1-smk37.fwsc (and organvave-1-smk37-vX.Y.Z.fwsc).
+The default stays the FM-1, byte-identical.
+MODEL=elite / mke (or --model) with smk37: the same build under the SMK-37 Elite's or the MKE-P37's model
+name (identity SMK-37 Elite_800 / MKE-P37_800, the loader's and the update record's name too; -DSMK_MODEL),
+so the stock updater still takes that unit's factory package; build/organvave-1-smk37-elite.fwsc, -mke.fwsc.
 
 The JieLi toolchain is Linux x86-64 only. JIELI_TOOLCHAIN points at it; on
 macOS (or with JIELI_DOCKER=1) each tool runs in a linux/amd64 container.
@@ -51,6 +59,12 @@ SDK_SHA256 = {
 }
 
 PRODUCT = "FM-1_800"                # package identity (organvave-1: FM-1_8XY); release builds are FM-1_8XY
+BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board (the SMK-37 port, genkigenki's layer)
+BOARD_PREFIX = {"fm1": "FM-1_8", "smk37": "SMK-37 Pro_8"}   # identity of a release build: prefix + X + Y
+BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}       # the FM-1 build gets no new flag (byte-identical)
+BOARD_STEM = {"fm1": "felucca", "smk37": "organvave-1-smk37"}   # package name: STEM.fwsc (and the versioned copy)
+# smk37: the keyboard's model name (MODEL env or --model); one hardware, three names. pro adds no flag
+MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}
 VERSION = None                      # ORGANVAVE_VERSION for release builds (default: firmware/src/core.h)
 
 
@@ -147,7 +161,7 @@ def ldr_wrap(image):
 def build_loader():
     LDR.mkdir(parents=True, exist_ok=True)
     src = FW / "loader"
-    flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src"]
+    flags = [*CFLAGS, *BOARD_DEFS[BOARD], "-Ifirmware/hal", "-Ifirmware/src"]
     tc_all(("cc", "-c", src / "crt0_ldr.S", "-o", LDR / "crt0_ldr.o"),
            ("cc", *flags, "-c", src / "loader.c", "-o", LDR / "loader.o"))
     elf = LDR / "loader.elf"
@@ -186,7 +200,7 @@ def ld_regions():
 
 
 def build_app():
-    flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
+    flags = [*CFLAGS, *BOARD_DEFS[BOARD], "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_UAC_48K",
                  "FELUCCA_UAC_AS_FIRST"):
@@ -212,7 +226,14 @@ def build_app():
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
     elf = OUT / "felucca.elf"
-    tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
+    ld = FW / "app.ld"
+    if APP_SLOT != 0x8DFBC:          # another board's app slot (SMK-37 Pro): the same script, its XIP length
+        txt = ld.read_text()
+        if txt.count("LENGTH = 0x8DFBC") != 1:
+            raise SystemExit("app.ld: the XIP LENGTH line was not found")
+        ld = OUT / "app.ld"
+        ld.write_text(txt.replace("LENGTH = 0x8DFBC", f"LENGTH = {APP_SLOT:#X}".replace("0X", "0x")))
+    tc("pi32v2/bin/ld", "-T", ld, OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
        OUT / "felucca.o", "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
@@ -353,17 +374,36 @@ def core_version():
 
 
 def main():
-    global PRODUCT, VERSION
+    global PRODUCT, VERSION, BOARD, APP_SLOT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_8XY, version string vX.Y")
+    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_8XY (SMK: SMK-37 Pro_8XY), version string vX.Y")
+    ap.add_argument("--board", choices=sorted(BOARD_PREFIX), default=None,
+                    help="target board: fm1 (default) or smk37 (default: $BOARD, else fm1)")
+    ap.add_argument("--model", choices=sorted(MODELS), default=None,
+                    help="smk37: the model name, pro (default), elite or mke (default: $MODEL, else pro)")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
     a = ap.parse_args()
-    name = "felucca.fwsc"
+    BOARD = (a.board or os.environ.get("BOARD") or "fm1").lower().replace("-", "")
+    if BOARD not in BOARD_PREFIX:
+        raise SystemExit(f"BOARD={BOARD}: use fm1 or smk37")
+    model = (a.model or (os.environ.get("MODEL") if BOARD == "smk37" else None) or "pro").lower()
+    if model not in MODELS or (model != "pro" and BOARD != "smk37"):
+        raise SystemExit(f"MODEL={model}: pro, elite or mke, with BOARD=smk37")
+    fm1pkg_make.set_board(BOARD)
+    APP_SLOT = fm1pkg_make.APP_SLOT
+    stem = BOARD_STEM[BOARD]
+    PRODUCT = fm1pkg_make.BOARDS[BOARD][2]
+    if model != "pro":              # another model name: identity, loader and update record (fm1_cc.h SMK_MODEL)
+        BOARD_DEFS[BOARD] = [*BOARD_DEFS[BOARD], f'-DSMK_MODEL="{MODELS[model]}"']
+        PRODUCT = PRODUCT.replace(MODELS["pro"], MODELS[model])
+        BOARD_PREFIX[BOARD] = BOARD_PREFIX[BOARD].replace(MODELS["pro"], MODELS[model])
+        stem += "-" + model
+    name = f"{stem}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z, X.Y.Z.W or X.Y-suffix, one digit each")
-        PRODUCT = "FM-1_8" + m[1] + m[2]
+        PRODUCT = BOARD_PREFIX[BOARD] + m[1] + m[2]
         VERSION = "v" + a.release.lower()      # e.g. v0.1, v0.1-rc1 (ORGANVAVE_VERSION)
     if not (FW / "engines" / "src" / "felucca_engine.h").exists():
         raise SystemExit("firmware/engines is empty: the Felucca-Engines submodule "
@@ -390,7 +430,8 @@ def main():
     if errors:
         raise SystemExit("build: checks failed")
     pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY), ota, PRODUCT)
-    named = "organvave-1-" + (VERSION or core_version()) + ".fwsc"      # e.g. organvave-1-v0.1.0.fwsc
+    # e.g. organvave-1-v0.1.0.fwsc; the SMK-37: organvave-1-smk37[-elite|-mke]-v0.1.0.fwsc
+    named = ("organvave-1-" if BOARD == "fm1" else stem + "-") + (VERSION or core_version()) + ".fwsc"
     (OUT / name).write_bytes(pkg)
     (OUT / named).write_bytes(pkg)
     print(f"app      {OUT / 'felucca.bin'}  {len(img)} B")
@@ -400,7 +441,7 @@ def main():
         rel = OUT / f"release-{a.release}"
         shutil.rmtree(rel, ignore_errors=True)
         (rel / "LICENSES").mkdir(parents=True)
-        app = f"organvave-1-{a.release}-app.bin"
+        app = f"{named[:-5]}-app.bin"
         (rel / named).write_bytes(pkg)
         (rel / app).write_bytes(img)
         (rel / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n"
