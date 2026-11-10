@@ -1999,6 +1999,31 @@ static void oa_input(void)
         }
 }
 
+#if BOARD_SMK37
+/* the SMK-37 (smk_organ.c draws the pads): its button LEDs are on / off, one per button (smk_input.h fm1_led) and
+ * show what the FM-1's lit buttons show; it has no key LEDs. KNOB BANK and FADER BANK: smk_organ.c */
+static void smk_btn_leds(void);
+static void oa_leds(void)
+{
+    uint32_t k;
+    if (idle_leds())
+        return;
+    for (k = 0; k < SMK_NLED; k++)
+        fm1_led[k] = 0;
+    fm1_led_key(panel.btn[B_HOME], oa_page == 0u);
+    fm1_led_key(panel.btn[B_EDIT], oa_page == 1u || oa_page == 8u);
+    fm1_led_key(panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
+    fm1_led_key(panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
+    fm1_led_key(panel.btn[B_ENV], org_patch[OP_PERC] != 0);
+    fm1_led_key(panel.btn[B_LFO], vib_on() != 0);
+    fm1_led_key(panel.btn[B_SAVE], oa_sv);
+    fm1_led_key(panel.btn[B_GLO], oa_gl != 0u);
+    fm1_led_key(panel.btn[B_ARP], oa_dbp != 0u);
+    fm1_led_key(panel.btn[B_OCTDN], song.octave < 0);
+    fm1_led_key(panel.btn[B_OCTUP], song.octave > 0);
+    smk_btn_leds();
+}
+#else
 static void oa_leds(void)
 {
     uint8_t nl[FM1_NCOL] = {0}, nd[FM1_NCOL] = {0}, nb[FM1_NCOL] = {0}, nm[FM1_NCOL] = {0};
@@ -2033,6 +2058,7 @@ static void oa_leds(void)
         fm1_led[k] = nl[k];
     }
 }
+#endif
 
 /* power-on, after the autosave: the instrument is the organ (an autosave of another engine: the first preset) */
 static void oa_init(void)

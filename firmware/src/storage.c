@@ -70,7 +70,7 @@ _Static_assert(ST_SMK_BASE + ST_SMK_AREA * ST_SECTOR == 0xAF000u, "SMK store: th
 static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy A (0) / B (1) */
 {
     static const uint8_t ORDER[OBJ_COUNT] = {
-        [0] = 0xFF, [1] = 0xFF, [2] = 0xFF, [3] = 0xFF, [4] = 0xFF, [7] = 0xFF,   /* (retired numbers: no sector) */
+        [1] = 0xFF, [2] = 0xFF, [3] = 0xFF, [4] = 0xFF, [7] = 0xFF,   /* (retired numbers: no sector) */
         [OBJ_UPRESET0] = 0, [OBJ_UPRESET0 + 1] = 1, [OBJ_UPFM6] = 2, [OBJ_AUTOSAVE] = 3, [OBJ_SETTINGS] = 4};
     uint32_t k = obj < OBJ_COUNT ? ORDER[obj] : 0xFFu;
     return k == 0xFFu ? 0xFFFFFFFFu : ST_SMK_BASE + (k * 2u + (copy & 1u)) * ST_SECTOR;

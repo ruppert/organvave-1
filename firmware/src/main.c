@@ -71,6 +71,7 @@ static void hexs(char *b, uint32_t v)
     b[8] = 0;
 }
 
+
 static void fm1_fault(const fm1_crash_t *c)
 {
     char b[12];
@@ -165,6 +166,10 @@ static void fm1_main(void)
     felucca_dbg.prev_rst = fm1_boot.p3_rst;
     fm1_input_init();
     fm1_adc_init();
+#if BOARD_SMK37 && FELUCCA_FLASH
+    if (flash_ok)                                   /* the factory key / pad velocity curves (USRTRIM, read only) */
+        smk_trim_load(fm1_xip_ptr(SMK_TRIM_FLASH));
+#endif
     panel_init();
     felucca_init();
     master_boot();
@@ -179,7 +184,7 @@ static void fm1_main(void)
     fm1_guard_lock_top();
     fm1_irq_enable_all();
     fm1_delay_ms(30);
-    if ((fm1_in.buttons & 3u) == 3u) {
+    if ((fm1_in.buttons & FM1_OCT_BOTH) == FM1_OCT_BOTH) {
         panel_setup();                        /* OCT- + OCT+ held at power-on */
         settings_save();
     }
@@ -265,11 +270,20 @@ static void fm1_main(void)
         settings_poll();                              /* queued settings save: only while quiet */
         autosave_poll();                              /* the instrument, quiet and idle: settings.c */
         felucca_dbg.stage = 2;
+#if BOARD_SMK37
+        smk_frame();                                    /* the SMK-37's pads, faders, wheels (smk_organ.c) */
+#endif
         UI_LEDS();
+#if BOARD_SMK37
+        padled_flush();                                 /* the pads' colours, between LCD transfers */
+#endif
         UI_DRAW();
         felucca_dbg.stage = 9;
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
             UI_INPUT();
+#if BOARD_SMK37
+            smk_poll();                                 /* (the wheels and the pads follow the hand, not the screen) */
+#endif
 #if FELUCCA_OTA
             ed_service();                       /* editor replies without waiting for the next frame */
 #endif

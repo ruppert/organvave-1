@@ -137,6 +137,7 @@ static void midi_pc_poll(void)                           /* main loop (organ_app
 /* ----------------------------------------------------------------- LEDs --- */
 /* The LED picture is built off-line and copied one byte per column: clearing and relighting would let the 10 kHz scan
  * catch the dark gap and flicker (organ_app.c oa_leds) */
+#if !BOARD_SMK37                                   /* (the FM-1's key and button LEDs in the matrix; the SMK: organ_app.c) */
 static uint8_t led_pos[41];                        /* (col << 3) | row bit, 0xFF = none */
 
 static void led_pos_init(void)
@@ -157,6 +158,7 @@ static void led_put(uint8_t *nl, uint32_t id, int on)
     if (q != 0xFF && on)
         nl[q >> 3] |= (uint8_t)(1u << (q & 7u));
 }
+#endif
 
 /* the idle glow (hal/fm1_input.h fm1_led_idle_start: a soft light drifting over the keys, the buttons breathing with
  * it) after IDLE_LEDS_MS with no key, button or knob and nothing sounding; any input ends it at once (and is not
