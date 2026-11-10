@@ -28,12 +28,47 @@
 #undef memset
 #undef memcpy
 #undef memcmp
+#if BOARD_SMK37
+/* the SMK-37 port's host build (tests/smk_organ_test.c, -DBOARD_SMK37=1): smk_input.h's state and calls, as a test drives
+ * them: the 37 keys, the pads (as commands), the faders, the wheels, the pedal, the 18 buttons and their LEDs */
+#define FM1_NKEY 37u
+#define FM1_NBTN 18u
+#define FM1_NENC 8u
+#define SMK_NPAD 16u
+#define SMK_NLED 19u
+#define SMK_KEY_F3 5u
+enum { SMK_BTN_KNOB_BANK = 0, SMK_BTN_FADER_BANK = 1, SMK_BTN_LEFT = 2, SMK_BTN_RIGHT = 3 };
+static struct {
+    volatile uint32_t notes, buttons;
+    uint64_t keys;
+    uint8_t key_vel[FM1_NKEY], fader[4], pad_st[SMK_NPAD];
+    uint16_t pad_raw[SMK_NPAD], wheel[2], pedal, batt;
+    uint32_t adc_ok, adc_miss, frames;
+} fm1_in;
+static uint8_t fm1_led[SMK_NLED];
+static void fm1_led_key(uint32_t id, int on) { if (id < SMK_NLED) fm1_led[id] = (uint8_t)(on != 0); }
+static int32_t smk_master = 724;
+static volatile uint8_t smk_pad_cmd;
+static int32_t host_q_pad[64], host_q_ext[64];
+static uint32_t host_np, host_rp, host_ne, host_re;
+static int32_t smk_padcmd_take(void) { return host_rp < host_np ? host_q_pad[host_rp++ % 64u] : -1; }
+static int32_t smk_extkey_take(void) { return host_re < host_ne ? host_q_ext[host_re++ % 64u] : -1; }
+static uint32_t host_padrgb[SMK_NPAD];
+static void padled_set(uint32_t pad, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (pad < SMK_NPAD)
+        host_padrgb[pad] = (uint32_t)r << 16 | (uint32_t)g << 8 | b;
+}
+#else
 static struct { volatile uint32_t notes, buttons; } fm1_in;
+#endif
 
 /* ------------------------------------------------------------ HAL stubs --- */
 #define FM1_NCOL 11u
 static const int8_t FM1_KEYMAP[6][FM1_NCOL];           /* (zero: led_put finds no LED; the LED tests map their own) */
+#if !BOARD_SMK37
 static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_breath[FM1_NCOL], fm1_led_mid[FM1_NCOL];
+#endif
 static uint32_t host_dim_lo;
 static void fm1_led_dim_level(uint32_t lo) { host_dim_lo = lo; }
 static int host_anim, host_idle, host_idle_glow;
@@ -42,7 +77,7 @@ static void fm1_led_idle_start(uint32_t glow) { host_idle = 1; host_idle_glow = 
 static int fm1_led_idle_on(void) { return host_idle; }
 static void fm1_led_anim_stop(void) { host_anim = host_idle = 0; }
 static uint32_t host_ticks, host_pressed, host_notes;
-static int32_t host_enc[7];
+static int32_t host_enc[8];
 #ifndef HOST_TICKS                                      /* (a test with its own clock: audio_test.c) */
 #define FM1_TICKS_PER_US 1u
 static uint32_t fm1_ticks(void) { return host_ticks; }
@@ -51,8 +86,8 @@ static uint32_t fm1_input_edges(int x) { uint32_t p = host_pressed; (void)x; hos
 static uint32_t fm1_input_note_edges(void) { uint32_t n = host_notes; host_notes = 0; return n; }
 static int32_t fm1_enc_take(uint32_t e)
 {
-    int32_t s = host_enc[e % 7u];
-    host_enc[e % 7u] = 0;
+    int32_t s = host_enc[e % 8u];
+    host_enc[e % 8u] = 0;
     return s;
 }
 static void (*host_wdt_hook)(void);                     /* (a test's: time passing in a blocking loop) */
@@ -131,7 +166,11 @@ static uint32_t fl_jedec_ram(void) { return 0; }
 static uint32_t fl_jedec_ram(void) { return 0x856014u; }
 #endif
 #define FL_FAR(fn) (fn)
+#if BOARD_SMK37
+#include "fm1_flash_map.h"                              /* (the SMK's store layout; FL_JEDEC_OK) */
+#else
 #define FL_JEDEC_OK(id) ((id) == 0x856014u)                          /* as hal/fm1_flash_map.h (FM-1; the SMK-37 port) */
+#endif
 #include "../firmware/src/storage.c"
 #include "../firmware/src/ui.c"
 #include "../firmware/src/upreset.c"

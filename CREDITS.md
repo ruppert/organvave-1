@@ -32,6 +32,13 @@ second core taken out; the credits for those parts stay below, marked "(Felucca:
 - Guilherme Ruppert: FMini-1 (the FMUG engine, its app and editor: not in this firmware since 0.1.0) and organvave-1. FMUG filter (FMini-1 1.7.0): the Minimoog ladder's calibration (the singing pitch against the corner, the feedback lag pole, the critical loop gain,
   the cutoff and emphasis dials) read from the circuit notes of [CA-72](https://github.com/idlefoundry/ca-72) by idlefoundry (GPL-3.0-or-later); the
   integer implementation (tools/fmug_filter.py, firmware/src/eng_fmug.c) is written for this firmware
+- SMK-37 port (`BOARD_SMK37`, [SMK37.md](SMK37.md)): the board layer of M. Geisler's ([genkigenki](https://github.com/genkigenki))
+  SMK-37 target for Felucca (genkigenki/Felucca, branch `smk37`, hugelton/Felucca#237, GPL-3.0: `hal/smk_input.h`,
+  `hal/smk_compat.h`, `hal/fm1_flash_map.h`, the SMK parts of the flash driver, the LCD, the pad LEDs, the update path,
+  the build, the installers and their tests), applied by hand; the porting kit
+  [fm1-to-smk37](https://github.com/genkigenki/fm1-to-smk37) (its guide and setup-file template, CC BY-NC 4.0) for the
+  method and `smk37-port.yaml`. The SMK-37 hardware facts in that layer build on [FM-1-RE](https://github.com/AL-255/FM-1-RE)
+  (AL-255) and [kagaimiq](https://github.com/kagaimiq)'s JieLi tools.
 - (Felucca: not in this firmware) Second core: its start, mailbox and guards from [X0X](https://github.com/charlesvestal/fm1-x0x) by [charlesvestal](https://github.com/charlesvestal)
   with the dual-core findings of [Melodee](https://github.com/keremimo/melodee) by [keremimo](https://github.com/keremimo); its audio split,
   measurements and hardening after [Jangada](https://github.com/zednaked/jangada) by [zednaked](https://github.com/zednaked) (all GPL-3.0)

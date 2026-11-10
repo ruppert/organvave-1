@@ -435,8 +435,32 @@ static void fm1__frame(void)
 #define SMK_PAD_OFF 12u           /* below base + this: released */
 #define SMK_PAD_PEAKN 3u          /* samples (2.4 ms apart) for the peak */
 
+/* OrganVave-1 (smk_organ.c): the pads as command keys, not notes. While smk_pad_cmd is set a pad's hit and release go to
+ * a queue of their own (pad << 8 | velocity, 0 = release; smk_padcmd_take), never to the note bits */
+static volatile uint8_t smk_pad_cmd;
+#define SMK_PADCQ 16u
+static volatile uint16_t smk_padcq[SMK_PADCQ];
+static volatile uint8_t smk_padcq_w, smk_padcq_r;
+static int32_t smk_padcmd_take(void)                   /* the next pad event, -1 if none */
+{
+    int32_t v = -1;
+    if (smk_padcq_r != smk_padcq_w) {
+        v = smk_padcq[smk_padcq_r];
+        smk_padcq_r = (uint8_t)((smk_padcq_r + 1u) % SMK_PADCQ);
+    }
+    return v;
+}
+
 static void smk__padq(uint32_t pad, uint32_t vel)     /* a pad hit (vel) or release (0): its white key */
 {
+    if (smk_pad_cmd && !smk_pad_note[pad]) {         /* (a pad held from before keeps its note to its release) */
+        uint8_t w = smk_padcq_w;
+        if ((uint8_t)(w + 1u) % SMK_PADCQ != smk_padcq_r) {
+            smk_padcq[w] = (uint16_t)(pad << 8 | (vel & 0x7Fu));
+            smk_padcq_w = (uint8_t)((w + 1u) % SMK_PADCQ);
+        }
+        return;
+    }
     int32_t n0 = smk_pad_piano ? SMK_PIANO_NOTE[pad] : (int32_t)SMK_WHITE_NOTE[SMK_WHITE_OF_PAD(pad)];
     uint32_t n, bit;
     if (vel) {

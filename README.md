@@ -11,6 +11,8 @@ tone generator (the tonewheels, the key click, the crosstalk and the temperament
 drawbar page. Percussion, vibrato, the rotary, the lower manual and the pedals come in the milestones below. Nothing here
 has been tested on a real FM-1 yet. Do not install it unless you know how to recover an FM-1 (see [BUILDING.md](BUILDING.md)).
 
+**M-Vave SMK-37:** see [SMK-37 instructions](SMK37.md) (branch `organvave-37`, beta, not yet tested on a unit).
+
 ## Plan
 
 [ORGAN.md](ORGAN.md) is the approved plan: the map from setBfree to the firmware, the measured budget, the two rotary

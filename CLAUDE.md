@@ -35,6 +35,13 @@ python3 web/make_site.py build/felucca.fwsc /tmp/site X.Y.Z  # the site (the ins
 python3 tools/gen_splash.py                 # firmware/src/organvave_splash.h from docs/organvave-splash.png
 ```
 
+The SMK-37 port (branch `organvave-37`, [SMK37.md](SMK37.md), the owner's decisions in `smk37-port.yaml`): `BOARD=smk37
+[MODEL=pro|elite|mke] ./build.sh` builds `build/organvave-1-smk37[-elite|-mke].fwsc`; build the FM-1 last (the tests
+use its files) and check that the FM-1 app, package and loader are byte-identical to the build before the change (same
+day: `__DATE__`). Everything SMK sits behind `BOARD_SMK37`; the organ's mapping is `firmware/src/smk_organ.c`
+(tests/smk_organ_test.c). Never widen the flash allow-list (`hal/fm1_flash_map.h`): the SMK's calibration, pairing and
+key areas are unique to each unit.
+
 A single host test is one `cc` line (they are in `tests/run_tests.sh`). The sandbox is ephemeral: the toolchain and the SDK may have to be fetched again (`tools/get_toolchain.sh`;
 BUILDING.md has the SDK clone). If a download is refused by the network allowlist, say so and ask for the files.
 

@@ -293,10 +293,48 @@ static void key_off(uint32_t k, track_t *t)
 }
 
 
+#if BOARD_SMK37
+/* SMK-37 (smk37-port.yaml, keys: outer extend): the keybed's 10 keys beyond the FM-1's 27 (C3..E3 below the lowest F,
+ * G#5..C6 above the highest G) play the organ as the 27 do: kb_pitch past either end (key -5..-1, 27..31), the octave
+ * buttons and TRN, the manuals' split on the note. Not in DRAWBAR PRESET MODE (nothing there yet) nor under the splash */
+static uint8_t ext_note[FM1_NKEY];               /* note + 1 sounding, 0 = none */
+static void ext_keys_block(void)
+{
+    int32_t e;
+    while ((e = smk_extkey_take()) >= 0) {
+        uint32_t kk = (uint32_t)e >> 8, v = (uint32_t)e & 0x7Fu, x;
+        if (kk >= FM1_NKEY)
+            continue;
+        if (!v) {
+            if (ext_note[kk]) {
+                x = ext_note[kk] - 1u;
+                ext_note[kk] = 0;
+                if (!midi_local_held(x)) {
+                    input_off(TSEL, x);
+                    midi_out_event(0x08u | 0x80u << 8 | x << 16);
+                }
+            }
+            continue;
+        }
+        if (ext_note[kk] || kb_boot_hold || org_dbp_mode)
+            continue;
+        x = (uint32_t)clamp(53 + (int32_t)kk - (int32_t)SMK_KEY_F3 + 12 * song.octave + TSEL->p[P_TRANS], 0, 127);
+        ext_note[kk] = (uint8_t)(x + 1u);
+        if (midi_note_held(TSEL, x))
+            continue;
+        input_on(TSEL, x, KB_VEL);
+        midi_out_event(0x09u | 0x90u << 8 | x << 16 | KB_VEL << 24);
+    }
+}
+#endif
+
 static void keyboard_block(void)
 {
     static uint8_t dbp_was;
     uint32_t cur = fm1_in.notes, ch, k;
+#if BOARD_SMK37
+    ext_keys_block();
+#endif
     if (org_dbp_mode != dbp_was) {                /* DRAWBAR PRESET MODE (0.9.32) coming in: the keys held let go, silent */
         dbp_was = org_dbp_mode;
         if (dbp_was)

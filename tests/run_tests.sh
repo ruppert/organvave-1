@@ -90,6 +90,8 @@ run "update loader, SMK-37 Pro: app area 0x4000-0x9CFFF, protected ranges untouc
 
 $HC -o "$OUT/organ_app_test" tests/organ_app_test.c -lm
 run "the organ's app: HOME and DRAWBARS (the knobs, SELECT, a knob on HOME), PRESETS over the factory and the user presets, SAVE, GLO, octave, keys and MIDI to the organ" "$OUT/organ_app_test" "$OUT/oa"
+$HC -DBOARD_SMK37=1 -Ifirmware/hal -o "$OUT/smk_organ_test" tests/smk_organ_test.c -lm
+run "SMK-37 port: the organ's mapping (smk37-port.yaml): the outer keys, the pads (drawbar sets, switches, their lights), the faders (banks, soft takeover), the mod wheel, the pedal, < >, the diagnostics page, the knobs" "$OUT/smk_organ_test"
 $HC -O2 -o "$OUT/organ_test" tests/organ_test.c -lm
 run "the organ's tone generator against setBfree: the temperaments' wheels, the footages, the drawbar law, nine cases' levels and attacks (clicks, crosstalk, key compression, swell), bounds, silence" "$OUT/organ_test"
 $HC -O2 -o "$OUT/organ_adv_test" tests/organ_adv_test.c -lm
