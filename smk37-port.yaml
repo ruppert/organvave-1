@@ -1,0 +1,113 @@
+# smk37-port.yaml: every decision for the SMK-37 port of OrganVave-1, in one place.
+# The template is from github.com/genkigenki/fm1-to-smk37 (the porting kit, CC BY-NC 4.0); the answers are the owner's
+# (2026-11-10). Change this file first, then the code. Patterns: the kit's docs/06-mapping-patterns.md.
+
+firmware:
+  name: "OrganVave-1"       # unchanged on the SMK-37
+  upstream: ""              # the owner's own firmware (github.com/ruppert/organvave-1); no upstream pull request
+  base: "v0.9.45 (main 9e49485)"
+  family: felucca           # FMini-1 -> Felucca 1.6.1
+  board_layer: felucca      # genkigenki/Felucca smk37 (on Felucca 1.6, 1727537..), by area: the tree was slimmed
+  lost_on_smk:
+    - TRS MIDI IN (the SMK's jack is MIDI OUT; PH8 is a key row). USB MIDI stays.
+    - the stock firmware's settings area is cleared on the first boot (the calibration and the way back stay)
+  priorities:
+    - the organ plays on all 37 keys with velocity off (an organ), splits and octaves as on the FM-1
+    - drawbars on the faders, the preset keys on the pads, the Leslie on the mod wheel and the pedal
+    - the FM-1 build byte-identical
+
+delivery:
+  mode: own                 # the owner's firmware: branch organvave-37 of ruppert/organvave-1
+  package: "organvave-1-smk37.fwsc, organvave-1-smk37-elite.fwsc, organvave-1-smk37-mke.fwsc"
+  usb_name: ""              # the firmware's own (unchanged)
+  data_family: "ORGVAVE"    # own family (7 letters): other firmwares' data is cleared on a switch
+  copyright: "Guilherme Ruppert (OrganVave-1)"
+
+models: [pro, elite, mke]
+
+keys:
+  middle: fm1               # keys 5..31 (F3..G5) = the FM-1's 27 keys
+  outer: extend             # owner: all 37 keys play the organ (C3..C6); the manual split, the octaves as on the FM-1
+  velocity: organ           # an organ has none: the notes play as on the FM-1 (to confirm on the unit)
+
+pads:                       # owner: "teclas de preset" (a Hammond's reverse-coloured preset keys). PROPOSED LAYOUT, to approve:
+  pattern: custom
+  order: reading            # pads 1-8 top row (hardware 0..7), 9-16 bottom (8..15)
+  top_row:                  # the upper manual's drawbar sets (DRAWBAR PRESET MODE's OA_DBP, its first eight)
+    - "1: 800000000"
+    - "2: 828000000"
+    - "3: 008000000"
+    - "4: 800000008"
+    - "5: 888000000"
+    - "6: 888800000"
+    - "7: 888000007"
+    - "8: 800008888"
+  bottom_row:               # the switches, lit by their state
+    - "9: LESLIE SLOW / FAST"
+    - "10: UPPER VIB / CHORUS on/off (UP tab)"
+    - "11: PERCUSSION on/off"
+    - "12: PERC SOFT"
+    - "13: PERC FAST"
+    - "14: PERC 3RD"
+    - "15: OVERDRIVE (TUBE DRIVE 2.5) on/off"
+    - "16: REVERB on/off"
+  colours: "drawbar sets cream (the bright one is the set playing), switches lit when on (colour per group: Leslie red, vibrato blue, percussion white, drive orange, reverb green)"
+  idle: dim
+  velocity: false
+
+faders:                     # owner: drawbars in banks
+  pattern: banks
+  takeover: soft            # a fader acts only once it moves (also after a bank change)
+  bank_button: FADER BANK
+  banks:                    # of the manual KNOB BANK picks (UPPER by default)
+    A: ["16'", "5 1/3'", "8'", "4'"]
+    B: ["2 2/3'", "2'", "1 3/5'", "1 1/3'"]
+    C: ["1'", "EXPR", "-", "-"]
+  screen: bar               # a short overlay: the bank, the four drawbars, the value moved
+
+wheels:
+  pitch:
+    target: off             # an organ has no bend
+  mod:
+    target: leslie          # owner: up FAST, down SLOW (a switch with hysteresis: past 2/3 FAST, under 1/3 SLOW)
+  calibration: auto
+
+rules:
+  no_doubles: true
+  doubles_allowed:          # the owner's choices: the Leslie on the mod wheel, the pedal and pad 9
+    - leslie speed: mod wheel, pedal, pad 9
+
+knobs:                      # owner: K1 MASTER, K2 PRESETS, K3 SELECT, K4 ALGORITHM, K5-K8 KNOB 1-4
+  K1: master
+  K2: presets
+  K3: select
+  K4: algorithm
+  K5: knob 1
+  K6: knob 2
+  K7: knob 3
+  K8: knob 4
+  step: detent
+
+buttons:
+  map: printed
+  names: firmware
+  extra:                    # ASSUMED (the owner left it open): the recommended choice
+    KNOB BANK: "the manual the faders set: UPPER, LOWER, PEDAL (a header shows it)"
+    FADER BANK: "the drawbar bank A, B, C"
+    "<": "preset back"
+    ">": "preset forward"
+
+screen:
+  style: keep               # the FM-1 UI (240 x 240, the same panel)
+  rules:
+    - the screen shows what you touch first
+    - no hidden modes
+
+pedal: leslie               # ASSUMED (left open): a press switches the Leslie SLOW / FAST
+
+diagnostics: screen         # ASSUMED (left open): the serial console is gone from OrganVave-1; an SMK-only page shows
+                            # keys, pads, faders, wheels, buttons and encoders live (a power-on combo opens it)
+
+open_questions:
+  - the pads' layout above (which eight drawbar sets, which eight switches)
+  - fader bank C: 1' and EXPR, or another use for its two free faders
