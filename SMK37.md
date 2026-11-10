@@ -72,7 +72,12 @@ python3 tools/fm1_install.py build/organvave-1-smk37.fwsc
 ```
 
 `fm1_install.py` needs `mido` and `python-rtmidi` (`pip3 install mido python-rtmidi`). It checks that the package is
-for the connected model. (The site's web installer publishes the FM-1 package only.)
+for the connected model.
+
+Or from the browser (Chrome or Edge): **<https://ruppert.github.io/organvave-1/smk.html>**. The page asks the keyboard for
+its model and installs that model's package; it refuses an FM-1 and holds Install until you confirm the backup. It is
+`web/site_smk.html`, built by `web/make_smk_site.py` (tests: `web/test_smk_site.mjs`); the site's workflow on `main`
+builds the three packages from this branch and publishes the page.
 
 ## Going back to the stock firmware
 
