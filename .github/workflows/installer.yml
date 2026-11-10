@@ -52,6 +52,25 @@ jobs:
           cp -r docs/emu _site/emu
           echo "OrganVave-1 v$VERSION: the installer, the patch editor and the emulator" >> "$GITHUB_STEP_SUMMARY"
 
+      # the SMK-37 port lives on the branch organvave-37 (SMK37.md there): its three packages (SMK-37 Pro, Elite, MKE-P37)
+      # and its installer page, smk.html (web/make_smk_site.py there). A failure here leaves the FM-1 site as it is.
+      # A change on the branch is published by the next run on main: a push here, or Actions > Installer > Run workflow.
+      - uses: actions/checkout@v4
+        with:
+          ref: organvave-37
+          path: smk-src
+          submodules: recursive
+
+      - name: The SMK-37 installer (smk.html, from organvave-37)
+        continue-on-error: true
+        working-directory: smk-src
+        run: |
+          for m in pro elite mke; do BOARD=smk37 MODEL=$m ./build.sh; done
+          SMKV=$(sed -n 's/^#define ORGANVAVE_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
+          python3 web/make_smk_site.py ../_site "$SMKV" build/organvave-1-smk37.fwsc build/organvave-1-smk37-elite.fwsc \
+              build/organvave-1-smk37-mke.fwsc
+          echo "SMK-37 v$SMKV (organvave-37 $(git rev-parse --short HEAD)): smk.html" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
