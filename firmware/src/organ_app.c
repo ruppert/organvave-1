@@ -1226,8 +1226,9 @@ static void scr_home(void)
     oa_preset_label(num, nm);
     cv_rect(0, 0, 240, 240, RGB565(0x0b, 0x0b, 0x0b));
     /* the wood rails and the frame */
-    wood(0, HU(64), HU(20), 240 - HU(64));
-    wood(HU(557), HU(64), 240 - HU(557), 240 - HU(64));
+    /* the side frames: the owner's pictures (0.9.53), 8 x 213 px each */
+    art_blit(0, HU(64), HOME_FRAME_W, HOME_FRAME_H, HOME_FRAME[0]);
+    art_blit(HU(557), HU(64), HOME_FRAME_W, HOME_FRAME_H, HOME_FRAME[1]);
     /* the header: the number and the name, the battery */
     cv_rect(HU(20), 0, HU(537), HU(62), HEADBG);
     ltext(HU(20), HU(12), &AF_N, num, CREAM_W, HEADBG);                 /* the number and the name: one size, a gap between */

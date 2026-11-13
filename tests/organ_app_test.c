@@ -404,6 +404,12 @@ int main(int argc, char **argv)
                         uint16_t a1 = (uint16_t)((host_screen[HU(340) * 240 + 4 + 157] >> 8) | (host_screen[HU(340) * 240 + 4 + 157] << 8));
                         bad += check("  .. the Lower label's box is as narrow as Upper's", a0 == 0xffff && a1 == 0xffff);
                     }
+                    {   /* the side frames are the owner's pictures (0.9.53): a pixel of each, halfway down */
+                        uint32_t yy = HU(64) + 100u;
+                        uint16_t fl = (uint16_t)((host_screen[yy * 240 + 3] >> 8) | (host_screen[yy * 240 + 3] << 8));
+                        uint16_t fr = (uint16_t)((host_screen[yy * 240 + HU(557) + 3] >> 8) | (host_screen[yy * 240 + HU(557) + 3] << 8));
+                        bad += check("  .. the side frames are the pictures", fl == HOME_FRAME[0][100 * HOME_FRAME_W + 3] && fr == HOME_FRAME[1][100 * HOME_FRAME_W + 3]);
+                    }
                 }
             }
             turn(EN_SELECT, 2);

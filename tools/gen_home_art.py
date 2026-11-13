@@ -7,7 +7,9 @@
 
 The nine drawbar heads are crops of the reference picture (docs/drawbar-heads-ref.png), one per drawbar, resized to the
 HOME's size (18 x 29 px) and stored as RGB565; a smaller set (14 x 23 px, 0.9.47) for HOME 2's pedal and lower drawbars,
-18 px apart. The PERC label is the text rotated 90 degrees counter-clockwise, on black.
+18 px apart.
+The two side frames (0.9.53, the owner's pictures docs/home-frame-left.png and docs/home-frame-right.png) are resized to
+the frames' size on HOME (8 x 213 px, below the header) and stored as RGB565. The PERC label is the text rotated 90 degrees counter-clockwise, on black.
 """
 import math
 from pathlib import Path
@@ -20,6 +22,8 @@ OUT = ROOT / "firmware" / "src" / "organ_home_art.h"
 
 HEAD_W, HEAD_H = 18, 29
 SMALL_W, SMALL_H = 14, 23                            # HOME 2 (the pedal's two and the lower's nine, 18 px apart)
+FRAME_W, FRAME_H = 8, 213                            # HOME's side frames: HU(20) wide, from HU(64) to the bottom
+FRAMES = [ROOT / "docs" / "home-frame-left.png", ROOT / "docs" / "home-frame-right.png"]
 CENTERS = [55 + i * 93.5 for i in range(9)]           # the nine heads' centres in the reference (px)
 CROP_X, CROP_Y0, CROP_Y1 = 35, 292, 412              # half width of a head, its top and bottom rows
 
@@ -76,6 +80,15 @@ def main():
     ]
     for h in heads(SMALL_W, SMALL_H):
         lines.append("    {" + c_array(h) + "},")
+    lines += [
+        "};",
+        f"#define HOME_FRAME_W {FRAME_W}",
+        f"#define HOME_FRAME_H {FRAME_H}",
+        "/* HOME's side frames, left and right (the owner's pictures, resized) */",
+        f"static const uint16_t HOME_FRAME[2][{FRAME_W * FRAME_H}] = {{",
+    ]
+    for f in FRAMES:
+        lines.append("    {" + c_array(Image.open(f).convert("RGB").resize((FRAME_W, FRAME_H), Image.LANCZOS)) + "},")
     lines += [
         "};",
         f"#define HOME_PERC_W {pc.width}",
