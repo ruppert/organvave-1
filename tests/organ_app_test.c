@@ -399,6 +399,11 @@ int main(int argc, char **argv)
                     uint16_t g1 = (uint16_t)((host_screen[HU(340) * 240 + 4 + 61] >> 8) | (host_screen[HU(340) * 240 + 4 + 61] << 8));
                     bad += check("  .. HOME 2's rules: under the pedal (0.9.50) and under the lower, 11 px apart (0.9.51)",
                                  lp == 0xffff && pp == 0xffff && g0 != 0xffff && g1 != 0xffff);
+                    {   /* the Lower label's box: 34 px (0.9.52), the rule reaches 4 px from its text */
+                        uint16_t a0 = (uint16_t)((host_screen[HU(340) * 240 + 4 + 122] >> 8) | (host_screen[HU(340) * 240 + 4 + 122] << 8));
+                        uint16_t a1 = (uint16_t)((host_screen[HU(340) * 240 + 4 + 157] >> 8) | (host_screen[HU(340) * 240 + 4 + 157] << 8));
+                        bad += check("  .. the Lower label's box is as narrow as Upper's", a0 == 0xffff && a1 == 0xffff);
+                    }
                 }
             }
             turn(EN_SELECT, 2);
