@@ -2029,7 +2029,7 @@ static void oa_leds(void)
     fm1_led_key(panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
     fm1_led_key(panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     fm1_led_key(panel.btn[B_ENV], org_patch[OP_PERC] != 0);
-    fm1_led_key(panel.btn[B_LFO], org_patch[OP_VIB] != 0u && vib_up());   /* the UP tab (0.9.46) */
+    fm1_led_key(panel.btn[B_LFO], vib_on() != 0);
     fm1_led_key(panel.btn[B_SAVE], oa_sv);
     fm1_led_key(panel.btn[B_GLO], oa_gl != 0u);
     fm1_led_key(panel.btn[B_ARP], oa_dbp != 0u);
