@@ -1258,8 +1258,8 @@ static void scr_home(void)
                 }
                 for (dv = 0; dv < (int32_t)v; dv++)        /* a dot per step, in place of the number */
                     cv_rect(c - 1, top + HU10(217) * dv + HU10(217) / 2 - 1, 2, 2, RGB565(0xff, 0xff, 0xff));
-                cv_rect(c - 6, headtop, 12, 7, RGB565(0xf4, 0xf1, 0xea));
-                cv_rect(c - 6, headtop + 6, 12, 1, RGB565(0x9a, 0x94, 0x88));
+                /* the head (0.9.47, owner: as the upper's): the lower's by its place, the pedal's by its footage (16' brown, 8' white) */
+                art_blit(c - HOME_HEAD_SW / 2, headtop, HOME_HEAD_SW, HOME_HEAD_SH, HOME_HEAD_S[n < 2 ? 2 * n : n - 2]);
             }
         }
     }

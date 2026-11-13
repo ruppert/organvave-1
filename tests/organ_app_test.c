@@ -381,6 +381,18 @@ int main(int argc, char **argv)
             bad += check("  .. SELECT +1: region 1, the lower's bars 1-4", oa_home_reg == 1);
             turn(EN_K1, -1);
             bad += check("  .. K1 turns the lower's bar 1 up", org_patch[OP_LB] == 5);
+            {   /* the lower's heads are the upper's art, smaller (0.9.47): bar 1's (brown) under its stem, at its step */
+                int32_t ht = HU10(930 + 217 * 5);
+                uint16_t px;
+                uint32_t mu = oa_msg_until, pu = oa_pp_until;
+                oa_msg_until = 0;                         /* (no value pop-up over the bars) */
+                oa_pp_until = 0;
+                (void)frame_hash();
+                oa_msg_until = mu;
+                oa_pp_until = pu;
+                px = (uint16_t)((host_screen[(ht + 11) * 240 + 68] >> 8) | (host_screen[(ht + 11) * 240 + 68] << 8));
+                bad += check("  .. HOME 2 draws the lower's bar 1 with its head (the small art)", px == HOME_HEAD_S[0][11 * HOME_HEAD_SW + 7]);
+            }
             turn(EN_SELECT, 2);
             bad += check("  .. SELECT +2: region 3, the lower's bars 6-9", oa_home_reg == 3);
             org_set(OP_LB + 5, 4u);
@@ -790,20 +802,20 @@ int main(int argc, char **argv)
             oa_page = 4;
         }
         if (shot_dir) {
-            static const char *const N[10] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq", "lower", "advanced"};
+            static const char *const N[11] = {"home", "drawbars", "perc", "rotary", "drive", "reverb", "delay", "eq", "lower", "advanced", "home2"};
             uint32_t pg;
             org_set(OP_ROT, 1);
             org_set(OP_DRV, 1);
             oa_msg_until = 0;
             oa_pp_until = 0;
-            for (pg = 0; pg < 10u; pg++) {
+            for (pg = 0; pg < 11u; pg++) {
                 char path[200];
                 FILE *f;
                 if (pg == 7u) {                               /* (the EQ's shot shows something set) */
                     org_set(OP_EQ, 1); org_set(OP_EQ_LOW, eq_byte(5)); org_set(OP_EQ_MID, eq_byte(-3)); org_set(OP_EQ_FREQ, eq_fbyte(7));
                     org_set(OP_EQ_HIGH, eq_byte(2));
                 }
-                oa_page = (uint8_t)(pg == 9u ? 8u : pg == 8u ? 1u : pg);
+                oa_page = (uint8_t)(pg == 10u ? 9u : pg == 9u ? 8u : pg == 8u ? 1u : pg);
                 oa_man = (uint8_t)(pg == 8u);
                 oa_sel = (uint8_t)(pg == 8u ? 3u : 0u);
                 (void)frame_hash();
