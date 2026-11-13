@@ -1299,7 +1299,7 @@ static void scr_home(void)
     if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
         cv_rect(H2X + 15, HU(331), 30, 20, BLACK);                /* a narrow box (the rule is short): 6 px of rule each side */
         ctext(H2X + 30, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
-        cv_rect(H2X + 118, HU(331), 44, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's */
+        cv_rect(H2X + 123, HU(331), 34, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's (34 px, 0.9.52) */
         ctext(H2X + 140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
     } else {
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
