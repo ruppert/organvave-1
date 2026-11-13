@@ -30,11 +30,11 @@ MID_W, MID_H = (537 * 240 + 288) // 577, 12           # HOME's middle frame: HU(
 
 
 def mid_crop():
-    """the top frame's picture cut (not resized) to the middle frame's size: a window at the picture's centre, native pixels"""
-    im = Image.open(TOP).convert("RGB")
-    x0 = (im.width - MID_W) // 2
-    y0 = (im.height - MID_H) // 2
-    return im.crop((x0, y0, x0 + MID_W, y0 + MID_H))
+    """the top frame's picture, resized to the top frame's size exactly as the top frame is, then cut to the middle frame's
+    height from its centre: the same grain and scale as the top (0.9.58)"""
+    im = Image.open(TOP).convert("RGB").resize((TOP_W, TOP_H), Image.LANCZOS)
+    y0 = (TOP_H - MID_H) // 2
+    return im.crop((0, y0, TOP_W, y0 + MID_H))
 CENTERS = [55 + i * 93.5 for i in range(9)]           # the nine heads' centres in the reference (px)
 CROP_X, CROP_Y0, CROP_Y1 = 35, 292, 412              # half width of a head, its top and bottom rows
 
