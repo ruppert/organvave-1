@@ -1213,6 +1213,7 @@ static int32_t home_ang_rev(void)
     int32_t r = TSEL->p[P_REV];
     return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
 }
+#define H2X 8                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rule and labels, 8 px right (0.9.49, owner) */
 static void scr_home(void)
 {
     static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x00, 0x00, 0x00);
@@ -1245,7 +1246,7 @@ static void scr_home(void)
         static const uint8_t PB_BAR[2] = {0, 2};
         int32_t n;
         for (n = 0; n < 11; n++) {
-            int32_t c = n < 2 ? 20 + 18 * n : 68 + 18 * (n - 2), top10 = 930, dv;
+            int32_t c = H2X + (n < 2 ? 20 + 18 * n : 68 + 18 * (n - 2)), top10 = 930, dv;
             v = n < 2 ? org_patch[OP_PB + PB_BAR[n]] : org_patch[OP_LB + (uint32_t)(n - 2)];
             if (v > 8u)
                 v = 8u;
@@ -1268,10 +1269,10 @@ static void scr_home(void)
     {   /* the region's mark: one orange line across the top of the drawbars it picks (bars 1-4, 5-8, 6-9) */
         static const uint8_t FIRST[3] = {0, 4, 5}, LAST[3] = {3, 7, 8};
         if (pl && oa_home_reg == 0u) {                    /* HOME 2: the pedal's two stems, 16' and 8' */
-            cv_rect(20 - 5 - 6, HU10(930) - 2, (38 + 5 + 6) - (20 - 5 - 6), 2, C_ORANGE);
+            cv_rect(H2X + 20 - 5 - 6, HU10(930) - 2, (38 + 5 + 6) - (20 - 5 - 6), 2, C_ORANGE);
         } else if (pl && oa_home_reg <= 3u) {             /* HOME 2: the lower's regions: 1-4, 5-8, 6-9 */
             static const uint8_t LFIRST[4] = {0, 0, 4, 5}, LLAST[4] = {0, 3, 7, 8};
-            int32_t l = 68 + 18 * (int32_t)LFIRST[oa_home_reg] - 6, r = 68 + 18 * (int32_t)LLAST[oa_home_reg] + 6;
+            int32_t l = H2X + 68 + 18 * (int32_t)LFIRST[oa_home_reg] - 6, r = H2X + 68 + 18 * (int32_t)LLAST[oa_home_reg] + 6;
             cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);
         }
         if (oa_home_reg < 3u && !pl) {
@@ -1282,13 +1283,13 @@ static void scr_home(void)
     }
     /* the UPPER label on its rule, between the drawbars and the tabs; HOME 2: the rule under the lower's nine only (0.9.48, owner) */
     if (pl)
-        cv_rect(68 - 9, HU(340), 18 * 8 + 18, 1, RGB565(0xff, 0xff, 0xff));
+        cv_rect(H2X + 68 - 9, HU(340), 18 * 8 + 18, 1, RGB565(0xff, 0xff, 0xff));
     else
         cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
     if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
-        ctext(29, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
-        cv_rect(118, HU(331), 44, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's */
-        ctext(140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
+        ctext(H2X + 29, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
+        cv_rect(H2X + 118, HU(331), 44, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's */
+        ctext(H2X + 140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
     } else {
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
     ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
