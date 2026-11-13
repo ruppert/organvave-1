@@ -390,12 +390,12 @@ int main(int argc, char **argv)
                 (void)frame_hash();
                 oa_msg_until = mu;
                 oa_pp_until = pu;
-                px = (uint16_t)((host_screen[(ht + 11) * 240 + 76] >> 8) | (host_screen[(ht + 11) * 240 + 76] << 8));
-                bad += check("  .. HOME 2 draws the lower's bar 1 with its head (the small art), 8 px right (0.9.49)", px == HOME_HEAD_S[0][11 * HOME_HEAD_SW + 7]);
+                px = (uint16_t)((host_screen[(ht + 11) * 240 + 72] >> 8) | (host_screen[(ht + 11) * 240 + 72] << 8));
+                bad += check("  .. HOME 2 draws the lower's bar 1 with its head (the small art), 4 px right (0.9.50)", px == HOME_HEAD_S[0][11 * HOME_HEAD_SW + 7]);
                 {   /* the rule under the drawbars: under the lower's nine only (0.9.48), not under the pedal's */
-                    uint16_t pp = (uint16_t)((host_screen[HU(340) * 240 + 37 - 20] >> 8) | (host_screen[HU(340) * 240 + 37 - 20] << 8));
+                    uint16_t pp = (uint16_t)((host_screen[HU(340) * 240 + 12] >> 8) | (host_screen[HU(340) * 240 + 12] << 8));
                     uint16_t lp = (uint16_t)((host_screen[HU(340) * 240 + 80] >> 8) | (host_screen[HU(340) * 240 + 80] << 8));
-                    bad += check("  .. HOME 2's rule: under the lower, not under the pedal", lp == 0xffff && pp != 0xffff);
+                    bad += check("  .. HOME 2's rules: under the pedal (0.9.50) and under the lower", lp == 0xffff && pp == 0xffff);
                 }
             }
             turn(EN_SELECT, 2);

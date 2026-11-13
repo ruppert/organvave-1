@@ -1219,7 +1219,7 @@ static int32_t home_ang_rev(void)
     int32_t r = TSEL->p[P_REV];
     return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
 }
-#define H2X 8                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rule and labels, 8 px right (0.9.49, owner) */
+#define H2X 4                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rules and labels, 4 px right (0.9.49 8, 0.9.50 4: owner) */
 static void scr_home(void)
 {
     static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x00, 0x00, 0x00);
@@ -1287,13 +1287,17 @@ static void scr_home(void)
             cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);     /* on the wood above, touching the stems */
         }
     }
-    /* the UPPER label on its rule, between the drawbars and the tabs; HOME 2: the rule under the lower's nine only (0.9.48, owner) */
-    if (pl)
+    /* the UPPER label on its rule, between the drawbars and the tabs; HOME 2: a rule under the pedal's two and one under the
+     * lower's nine (0.9.48, 0.9.50: owner) */
+    if (pl) {
+        cv_rect(H2X + 6, HU(340), 48, 1, RGB565(0xff, 0xff, 0xff));          /* under the pedal's two (0.9.50, owner), 5 px short of the lower's */
         cv_rect(H2X + 68 - 9, HU(340), 18 * 8 + 18, 1, RGB565(0xff, 0xff, 0xff));
+    }
     else
         cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
     if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
-        ctext(H2X + 29, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
+        cv_rect(H2X + 15, HU(331), 30, 20, BLACK);                /* a narrow box (the rule is short): 9 px of rule each side */
+        ctext(H2X + 30, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
         cv_rect(H2X + 118, HU(331), 44, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's */
         ctext(H2X + 140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
     } else {
