@@ -99,9 +99,16 @@ int main(int argc, char **argv)
         turn(EN_K1 + 1, 1);
         bad += check("  .. vibrato: K2 (LO) on: V3", org_patch[OP_VIB] == 3);
         turn(EN_K1 + 2, 1);
-        bad += check("  .. K3 turns the selector clockwise: C3", org_patch[OP_VIB] == 6);
+        bad += check("  .. K3 turns the selector clockwise (V1 C1 V2 C2 V3 C3): C3", org_patch[OP_VIB] == 6);
         turn(EN_K1 + 2, 9);
-        bad += check("  .. and stops at C2, the last position", org_patch[OP_VIB] == 5);
+        bad += check("  .. and stops at C3, the last position", org_patch[OP_VIB] == 6);
+        turn(EN_K1 + 2, -2);
+        bad += check("  .. K3 two to the left: V3, then C2", org_patch[OP_VIB] == 5);
+        turn(EN_K1 + 2, -9);
+        bad += check("  .. and stops at V1, the first", org_patch[OP_VIB] == 1);
+        org_set(OP_VIB, 0u);
+        turn(EN_K1 + 2, 2);
+        bad += check("  .. no type (an older patch): K3 two to the right, V1 then C1", org_patch[OP_VIB] == 4);
         turn(EN_K1 + 1, -1);
         bad += check("  .. K2 down: the lower manual is off the scanner; the upper is still on it", org_patch[OP_VIB_LO] == 0 && vib_up() == 1 && vib_on() == 1);
         turn(EN_K1, -1);
@@ -340,10 +347,11 @@ int main(int argc, char **argv)
         bad += check("FX again: HOME", oa_page == 0);
         press(B_ENV);
         bad += check("ENV on HOME: the percussion on", org_patch[OP_PERC] == 1);
+        org_set(OP_VIB_UP, 1u); org_set(OP_VIB_LO, 0u); org_set(OP_VIB_ROUTE, 1u);
         press(B_LFO);
-        bad += check("LFO: the vibrato to CHO 3 and round to off", org_patch[OP_VIB] == 0);
+        bad += check("LFO: the UP tab off, the selector stays (CHO 3)", org_patch[OP_VIB_UP] == 0 && org_patch[OP_VIB] == 6);
         press(B_LFO);
-        bad += check("  .. and to VIB 1", org_patch[OP_VIB] == 1);
+        bad += check("  .. and on again, still CHO 3", org_patch[OP_VIB_UP] == 1 && org_patch[OP_VIB] == 6 && org_patch[OP_VIB_LO] == 0);
         {   /* HOME again (page 9): SELECT as HOME's; region 0 is the pedal (K1, K2: 16', 8'), then the lower's three */
             uint8_t pb0 = org_patch[OP_PB], pb2 = org_patch[OP_PB + 2], lb0 = org_patch[OP_LB], lb4 = org_patch[OP_LB + 4], lb5 = org_patch[OP_LB + 5];
             press(B_HOME);
