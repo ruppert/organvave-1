@@ -24,6 +24,8 @@ HEAD_W, HEAD_H = 18, 29
 SMALL_W, SMALL_H = 14, 23                            # HOME 2 (the pedal's two and the lower's nine, 18 px apart)
 FRAME_W, FRAME_H = 8, 213                            # HOME's side frames: HU(20) wide, from HU(64) to the bottom
 FRAMES = [ROOT / "docs" / "home-frame-left.png", ROOT / "docs" / "home-frame-right.png"]
+TOP_W, TOP_H = (537 * 240 + 288) // 577, 29           # HOME's top frame: HU(537) x 29 px, under the header (0.9.54)
+TOP = ROOT / "docs" / "home-frame-top.png"            # the owner's wood band (its white margin cropped off)
 CENTERS = [55 + i * 93.5 for i in range(9)]           # the nine heads' centres in the reference (px)
 CROP_X, CROP_Y0, CROP_Y1 = 35, 292, 412              # half width of a head, its top and bottom rows
 
@@ -91,6 +93,11 @@ def main():
         lines.append("    {" + c_array(Image.open(f).convert("RGB").resize((FRAME_W, FRAME_H), Image.LANCZOS)) + "},")
     lines += [
         "};",
+        f"#define HOME_TOP_W {TOP_W}",
+        f"#define HOME_TOP_H {TOP_H}",
+        "/* HOME's top frame, under the header (the owner's picture, resized) */",
+        f"static const uint16_t HOME_TOP[{TOP_W * TOP_H}] = {{"
+        + c_array(Image.open(TOP).convert("RGB").resize((TOP_W, TOP_H), Image.LANCZOS)) + "};",
         f"#define HOME_PERC_W {pc.width}",
         f"#define HOME_PERC_H {pc.height}",
         "/* sin(a) x 1000 for a = 0 .. 90 degrees: the knobs' and the selector's pointers (no floating point in the firmware) */",

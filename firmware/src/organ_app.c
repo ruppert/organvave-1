@@ -1247,7 +1247,7 @@ static void scr_home(void)
     cv_rect(213, 11, 4, 5, CREAM_W);
     cv_rect(218, 11, 3, 5, CREAM_W);
     /* the wood under the header; the upper drawbars on black */
-    wood(HU(20), HU(64), HU(537), HU(29));
+    art_blit(HU(20), HU(64), HOME_TOP_W, HOME_TOP_H, HOME_TOP);       /* the top frame: the owner's wood band (0.9.54) */
     cv_rect(HU(20), HU(93), HU(537), HU(270), BLACK);
     if (pl) {                                              /* HOME again: the pedal's 16' and 8' (PB 0, 2), a gap, the lower manual's nine (0.10.4) */
         static const uint8_t PB_BAR[2] = {0, 2};
@@ -1372,7 +1372,6 @@ static void scr_home(void)
         cv_frame(HU(268) - 3, HU(468), HU(537) - HU(268) + 6, HU(562) - HU(468), C_ORANGE);   /* 3 px wider each side */
     }
     }
-    wood(HU(20), HU(565), HU(537), 240 - HU(565));
 }
 
 /* the bars of the DRAWBARS page: UPPER nine; LOWER / PEDAL eleven, the pedal's two (16' and 8') on the left, the lower's nine on the right.
