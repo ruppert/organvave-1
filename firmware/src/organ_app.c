@@ -13,7 +13,7 @@
  * (the dialog: PRESETS the slot, SELECT / ALGORITHM the name, SAVE again writes, HOME or EDIT cancels), GLO (MIDI IN,
  * MIDI CHANNEL, ABOUT), OCT- / OCT+ (the keys' octave, -2 .. +2). PRESETS: the factory presets, then the user ones.
  * PERC & VIB (FX, 0.2.0): KNOBS 1..4 switch the percussion (on, soft, fast, the 2 2/3' third), ALGORITHM turns the
- * vibrato's selector (off, VIB 1..3, CHO 1..3). ENV switches the percussion and LFO the vibrato's UP tab (0.9.46) (the
+ * vibrato's selector (off, VIB 1..3, CHO 1..3). ENV switches the percussion and LFO turns the vibrato on HOME too (the
  * panel's labels are the best guess until the calibration: HARDWARE CALIBRATION). The rotary and drive wait for 0.3.0.
  * Included by felucca.c before main.c. */
 
@@ -1216,10 +1216,8 @@ static int32_t home_ang_rev(void)
 static void scr_home(void)
 {
     static const uint16_t BLACK = RGB565(0x00, 0x00, 0x00), CREAM_W = RGB565(0xf4, 0xf1, 0xea), HEADBG = RGB565(0x00, 0x00, 0x00);
-    /* the selector (0.9.46, owner): V1 C1 V2 C2 V3 C3 clockwise, 60 degrees apart, from V1 at -150 (lower left, the minimum) to
-     * C3 at +150 (lower right, the maximum); the gap at the bottom is the knob's stop */
-    static const char *const ROT_POS[6] = {"V1", "C1", "V2", "C2", "V3", "C3"};
-    static const uint8_t VIB_POS[7] = {0, 0, 2, 4, 1, 3, 5};                     /* OP_VIB 0 off .. 6 C3 -> position */
+    static const char *const ROT_POS[6] = {"V3", "C3", "V1", "C1", "V2", "C2"};   /* the selector: from noon, clockwise, 60 degrees */
+    static const uint8_t VIB_POS[7] = {0, 2, 4, 0, 3, 5, 1};                     /* OP_VIB 0 off .. 6 C3 -> position */
     char num[8], nm[16];
     int32_t j, pos, vib, sel, lx, ly, lit;
     uint32_t v;
@@ -1304,14 +1302,14 @@ static void scr_home(void)
     cv_frame(HU(154), HU(372), HU(95), HU(90), RGB565(0x11, 0x11, 0x11));
     pos = vib ? VIB_POS[vib] : 0;
     for (j = 0; j < 6; j++) {
-        int32_t a = -150 + j * 60;
+        int32_t a = j * 60;
         lx = HU10(2015) + home_sin(a) * 14 / 1000 - 6;
         ly = HU(417) - home_cos(a) * 14 / 1000 - 4;
         ctext(lx + 6, ly, &AF_X, ROT_POS[j], j == (int32_t)pos && lit ? C_AMBER : RGB565(0xff, 0xff, 0xff), RGB565(0x10, 0x10, 0x10));
     }
     disc(HU10(2015), HU(417), 8, RGB565(0x11, 0x11, 0x11));
     disc(HU10(2015), HU(417), 7, RGB565(0x33, 0x33, 0x33));
-    cv_line_t(HU10(2015), HU(417), HU10(2015) + home_sin(pos * 60 - 150) * 6 / 1000, HU(417) - home_cos(pos * 60 - 150) * 6 / 1000,
+    cv_line_t(HU10(2015), HU(417), HU10(2015) + home_sin(pos * 60) * 6 / 1000, HU(417) - home_cos(pos * 60) * 6 / 1000,
               lit ? C_AMBER : C_DIM, 2);
     /* PERC, rotated, and the percussion tabs */
     art_blit(HU(310) - 1 - HOME_PERC_W / 2, HU(415) - HOME_PERC_H / 2, HOME_PERC_W, HOME_PERC_H, HOME_PERC);
@@ -1481,17 +1479,15 @@ static void oa_scene(void)
     } else if (oa_pp_on())
         oa_pp_draw();
     if (oa_dbp) {                                         /* DRAWBAR PRESET MODE: over every page, the bars live */
-        /* the title, the bars (x 19 .. 220, 101 px high) and the text under them in AF_S (0.9.46, owner: taller, the text larger;
-         * its first line, 237 px in AF_S, is broken after "Presets"); centred on the screen */
-        int32_t hgt = 6 + AF_M.h + 4 + 101 + 10 + AF_S.h + AF_S.h + 4 + AF_S.h + 8, y0 = (240 - hgt) / 2, by = y0 + 6 + AF_M.h + 4;
-        int32_t ty = by + 101 + 10;
+        /* as small as its contents (0.9.33): the title, the bars (x 19 .. 220, 101 px high), two lines under (0.9.34, the longer
+         * 210 px); centred */
+        int32_t hgt = 6 + AF_M.h + 4 + 101 + 8 + AF_X.h + 2 + AF_X.h + 4, y0 = (240 - hgt) / 2, by = y0 + 6 + AF_M.h + 4;
         cv_rect(7, y0 - 2, 226, hgt + 4, C_ORANGE);
         cv_rect(9, y0, 222, hgt, RGB565(0x00, 0x00, 0x00));
         ctext(120, y0 + 6, &AF_M, "DRAWBAR PRESET MODE", C_AMBER, RGB565(0x00, 0x00, 0x00));
         oa_upper_bars(by - HU10(930));
-        ctext(120, ty, &AF_S, "Middle Octave = Drawbar Presets", C_CREAM, RGB565(0x00, 0x00, 0x00));
-        ctext(120, ty + AF_S.h, &AF_S, "(Black keys)", C_CREAM, RGB565(0x00, 0x00, 0x00));
-        ctext(120, ty + 2 * AF_S.h + 4, &AF_S, "Other Keys: Various switches", C_CREAM, RGB565(0x00, 0x00, 0x00));
+        ctext(120, by + 101 + 8, &AF_X, "Press a note to select drawbar preset (middle octave)", C_CREAM, RGB565(0x00, 0x00, 0x00));
+        ctext(120, by + 101 + 8 + AF_X.h + 2, &AF_X, "Other keys: various functions", C_CREAM, RGB565(0x00, 0x00, 0x00));
     }
     if (oa_fl_on()) {                                     /* a quick message (0.5 s), over the DRAWBAR PRESET pop-up */
         int32_t w = text_w(&AF_M, oa_fl) + 28;
@@ -1723,8 +1719,8 @@ static void oa_buttons(uint32_t pressed)
     }
     if ((pressed >> panel.btn[B_ENV]) & 1u)               /* ENV: the percussion on or off */
         org_set(OP_PERC, !org_patch[OP_PERC]);
-    if ((pressed >> panel.btn[B_LFO]) & 1u)               /* LFO: the UP tab on or off (0.9.46, owner); the selector stays */
-        home_route(0u, org_patch[OP_VIB] != 0u && vib_up() ? -1 : 1);
+    if ((pressed >> panel.btn[B_LFO]) & 1u)               /* LFO: the vibrato's selector, on to the next */
+        org_set(OP_VIB, (org_patch[OP_VIB] + 1u) % 7u);
     if ((pressed >> panel.btn[B_OCTDN]) & 1u)
         song.octave = song.octave > -2 ? song.octave - 1 : song.octave;
     if ((pressed >> panel.btn[B_OCTUP]) & 1u)
@@ -1793,17 +1789,15 @@ static void home_route(uint32_t lo, int32_t s)            /* the UP (lo 0) or LO
     if (s > 0 && org_patch[OP_VIB] == 0u)
         org_set(OP_VIB, 3u);
 }
-static void home_sel(int32_t s)                           /* the chorus selector: clockwise (s up) through its six positions, not cyclic */
+static void home_sel(int32_t s)                           /* the chorus selector: clockwise (s up) through its six positions, not cyclic; off: nothing */
 {
-    static const uint8_t AT[6] = {1, 4, 2, 5, 3, 6};     /* position (clockwise, 0.9.46: V1 C1 V2 C2 V3 C3) -> OP_VIB */
+    static const uint8_t AT[6] = {3, 6, 1, 4, 2, 5};     /* position (from noon, clockwise: V3 C3 V1 C1 V2 C2) -> OP_VIB */
     uint32_t v = org_patch[OP_VIB], p;
     int32_t n = s < 0 ? -s : s, d = s < 0 ? -1 : 1;
-    if (v == 0u || v > 6u) {                              /* no type yet (an older patch): the first detent is V1 */
-        p = 0u;
-        n = d > 0 ? n - 1 : 0;
-    } else
-        for (p = 0; p < 6u && AT[p] != v; p++)
-            ;
+    if (v == 0u || v > 6u)
+        return;
+    for (p = 0; p < 6u && AT[p] != v; p++)
+        ;
     while (n-- > 0 && (d > 0 ? p < 5u : p > 0u))
         p = (uint32_t)((int32_t)p + d);
     org_set(OP_VIB, AT[p]);
@@ -2023,7 +2017,7 @@ static void oa_leds(void)
     led_put(nl, panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
     led_put(nl, panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
-    led_put(nl, panel.btn[B_LFO], org_patch[OP_VIB] != 0u && vib_up());   /* the UP tab, as HOME draws it */
+    led_put(nl, panel.btn[B_LFO], vib_on() != 0);
     led_put(nl, panel.btn[B_SAVE], oa_sv);
     led_put(nl, panel.btn[B_GLO], oa_gl != 0u);
     led_put(nl, panel.btn[B_ARP], oa_dbp != 0u);
