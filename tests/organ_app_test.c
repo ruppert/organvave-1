@@ -409,6 +409,11 @@ int main(int argc, char **argv)
                         uint16_t fl = (uint16_t)((host_screen[yy * 240 + 3] >> 8) | (host_screen[yy * 240 + 3] << 8));
                         uint16_t fr = (uint16_t)((host_screen[yy * 240 + HU(557) + 3] >> 8) | (host_screen[yy * 240 + HU(557) + 3] << 8));
                         bad += check("  .. the side frames are the pictures", fl == HOME_FRAME[0][100 * HOME_FRAME_W + 3] && fr == HOME_FRAME[1][100 * HOME_FRAME_W + 3]);
+                        {   /* the top frame (0.9.54): the owner's band, a pixel of it; no wood at the bottom of HOME */
+                            uint16_t tp = (uint16_t)((host_screen[(HU(64) + 10) * 240 + HU(20) + 40] >> 8) | (host_screen[(HU(64) + 10) * 240 + HU(20) + 40] << 8));
+                            uint16_t bp = (uint16_t)((host_screen[239 * 240 + 120] >> 8) | (host_screen[239 * 240 + 120] << 8));
+                            bad += check("  .. the top frame is the picture, and the bottom has none", tp == HOME_TOP[10 * HOME_TOP_W + 40] && bp == RGB565(0x0b, 0x0b, 0x0b));
+                        }
                     }
                 }
             }
