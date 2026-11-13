@@ -392,6 +392,11 @@ int main(int argc, char **argv)
                 oa_pp_until = pu;
                 px = (uint16_t)((host_screen[(ht + 11) * 240 + 68] >> 8) | (host_screen[(ht + 11) * 240 + 68] << 8));
                 bad += check("  .. HOME 2 draws the lower's bar 1 with its head (the small art)", px == HOME_HEAD_S[0][11 * HOME_HEAD_SW + 7]);
+                {   /* the rule under the drawbars: under the lower's nine only (0.9.48), not under the pedal's */
+                    uint16_t pp = (uint16_t)((host_screen[HU(340) * 240 + 29 - 20] >> 8) | (host_screen[HU(340) * 240 + 29 - 20] << 8));
+                    uint16_t lp = (uint16_t)((host_screen[HU(340) * 240 + 80] >> 8) | (host_screen[HU(340) * 240 + 80] << 8));
+                    bad += check("  .. HOME 2's rule: under the lower, not under the pedal", lp == 0xffff && pp != 0xffff);
+                }
             }
             turn(EN_SELECT, 2);
             bad += check("  .. SELECT +2: region 3, the lower's bars 6-9", oa_home_reg == 3);
