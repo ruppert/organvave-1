@@ -26,6 +26,15 @@ FRAME_W, FRAME_H = 8, 213                            # HOME's side frames: HU(20
 FRAMES = [ROOT / "docs" / "home-frame-left.png", ROOT / "docs" / "home-frame-right.png"]
 TOP_W, TOP_H = (537 * 240 + 288) // 577, 29           # HOME's top frame: HU(537) x 29 px, under the header (0.9.54)
 TOP = ROOT / "docs" / "home-frame-top.png"            # the owner's wood band (its white margin cropped off)
+MID_W, MID_H = (537 * 240 + 288) // 577, 12           # HOME's middle frame: HU(537) x 12 px (0.9.57)
+
+
+def mid_crop():
+    """the top frame's picture cut (not resized) to the middle frame's size: a window at the picture's centre, native pixels"""
+    im = Image.open(TOP).convert("RGB")
+    x0 = (im.width - MID_W) // 2
+    y0 = (im.height - MID_H) // 2
+    return im.crop((x0, y0, x0 + MID_W, y0 + MID_H))
 CENTERS = [55 + i * 93.5 for i in range(9)]           # the nine heads' centres in the reference (px)
 CROP_X, CROP_Y0, CROP_Y1 = 35, 292, 412              # half width of a head, its top and bottom rows
 
@@ -98,6 +107,10 @@ def main():
         "/* HOME's top frame, under the header (the owner's picture, resized) */",
         f"static const uint16_t HOME_TOP[{TOP_W * TOP_H}] = {{"
         + c_array(Image.open(TOP).convert("RGB").resize((TOP_W, TOP_H), Image.LANCZOS)) + "};",
+        f"#define HOME_MID_W {MID_W}",
+        f"#define HOME_MID_H {MID_H}",
+        "/* HOME's middle frame: the top frame's picture, cut to its size (native pixels) */",
+        f"static const uint16_t HOME_MID[{MID_W * MID_H}] = {{" + c_array(mid_crop()) + "};",
         f"#define HOME_PERC_W {pc.width}",
         f"#define HOME_PERC_H {pc.height}",
         "/* sin(a) x 1000 for a = 0 .. 90 degrees: the knobs' and the selector's pointers (no floating point in the firmware) */",

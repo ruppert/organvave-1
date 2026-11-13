@@ -144,16 +144,8 @@ static void rtext(int32_t xr, int32_t ytop, const aafont_t *f, const char *s, ui
 }
 
 /* ----------------------------------------------------- panel elements --- */
-/* the wood's colour at a neutral of the same brightness (0.9.56): the red cast taken off by a part of this */
-static uint16_t wood_neutral(uint16_t c)
-{
-    int32_t r = ((c >> 11) & 31) * 255 / 31, g = ((c >> 5) & 63) * 255 / 63, b = (c & 31) * 255 / 31;
-    int32_t y = (r * 3 + g * 6 + b) / 10;
-    return RGB565(y, y, y);
-}
-/* the wood of the console's cheek blocks and lid: a warm gradient with a wandering grain. neutral: 0..256, the part of the
- * colour taken toward grey (0.9.56: the middle frame, 12 %, a subtle cut of its red) */
-static void wood(int32_t x, int32_t y, int32_t w, int32_t h, int32_t neutral)
+/* the wood of the console's cheek blocks and lid: a warm gradient with a wandering grain */
+static void wood(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     static const uint16_t W[3] = {RGB565(0x5a, 0x2b, 0x12), RGB565(0x86, 0x45, 0x1f), RGB565(0x6a, 0x33, 0x16)};
     int32_t i, j;
@@ -167,8 +159,6 @@ static void wood(int32_t x, int32_t y, int32_t w, int32_t h, int32_t neutral)
                     c = mix(c, RGB565(0x3a, 0x1a, 0x0a), 110);
                 else if (g == 9)
                     c = mix(c, RGB565(0xb0, 0x62, 0x30), 70);
-                if (neutral)
-                    c = mix(c, wood_neutral(c), neutral);
                 cv_pset(i, j, c);
             }
 }
@@ -217,7 +207,7 @@ static void oa_flash(const char *t)
 static const char *const OA_DRV_NAME[DR_TYPES] = {"TUBE DRIVE", "DISTORTION", "SOFT TUBE", "MID DRIVE", "HARD CLIP", "TIGHT TUBE"};
 static void header(const char *page, const char *right)
 {
-    wood(0, 0, 240, 22, 0);
+    wood(0, 0, 240, 22);
     chrome(0, 22, 240, 3);
     {   /* an engraved brass plate for the page name */
         int32_t w = text_w(&AF_S, page) + 12;
@@ -1223,6 +1213,7 @@ static int32_t home_ang_rev(void)
     int32_t r = TSEL->p[P_REV];
     return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
 }
+#define R2_DY 2                                          /* HOME: the second row (the Leslie switch, the knobs and their frame) 2 px lower (0.9.57, owner) */
 #define H2X 4                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rules and labels, 4 px right (0.9.49 8, 0.9.50 4: owner) */
 static void scr_home(void)
 {
@@ -1310,7 +1301,7 @@ static void scr_home(void)
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
     ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
     }
-    wood(HU(20), HU(358), HU(537), HU(12), 31);            /* the middle frame: 12 % less red (0.9.56, owner) */
+    art_blit(HU(20), HU(358), HOME_MID_W, HOME_MID_H, HOME_MID);      /* the middle frame: the top frame's picture, cut (0.9.57, owner) */
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
     cv_rect(HU(20), HU(370), HU(537), HU(94), BLACK);
     vib = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0;
@@ -1337,34 +1328,34 @@ static void scr_home(void)
     home_tab(HU10(4355) + 1, HU(378), HU(51), HU(74), "FAST", org_patch[OP_PERC_FAST] != 0);
     home_tab(HU10(4915) + 2, HU(378), HU(51), HU(74), "3RD", org_patch[OP_PERC_SEL] != 0);
     /* row 2: the rotor switch (SLOW, STOP, FAST: the lever's knob), the four knobs */
-    cv_rect(HU(20), HU(464), HU(537), 1, RGB565(0x55, 0x55, 0x55));
-    cv_rect(HU(20), HU(466), HU(537), HU(103), BLACK);
-    cv_rect(HU(40), HU(470), HU(208), HU(86), RGB565(0x10, 0x10, 0x10));   /* the Leslie's box: a darker grey (0.10.5) */
-    cv_frame(HU(40), HU(470), HU(208), HU(86), RGB565(0x2a, 0x2a, 0x2a));
+    cv_rect(HU(20), HU(464) + R2_DY, HU(537), 1, RGB565(0x55, 0x55, 0x55));
+    cv_rect(HU(20), HU(466) + R2_DY, HU(537), HU(103), BLACK);
+    cv_rect(HU(40), HU(470) + R2_DY, HU(208), HU(86), RGB565(0x10, 0x10, 0x10));   /* the Leslie's box: a darker grey (0.10.5) */
+    cv_frame(HU(40), HU(470) + R2_DY, HU(208), HU(86), RGB565(0x2a, 0x2a, 0x2a));
     sel = !org_patch[OP_ROT] ? 0 : org_patch[OP_ROT_SPEED] == 2u ? 2 : org_patch[OP_ROT_SPEED] == 1u ? 1 : 0;
     /* the selected position's word is white, the others medium grey */
-    ltext(HU(56), HU(481), &AF_X, "SLOW", sel == 1 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
-    ltext(HU(124), HU(481), &AF_X, "STOP", sel == 0 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
-    ltext(HU(186), HU(481), &AF_X, "FAST", sel == 2 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
-    cv_rect(40, 218, 40, 3, RGB565(0xbb, 0xbb, 0xbb));
-    cv_rect(41, 221, 40, 1, BLACK);
+    ltext(HU(56), HU(481) + R2_DY, &AF_X, "SLOW", sel == 1 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
+    ltext(HU(124), HU(481) + R2_DY, &AF_X, "STOP", sel == 0 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
+    ltext(HU(186), HU(481) + R2_DY, &AF_X, "FAST", sel == 2 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
+    cv_rect(40, 218 + R2_DY, 40, 3, RGB565(0xbb, 0xbb, 0xbb));
+    cv_rect(41, 221 + R2_DY, 40, 1, BLACK);
     lx = sel == 1 ? 41 : sel == 2 ? 79 : 60;                 /* SLOW at the left, STOP in the middle, FAST at the right */
-    disc(lx, 219, 9, RGB565(0x0a, 0x0a, 0x0a));              /* the lever's knob: a dark rim, a grey face lit from the upper left */
-    disc(lx, 219, 8, RGB565(0x3a, 0x3a, 0x3a));
-    disc(lx, 219, 6, RGB565(0x55, 0x55, 0x55));
-    disc(lx - 2, 217, 2, RGB565(0x9a, 0x9a, 0x9a));
+    disc(lx, 219 + R2_DY, 9, RGB565(0x0a, 0x0a, 0x0a));              /* the lever's knob: a dark rim, a grey face lit from the upper left */
+    disc(lx, 219 + R2_DY, 8, RGB565(0x3a, 0x3a, 0x3a));
+    disc(lx, 219 + R2_DY, 6, RGB565(0x55, 0x55, 0x55));
+    disc(lx - 2, 217 + R2_DY, 2, RGB565(0x9a, 0x9a, 0x9a));
     {
         int32_t dg = home_ang_drv(), rv = home_ang_rev();
         int32_t cl = -135 + oa_ai(OP_CLICK_GAIN) * 270 / 40;   /* the step the knob moves (ADVANCED coding: byte 0 is the 100 % index 20) */
-        home_knob(HU(291), HU(506), dg);
-        home_knob(HU(365), HU(506), rv);
-        home_knob(HU(439), HU(506), cl);
-        home_knob(HU(513), HU(506), 135 - (int32_t)org_patch[OP_EXPR] * 270 / 60);   /* EXPR: the output volume; full clockwise at 0 */
+        home_knob(HU(291), HU(506) + R2_DY, dg);
+        home_knob(HU(365), HU(506) + R2_DY, rv);
+        home_knob(HU(439), HU(506) + R2_DY, cl);
+        home_knob(HU(513), HU(506) + R2_DY, 135 - (int32_t)org_patch[OP_EXPR] * 270 / 60);   /* EXPR: the output volume; full clockwise at 0 */
     }
-    ctext(HU(291), HU(542), &AF_X, "DRIVE", RGB565(0xff, 0xff, 0xff), BLACK);
-    ctext(HU(365), HU(542), &AF_X, "REV", RGB565(0xff, 0xff, 0xff), BLACK);
-    ctext(HU(439), HU(542), &AF_X, "CLICK", RGB565(0xff, 0xff, 0xff), BLACK);
-    ctext(HU(513), HU(542), &AF_X, "EXPR", RGB565(0xff, 0xff, 0xff), BLACK);
+    ctext(HU(291), HU(542) + R2_DY, &AF_X, "DRIVE", RGB565(0xff, 0xff, 0xff), BLACK);
+    ctext(HU(365), HU(542) + R2_DY, &AF_X, "REV", RGB565(0xff, 0xff, 0xff), BLACK);
+    ctext(HU(439), HU(542) + R2_DY, &AF_X, "CLICK", RGB565(0xff, 0xff, 0xff), BLACK);
+    ctext(HU(513), HU(542) + R2_DY, &AF_X, "EXPR", RGB565(0xff, 0xff, 0xff), BLACK);
     /* the region SELECT picked: an orange frame round the vibrato's row, the percussion tabs, the four knobs */
     {
     int32_t rv = pl ? (int32_t)oa_home_reg - 1 : (int32_t)oa_home_reg;   /* HOME 2's 4..6 are HOME's 3..5 */
@@ -1373,7 +1364,7 @@ static void scr_home(void)
     } else if (rv == 4) {
         cv_frame(HU10(3235) - 2, HU(372), HU10(4915) + 2 + HU(51) + 2 - (HU10(3235) - 2), HU(90), C_ORANGE);
     } else if (rv == 5) {
-        cv_frame(HU(268) - 3, HU(468), HU(537) - HU(268) + 6, HU(562) - HU(468), C_ORANGE);   /* 3 px wider each side */
+        cv_frame(HU(268) - 3, HU(468) + R2_DY, HU(537) - HU(268) + 6, HU(562) - HU(468), C_ORANGE);   /* 3 px wider each side */
     }
     }
 }
