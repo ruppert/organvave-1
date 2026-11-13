@@ -413,6 +413,15 @@ int main(int argc, char **argv)
                             uint16_t tp = (uint16_t)((host_screen[(HU(64) + 10) * 240 + HU(20) + 40] >> 8) | (host_screen[(HU(64) + 10) * 240 + HU(20) + 40] << 8));
                             uint16_t bp = (uint16_t)((host_screen[239 * 240 + 120] >> 8) | (host_screen[239 * 240 + 120] << 8));
                             bad += check("  .. the top frame is the picture, and the bottom has none", tp == HOME_TOP[10 * HOME_TOP_W + 40] && bp == RGB565(0x0b, 0x0b, 0x0b));
+                            {   /* the middle frame's cut (0.9.56): wood_neutral's grey at the same brightness, mixed 12 % toward it */
+                                uint16_t c0 = RGB565(134, 69, 31), c1 = mix(c0, wood_neutral(c0), 31);
+                                int32_t r0 = ((c0 >> 11) & 31) * 255 / 31, g0 = ((c0 >> 5) & 63) * 255 / 63, b0 = (c0 & 31) * 255 / 31;
+                                int32_t r1 = ((c1 >> 11) & 31) * 255 / 31, g1 = ((c1 >> 5) & 63) * 255 / 63, b1 = (c1 & 31) * 255 / 31;
+                                int32_t ch0 = (r0 - g0) + (g0 - b0), ch1 = (r1 - g1) + (g1 - b1);
+                                int32_t l0 = (r0 * 3 + g0 * 6 + b0) / 10, l1 = (r1 * 3 + g1 * 6 + b1) / 10;
+                                bad += check("  .. the middle frame's cut: less red (chroma down), the brightness kept (0.9.56)",
+                                             ch1 < ch0 && ch1 > ch0 * 8 / 10 && l1 - l0 <= 3 && l0 - l1 <= 3);
+                            }
                         }
                     }
                 }
