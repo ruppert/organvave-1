@@ -1258,8 +1258,8 @@ static void scr_home(void)
                 }
                 for (dv = 0; dv < (int32_t)v; dv++)        /* a dot per step, in place of the number */
                     cv_rect(c - 1, top + HU10(217) * dv + HU10(217) / 2 - 1, 2, 2, RGB565(0xff, 0xff, 0xff));
-                /* the head (0.9.47, owner: as the upper's): the lower's by its place, the pedal's by its footage (16' brown, 8' white) */
-                art_blit(c - HOME_HEAD_SW / 2, headtop, HOME_HEAD_SW, HOME_HEAD_SH, HOME_HEAD_S[n < 2 ? 2 * n : n - 2]);
+                /* the head (0.9.47, owner: as the upper's): the lower's by its place; the pedal's two brown (0.9.48, owner) */
+                art_blit(c - HOME_HEAD_SW / 2, headtop, HOME_HEAD_SW, HOME_HEAD_SH, HOME_HEAD_S[n < 2 ? n : n - 2]);
             }
         }
     }
@@ -1280,12 +1280,14 @@ static void scr_home(void)
             cv_rect(l, HU10(930) - 2, r - l, 2, C_ORANGE);     /* on the wood above, touching the stems */
         }
     }
-    /* the UPPER label on its rule, between the drawbars and the tabs */
-    cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
+    /* the UPPER label on its rule, between the drawbars and the tabs; HOME 2: the rule under the lower's nine only (0.9.48, owner) */
+    if (pl)
+        cv_rect(68 - 9, HU(340), 18 * 8 + 18, 1, RGB565(0xff, 0xff, 0xff));
+    else
+        cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
     if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
-        cv_rect(10, HU(331), 38, 20, BLACK);                /* each label's black box breaks the rule, as UPPER's */
         ctext(29, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
-        cv_rect(118, HU(331), 44, 20, BLACK);
+        cv_rect(118, HU(331), 44, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's */
         ctext(140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
     } else {
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
