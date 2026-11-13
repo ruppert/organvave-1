@@ -144,8 +144,16 @@ static void rtext(int32_t xr, int32_t ytop, const aafont_t *f, const char *s, ui
 }
 
 /* ----------------------------------------------------- panel elements --- */
-/* the wood of the console's cheek blocks and lid: a warm gradient with a wandering grain */
-static void wood(int32_t x, int32_t y, int32_t w, int32_t h)
+/* the wood's colour at a neutral of the same brightness (0.9.56): the red cast taken off by a part of this */
+static uint16_t wood_neutral(uint16_t c)
+{
+    int32_t r = ((c >> 11) & 31) * 255 / 31, g = ((c >> 5) & 63) * 255 / 63, b = (c & 31) * 255 / 31;
+    int32_t y = (r * 3 + g * 6 + b) / 10;
+    return RGB565(y, y, y);
+}
+/* the wood of the console's cheek blocks and lid: a warm gradient with a wandering grain. neutral: 0..256, the part of the
+ * colour taken toward grey (0.9.56: the middle frame, 12 %, a subtle cut of its red) */
+static void wood(int32_t x, int32_t y, int32_t w, int32_t h, int32_t neutral)
 {
     static const uint16_t W[3] = {RGB565(0x5a, 0x2b, 0x12), RGB565(0x86, 0x45, 0x1f), RGB565(0x6a, 0x33, 0x16)};
     int32_t i, j;
@@ -159,6 +167,8 @@ static void wood(int32_t x, int32_t y, int32_t w, int32_t h)
                     c = mix(c, RGB565(0x3a, 0x1a, 0x0a), 110);
                 else if (g == 9)
                     c = mix(c, RGB565(0xb0, 0x62, 0x30), 70);
+                if (neutral)
+                    c = mix(c, wood_neutral(c), neutral);
                 cv_pset(i, j, c);
             }
 }
@@ -207,7 +217,7 @@ static void oa_flash(const char *t)
 static const char *const OA_DRV_NAME[DR_TYPES] = {"TUBE DRIVE", "DISTORTION", "SOFT TUBE", "MID DRIVE", "HARD CLIP", "TIGHT TUBE"};
 static void header(const char *page, const char *right)
 {
-    wood(0, 0, 240, 22);
+    wood(0, 0, 240, 22, 0);
     chrome(0, 22, 240, 3);
     {   /* an engraved brass plate for the page name */
         int32_t w = text_w(&AF_S, page) + 12;
@@ -1300,7 +1310,7 @@ static void scr_home(void)
     cv_rect(HU(240), HU(331), HU(82), HU(20), BLACK);      /* the label's black box breaks the rule */
     ctext(HU(281), HU(331), &AF_X, "Upper", RGB565(0xff, 0xff, 0xff), BLACK);
     }
-    wood(HU(20), HU(358), HU(537), HU(12));
+    wood(HU(20), HU(358), HU(537), HU(12), 31);            /* the middle frame: 12 % less red (0.9.56, owner) */
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
     cv_rect(HU(20), HU(370), HU(537), HU(94), BLACK);
     vib = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0;
