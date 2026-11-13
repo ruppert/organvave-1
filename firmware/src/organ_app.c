@@ -1284,13 +1284,14 @@ static void scr_home(void)
     /* the UPPER label on its rule, between the drawbars and the tabs; HOME 2: a rule under the pedal's two and one under the
      * lower's nine (0.9.48, 0.9.50: owner) */
     if (pl) {
-        cv_rect(H2X + 6, HU(340), 48, 1, RGB565(0xff, 0xff, 0xff));          /* under the pedal's two (0.9.50, owner), 5 px short of the lower's */
-        cv_rect(H2X + 68 - 9, HU(340), 18 * 8 + 18, 1, RGB565(0xff, 0xff, 0xff));
+        /* each rule 3 px shorter at both ends (0.9.51, owner: more room between them, 11 px) */
+        cv_rect(H2X + 9, HU(340), 42, 1, RGB565(0xff, 0xff, 0xff));          /* under the pedal's two (0.9.50, owner) */
+        cv_rect(H2X + 68 - 6, HU(340), 18 * 8 + 12, 1, RGB565(0xff, 0xff, 0xff));
     }
     else
         cv_rect(HU(36), HU(340), HU(505), 1, RGB565(0xff, 0xff, 0xff));
     if (pl) {                                              /* the LFO screen's two labels, under the pedal and under the lower manual */
-        cv_rect(H2X + 15, HU(331), 30, 20, BLACK);                /* a narrow box (the rule is short): 9 px of rule each side */
+        cv_rect(H2X + 15, HU(331), 30, 20, BLACK);                /* a narrow box (the rule is short): 6 px of rule each side */
         ctext(H2X + 30, HU(331), &AF_X, "Pedals", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the pedal's two */
         cv_rect(H2X + 118, HU(331), 44, 20, BLACK);               /* the label's black box breaks the rule, as UPPER's */
         ctext(H2X + 140, HU(331), &AF_X, "Lower", RGB565(0xff, 0xff, 0xff), BLACK);     /* under the lower's nine */
