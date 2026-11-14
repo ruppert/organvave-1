@@ -348,6 +348,8 @@ static void oa_preset(int32_t s)
 static uint8_t oa_last_preset = 0xFF, oa_last_user = 0xFF, oa_primed;
 static uint32_t oa_pp_until;
 static int oa_pp_on(void) { return oa_pp_until && (int32_t)(fm1_ms - oa_pp_until) < 0; }
+static uint32_t oa_vp_until;                              /* the vibrato selector's pop-up (HOME, K3): 1 s */
+static int oa_vp_on(void) { return oa_vp_until && (int32_t)(fm1_ms - oa_vp_until) < 0; }
 static uint32_t oa_track_preset(void)                     /* every frame; 1 = the preset changed now */
 {
     uint32_t u = oa_on_user() ? TSEL->user : 0u, p = u ? 0xFEu : oa_factory();
@@ -655,6 +657,14 @@ static void oa_pp_draw(void)                              /* the preset pop-up *
     cv_rect(14, 72, 212, 96, C_POP);
     ctext(120, 84, &AF_L, num, C_AMBER, C_POP);
     ctext(120, 126, f, nm, C_CREAM, C_POP);
+}
+static void oa_vp_draw(void)                              /* the vibrato selector's pop-up: the option with a hyphen, the name's size, 35% down */
+{
+    static const char *const VIB_HY[7] = {"V-1", "V-1", "V-2", "V-3", "C-1", "C-2", "C-3"};   /* OP_VIB 0 (off) sits at V1 */
+    uint32_t v = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u;
+    cv_rect(12, 66, 216, 36, C_ORANGE);
+    cv_rect(14, 68, 212, 32, C_POP);
+    ctext(120, 77, &AF_N, VIB_HY[v], C_CREAM, C_POP);      /* 77: the caps (15 rows) centred on y 84, 35% of 240 */
 }
 
 static const char *const VIB_SHORT[7] = {"VIBRATO", "VIB 1", "VIB 2", "VIB 3", "CHO 1", "CHO 2", "CHO 3"};
@@ -1486,7 +1496,9 @@ static void oa_scene(void)
         cv_rect(30, 92, 180, 40, C_ORANGE);
         cv_rect(32, 94, 176, 36, C_POP);
         ctext(120, 104, &AF_M, oa_msg, C_AMBER, C_POP);
-    } else if (oa_pp_on())
+    } else if (oa_vp_on())
+        oa_vp_draw();
+    else if (oa_pp_on())
         oa_pp_draw();
     if (oa_dbp) {                                         /* DRAWBAR PRESET MODE: over every page, the bars live */
         /* the title, the bars (x 19 .. 220, 101 px high) and the text under them in AF_S (0.9.46, owner: taller, the text larger;
@@ -1525,7 +1537,7 @@ static uint32_t oa_signature(void)
     h = (h ^ oa_gl ^ (uint32_t)oa_gl_row << 2 ^ (uint32_t)fm_midi_src << 4 ^ (uint32_t)fm_ch_up << 6 ^ (uint32_t)fm_ch_lo << 11 ^ (uint32_t)fm_ch_pd << 16) * 16777619u;
     h = (h ^ oa_cc_row ^ (uint32_t)oa_ccmap[oa_cc_row % OA_NCTL] << 8 ^ (uint32_t)oa_ccmap[oa_cc_step(oa_cc_row, 1)] << 15 ^ (uint32_t)oa_ccmap[oa_cc_step(oa_cc_row, -1)] << 20) * 16777619u;
     h = (h ^ oa_sv ^ (uint32_t)oa_sv_slot << 1 ^ (uint32_t)oa_sv_pos << 8 ^ (uint32_t)oa_msg_on() << 12 ^
-         (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16) * 16777619u;
+         (uint32_t)oa_pp_on() << 13 ^ (uint32_t)up_gen << 16 ^ (uint32_t)oa_vp_on() << 17) * 16777619u;
     for (i = 0; i < 12u; i++)
         h = (h ^ (uint8_t)oa_sv_name[i]) * 16777619u;
     h = (h ^ t->p[P_REV] ^ (uint32_t)t->p[P_DLY] << 8 ^ (uint32_t)song.g[G_RTYPE] << 16 ^ (uint32_t)song.g[G_DTIME] << 20) * 16777619u;
@@ -1818,7 +1830,10 @@ static void home_sel(int32_t s)                           /* the chorus selector
             ;
     while (n-- > 0 && (d > 0 ? p < 5u : p > 0u))
         p = (uint32_t)((int32_t)p + d);
-    org_set(OP_VIB, AT[p]);
+    if (AT[p] != v) {
+        org_set(OP_VIB, AT[p]);
+        oa_vp_until = fm1_ms + 1000u;
+    }
 }
 static void home_rotor(int32_t s)                         /* the Leslie: SLOW, STOP, FAST from left to right; ALGORITHM moves it one place, not cyclic */
 {

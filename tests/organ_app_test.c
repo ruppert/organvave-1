@@ -83,6 +83,9 @@ int main(int argc, char **argv)
         org_set(OP_VIB, 0u);
         turn(EN_K1 + 2, 2);
         bad += check("  .. no type (vibrato off): K3 two to the right, V1 then C1", org_patch[OP_VIB] == 4);
+        bad += check("  .. K3 turns it: the pop-up is on for 1 s (V-1 .. C-3, a hyphen)", oa_vp_on() && oa_vp_until - fm1_ms == 1000u);
+        fm1_ms += 1001u;
+        bad += check("  .. and off after 1 s", !oa_vp_on());
         turn(EN_K1 + 1, -1);
         bad += check("  .. K2 down: the lower manual is off the scanner; the upper is still on it", org_patch[OP_VIB_LO] == 0 && vib_up() == 1 && vib_on() == 1);
         turn(EN_K1, -1);
