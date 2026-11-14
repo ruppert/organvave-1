@@ -1224,6 +1224,7 @@ static int32_t home_ang_rev(void)
     return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
 }
 #define R2_DY 3                                          /* HOME: the second row (the Leslie switch, the knobs and their frame) 3 px lower (0.9.57 2 px, v0.9.64 3 px, owner) */
+#define R1_DY 1                                          /* HOME: the first row (UP, LO, the chorus selector, the PERC tabs) 1 px lower (v0.9.65, owner) */
 #define LESLIE_DY 2                                      /* HOME: the Leslie's box (its fill and frame) 2 px lower than the rest of the second row (v0.9.60, owner) */
 #define H2X 4                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rules and labels, 4 px right (0.9.49 8, 0.9.50 4: owner) */
 static void scr_home(void)
@@ -1314,30 +1315,30 @@ static void scr_home(void)
     }
     art_blit(HU(20), HU(358), HOME_MID_W, HOME_MID_H, HOME_MID);      /* the middle frame: the top frame's picture, cut (0.9.57, owner) */
     /* row 1: the vibrato's UP / LO, the chorus selector, the percussion tabs and PERC */
-    cv_rect(HU(20), HU(370), HU(537), HU(94), BLACK);
+    cv_rect(HU(20), HU(370) + R1_DY, HU(537), HU(94), BLACK);
     vib = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0;
     lit = vib && vib_on();
-    home_tab(HU10(385), HU(378), HU(51), HU(74), "UP", vib != 0 && vib_up());
-    home_tab(HU10(945), HU(378), HU(51), HU(74), "LO", vib != 0 && vib_lo());
-    cv_rect(HU(154), HU(372), HU(95), HU(90), RGB565(0x10, 0x10, 0x10));   /* the vibrato's dial box: the same grey */
-    cv_frame(HU(154), HU(372), HU(95), HU(90), RGB565(0x11, 0x11, 0x11));
+    home_tab(HU10(385), HU(378) + R1_DY, HU(51), HU(74), "UP", vib != 0 && vib_up());
+    home_tab(HU10(945), HU(378) + R1_DY, HU(51), HU(74), "LO", vib != 0 && vib_lo());
+    cv_rect(HU(154), HU(372) + R1_DY, HU(95), HU(90), RGB565(0x10, 0x10, 0x10));   /* the vibrato's dial box: the same grey */
+    cv_frame(HU(154), HU(372) + R1_DY, HU(95), HU(90), RGB565(0x11, 0x11, 0x11));
     pos = VIB_POS[vib];
     for (j = 0; j < 6; j++) {
         int32_t a = j * 60;
         lx = HU10(2015) + home_sin(a) * 14 / 1000 - 6;
-        ly = HU(417) - home_cos(a) * 14 / 1000 - 4;
+        ly = HU(417) + R1_DY - home_cos(a) * 14 / 1000 - 4;
         ctext(lx + 6, ly, &AF_X, ROT_POS[j], j == (int32_t)pos && lit ? C_AMBER : RGB565(0xff, 0xff, 0xff), RGB565(0x10, 0x10, 0x10));
     }
-    disc(HU10(2015), HU(417), 8, RGB565(0x11, 0x11, 0x11));
-    disc(HU10(2015), HU(417), 7, RGB565(0x33, 0x33, 0x33));
-    cv_line_t(HU10(2015), HU(417), HU10(2015) + home_sin(pos * 60) * 6 / 1000, HU(417) - home_cos(pos * 60) * 6 / 1000,
+    disc(HU10(2015), HU(417) + R1_DY, 8, RGB565(0x11, 0x11, 0x11));
+    disc(HU10(2015), HU(417) + R1_DY, 7, RGB565(0x33, 0x33, 0x33));
+    cv_line_t(HU10(2015), HU(417) + R1_DY, HU10(2015) + home_sin(pos * 60) * 6 / 1000, HU(417) + R1_DY - home_cos(pos * 60) * 6 / 1000,
               lit ? C_AMBER : C_DIM, 2);
     /* PERC, rotated, and the percussion tabs */
-    art_blit(HU(310) - 1 - HOME_PERC_W / 2, HU(415) - HOME_PERC_H / 2, HOME_PERC_W, HOME_PERC_H, HOME_PERC);
-    home_tab(HU10(3235) - 1, HU(378), HU(51), HU(74), "ON", org_patch[OP_PERC] != 0);
-    home_tab(HU10(3795), HU(378), HU(51), HU(74), "SOFT", org_patch[OP_PERC_SOFT] != 0);
-    home_tab(HU10(4355) + 1, HU(378), HU(51), HU(74), "FAST", org_patch[OP_PERC_FAST] != 0);
-    home_tab(HU10(4915) + 2, HU(378), HU(51), HU(74), "3RD", org_patch[OP_PERC_SEL] != 0);
+    art_blit(HU(310) - 1 - HOME_PERC_W / 2, HU(415) + R1_DY - HOME_PERC_H / 2, HOME_PERC_W, HOME_PERC_H, HOME_PERC);
+    home_tab(HU10(3235) - 1, HU(378) + R1_DY, HU(51), HU(74), "ON", org_patch[OP_PERC] != 0);
+    home_tab(HU10(3795), HU(378) + R1_DY, HU(51), HU(74), "SOFT", org_patch[OP_PERC_SOFT] != 0);
+    home_tab(HU10(4355) + 1, HU(378) + R1_DY, HU(51), HU(74), "FAST", org_patch[OP_PERC_FAST] != 0);
+    home_tab(HU10(4915) + 2, HU(378) + R1_DY, HU(51), HU(74), "3RD", org_patch[OP_PERC_SEL] != 0);
     /* row 2: the rotor switch (SLOW, STOP, FAST: the lever's knob), the four knobs */
     cv_rect(HU(20), HU(464) + R2_DY, HU(537), 1, RGB565(0x55, 0x55, 0x55));
     cv_rect(HU(20), HU(466) + R2_DY, HU(537), HU(103) - 1, BLACK);   /* one row less: the band ends at 238, row 239 stays the background (v0.9.64) */
@@ -1371,9 +1372,9 @@ static void scr_home(void)
     {
     int32_t rv = pl ? (int32_t)oa_home_reg - 1 : (int32_t)oa_home_reg;   /* HOME 2's 4..6 are HOME's 3..5 */
     if (rv == 3) {
-        cv_frame(HU10(385) - 2, HU(372), HU(154) + HU(95) + 2 - (HU10(385) - 2), HU(90), C_ORANGE);
+        cv_frame(HU10(385) - 2, HU(372) + R1_DY, HU(154) + HU(95) + 2 - (HU10(385) - 2), HU(90), C_ORANGE);
     } else if (rv == 4) {
-        cv_frame(HU10(3235) - 2, HU(372), HU10(4915) + 2 + HU(51) + 2 - (HU10(3235) - 2), HU(90), C_ORANGE);
+        cv_frame(HU10(3235) - 2, HU(372) + R1_DY, HU10(4915) + 2 + HU(51) + 2 - (HU10(3235) - 2), HU(90), C_ORANGE);
     } else if (rv == 5) {
         cv_frame(HU(268) - 3, HU(468) + R2_DY, HU(537) - HU(268) + 6, HU(562) - HU(468), C_ORANGE);   /* 3 px wider each side */
     }
