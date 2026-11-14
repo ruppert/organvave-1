@@ -1214,6 +1214,7 @@ static int32_t home_ang_rev(void)
     return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
 }
 #define R2_DY 2                                          /* HOME: the second row (the Leslie switch, the knobs and their frame) 2 px lower (0.9.57, owner) */
+#define LESLIE_DY 2                                      /* HOME: the Leslie's box (its fill and frame) 2 px lower than the rest of the second row (v0.9.60, owner) */
 #define H2X 4                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rules and labels, 4 px right (0.9.49 8, 0.9.50 4: owner) */
 static void scr_home(void)
 {
@@ -1330,8 +1331,8 @@ static void scr_home(void)
     /* row 2: the rotor switch (SLOW, STOP, FAST: the lever's knob), the four knobs */
     cv_rect(HU(20), HU(464) + R2_DY, HU(537), 1, RGB565(0x55, 0x55, 0x55));
     cv_rect(HU(20), HU(466) + R2_DY, HU(537), HU(103), BLACK);
-    cv_rect(HU(40), HU(470) + R2_DY, HU(208), HU(86), RGB565(0x10, 0x10, 0x10));   /* the Leslie's box: a darker grey (0.10.5) */
-    cv_frame(HU(40), HU(470) + R2_DY, HU(208), HU(86), RGB565(0x2a, 0x2a, 0x2a));
+    cv_rect(HU(40), HU(470) + R2_DY + LESLIE_DY, HU(208), HU(86), RGB565(0x10, 0x10, 0x10));   /* the Leslie's box: a darker grey (0.10.5) */
+    cv_frame(HU(40), HU(470) + R2_DY + LESLIE_DY, HU(208), HU(86), RGB565(0x2a, 0x2a, 0x2a));
     sel = !org_patch[OP_ROT] ? 0 : org_patch[OP_ROT_SPEED] == 2u ? 2 : org_patch[OP_ROT_SPEED] == 1u ? 1 : 0;
     /* the selected position's word is white, the others medium grey */
     ltext(HU(56), HU(481) + R2_DY, &AF_X, "SLOW", sel == 1 ? RGB565(0xff, 0xff, 0xff) : RGB565(0x80, 0x80, 0x80), RGB565(0x10, 0x10, 0x10));
