@@ -1224,7 +1224,7 @@ static int32_t home_ang_rev(void)
     return -135 + (r < 0 ? 0 : r > 127 ? 127 : r) * 270 / 127;
 }
 #define R2_DY 3                                          /* HOME: the second row (the Leslie switch, the knobs and their frame) 3 px lower (0.9.57 2 px, v0.9.64 3 px, owner) */
-#define R1_DY 1                                          /* HOME: the first row (UP, LO, the chorus selector, the PERC tabs) 1 px lower (v0.9.65, owner) */
+#define R1_DY 2                                          /* HOME: the first row (UP, LO, the chorus selector, the PERC tabs) 2 px lower (v0.9.65 1 px, v0.9.68 1 px more, owner) */
 #define LESLIE_DY 2                                      /* HOME: the Leslie's box (its fill and frame) 2 px lower than the rest of the second row (v0.9.60, owner) */
 #define H2X 4                                             /* HOME 2: the pedal's and the lower's drawbars, their marks, rules and labels, 4 px right (0.9.49 8, 0.9.50 4: owner) */
 static void scr_home(void)
