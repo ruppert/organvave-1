@@ -39,37 +39,11 @@ int main(int argc, char **argv)
 
     press(B_EDIT);
     h_draw = frame_hash();
-    bad += check("EDIT: DRAWBARS, a different picture", oa_page == 1 && h_draw != h_home);
-
-    /* drawbars: SELECT picks a bar, ALGORITHM pulls it, the knobs 1-4 pull the picked bar and the three after it, the range 0..8 */
-    v0 = org_patch[OP_UB + oa_sel];
-    turn(EN_K1, v0 < 8 ? -1 : 1);                          /* left turns a drawbar up */
-    bad += check("K1 moves the picked bar by one step",
-                 org_patch[OP_UB + oa_sel] == (v0 < 8 ? v0 + 1 : v0 - 1));
-    turn(EN_K1, -20);
-    bad += check("  .. a big turn clamps at 8", org_patch[OP_UB + oa_sel] == 8);
-    turn(EN_K1, 20);
-    bad += check("  .. and at 0", org_patch[OP_UB + oa_sel] == 0);
-    k = oa_sel;
-    turn(EN_SELECT, 1);
-    bad += check("SELECT picks the next bar", oa_sel == (uint8_t)(k + 1u));
-    for (i = 0; i < 12u; i++)
-        turn(EN_SELECT, 1);
-    bad += check("  .. to the last of the nine and no further", oa_sel == 8);
-    for (i = 0; i < 12u; i++)                             /* (one bar a detent, as the encoder sends it) */
-        turn(EN_SELECT, -1);
-    bad += check("  .. and back to the first and no further", oa_sel == 0);
-    org_set(OP_UB + 0u, 3u);
-    turn(EN_ALGO, 2);
-    bad += check("ALGORITHM pulls the picked bar (two detents)", org_patch[OP_UB + 0] == 5);
-    turn(EN_ALGO, -20);
-    bad += check("  .. and stops at 0", org_patch[OP_UB + 0] == 0);
-    org_set(OP_UB + 0u, 3u);
-    org_set(OP_UB + 1u, 8u);
-    turn(EN_K2, 1);
-    bad += check("K2 is the bar after the picked one", org_patch[OP_UB + 1] == 7 && org_patch[OP_UB + 0] == 3);
-    for (i = 0; i < 3u; i++) { press(B_HOME); press(B_EDIT); }
-    bad += check("HOME, EDIT: the page changes back and again", oa_page == 1);
+    bad += check("EDIT: ADVANCED EDIT only, a different picture", oa_page == 8 && h_draw != h_home);
+    press(B_EDIT);
+    bad += check("EDIT again: back to HOME", oa_page == 0);
+    press(B_EDIT);
+    bad += check("HOME, EDIT: ADVANCED EDIT again", oa_page == 8);
 
     /* HOME: SELECT picks the region (not cyclic), the knobs work on it and stay on HOME; ALGORITHM is the Leslie (not cyclic) */
     {
@@ -606,55 +580,14 @@ int main(int argc, char **argv)
             bad += check("  .. TONE dark 1 is TREBLE -4", org_c11(org_patch[OP_DRV_TREB]) == -4 && org_patch[OP_DRV_TONE] == 0);
             org_set(OP_DRV_TREB, 0);
         }
-        /* EDIT walks the manuals' drawbars: UPPER, LOWER, PEDAL (the last two play over MIDI) */
-        {
-            uint32_t h_up, h_lo;
-            press(B_HOME);
-            press(B_EDIT);
-            bad += check("EDIT: the DRAWBARS page, the upper manual", oa_page == 1 && oa_man == 0);
-            h_up = frame_hash();
-            press(B_EDIT);
-            bad += check("EDIT again: the lower manual with the pedal's two bars (a different picture)", oa_page == 1 && oa_man == 1 && frame_hash() != h_up);
-            h_lo = frame_hash();
-            bad += check("  .. eleven bars: SELECT picks the pedal's 16' first", oa_sel == 0);
-            org_set(OP_PB + 0, 3);
-            org_set(OP_PB + 2, 3);
-            org_set(OP_LB + 0, 3);
-            org_set(OP_UB + 0, 8);
-            turn(EN_K1, -1);                              /* (a drawbar: a knob turned left pulls it up) */
-            turn(EN_K2, -1);
-            turn(EN_K3, -1);
-            bad += check("  .. the knobs pull the pedal's 16' and 8', then the lower's 16'",
-                         org_patch[OP_PB + 0] == 4 && org_patch[OP_PB + 2] == 4 && org_patch[OP_LB + 0] == 4 && org_patch[OP_UB + 0] == 8);
-            bad += check("  .. the other pedal bytes are not touched", org_patch[OP_PB + 1] == 0 && org_patch[OP_PB + 3] == 0 && org_patch[OP_PB + 8] == 0);
-            bad += check("  .. and the picture follows", frame_hash() != h_lo);
-            for (i = 0; i < 20u; i++)
-                turn(EN_SELECT, 1);
-            bad += check("  .. SELECT runs to the lower's 1' (the eleventh bar) and stops", oa_sel == 10);
-            org_set(OP_LB + 8, 2);
-            turn(EN_ALGO, 3);
-            bad += check("  .. ALGORITHM pulls it", org_patch[OP_LB + 8] == 5);
-            for (i = 0; i < 20u; i++)
-                turn(EN_SELECT, -1);
-            turn(EN_SELECT, 1);
-            turn(EN_ALGO, -1);
-            bad += check("  .. the pedal's 8' is the second bar", oa_sel == 1 && org_patch[OP_PB + 2] == 3);
-            press(B_EDIT);
-            bad += check("EDIT again: ADVANCED EDIT (a different picture)", oa_page == 8 && frame_hash() != h_lo);
-            press(B_EDIT);
-            bad += check("EDIT again: back to the upper manual (no pedal page)", oa_man == 0 && oa_page == 1 && oa_sel == 0);
-            press(B_EDIT); press(B_EDIT); press(B_EDIT); press(B_HOME); press(B_EDIT);
-            bad += check("  .. and from HOME it opens the upper manual", oa_man == 0 && oa_page == 1);
-            org_set(OP_PB + 0, 0); org_set(OP_PB + 2, 0); org_set(OP_LB + 0, 0); org_set(OP_LB + 8, 0);
-        }
         /* ADVANCED EDIT (0.9.4, 0.9.7): EDIT, EDIT, EDIT; SELECT picks a row, ALGORITHM changes it by one step, the knobs 1-4 go to rows 1-4.
          * 0.9.7: no TUNING and no TEMPERAMENT rows (60 Hz gear and A 440 are fixed): the first row is SPLIT */
         {
             uint32_t h_a, r;
             memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
             press(B_HOME);
-            press(B_EDIT); press(B_EDIT); press(B_EDIT);
-            bad += check("ADVANCED EDIT: the page after DRAWBARS' lower manual", oa_page == 8);
+            press(B_EDIT);
+            bad += check("ADVANCED EDIT: opened from HOME by one EDIT", oa_page == 8);
             h_a = frame_hash();
             bad += check("  .. 29 rows, the first picked (SPLIT: no TUNING, no TEMPERAMENT row)", OA_NR[8] == 29 && oa_row[8] == 0 && !strcmp(OA_LB[8][0], "SPLIT"));
             turn(EN_ALGO, 1);
@@ -741,7 +674,7 @@ int main(int argc, char **argv)
             }
             memset(org_patch + OP_TUNING, 0, ORG_PSIZE - OP_TUNING);
             press(B_EDIT);
-            bad += check("  .. EDIT goes back to the upper manual", oa_page == 1 && oa_man == 0);
+            bad += check("  .. EDIT again goes back to HOME", oa_page == 0);
             press(B_HOME);
         }
         /* REVERB and DELAY (0.4.0): the send is the part's, the rest the instrument's globals */
