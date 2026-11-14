@@ -95,8 +95,9 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
     lcd_data(px, w * h * 2u);
 }
 
-/* ST7789V init: reset, then 16-bit colour, scan direction and IPS inversion;
- * voltage and gamma stay at the defaults. Format: cmd, n, n data bytes;
+/* ST7789V init: reset, then 16-bit colour, scan direction, the gamma curves (0xE0 positive, 0xE1 negative: v0.9.67, the
+ * values of the common 240x240 IPS init, not this panel's datasheet: tune on the device) and IPS inversion;
+ * voltage stays at the default. Format: cmd, n, n data bytes;
  * cmd 0x00 = wait (data byte: ~ms). */
 static const uint8_t LCD_SEQ[] = {
     0x01, 0,                     /* SWRESET */
@@ -105,6 +106,8 @@ static const uint8_t LCD_SEQ[] = {
     0x00, 1, 120,
     0x3A, 1, 0x55,               /* COLMOD: RGB565 */
     0x36, 1, 0x00,               /* MADCTL: top-left origin, RGB order */
+    0xE0, 14, 0xD0, 0x08, 0x0E, 0x09, 0x09, 0x05, 0x31, 0x33, 0x48, 0x17, 0x14, 0x15, 0x31, 0x34,   /* positive gamma */
+    0xE1, 14, 0xD0, 0x08, 0x0E, 0x09, 0x09, 0x15, 0x31, 0x33, 0x48, 0x17, 0x14, 0x15, 0x31, 0x34,   /* negative gamma */
     0x21, 0,                     /* INVON: IPS panel */
     0x13, 0,                     /* NORON */
 };
