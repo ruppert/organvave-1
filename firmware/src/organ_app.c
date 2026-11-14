@@ -1725,9 +1725,9 @@ static void oa_buttons(uint32_t pressed)
             oa_sv_open();
         return;
     }
-    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: PERC & VIB, ROTARY, DRIVE, REVERB, DELAY, EQ, then HOME */
+    if ((pressed >> panel.btn[B_FX]) & 1u) {              /* FX: ROTARY, DRIVE, REVERB, DELAY, EQ, then HOME (PERC & VIB left the cycle, 0.9.66) */
         oa_close_all();
-        oa_page = oa_page >= 2u && oa_page < 7u ? (uint8_t)(oa_page + 1u) : oa_page == 7u ? 0u : 2u;
+        oa_page = oa_page >= 3u && oa_page < 7u ? (uint8_t)(oa_page + 1u) : oa_page == 7u ? 0u : 3u;
         return;
     }
     if ((pressed >> panel.btn[B_SCL]) & 1u) {             /* SCL: the rotor's speed: off -> SLOW -> FAST -> STOP -> SLOW */

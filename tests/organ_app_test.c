@@ -278,8 +278,8 @@ int main(int argc, char **argv)
         uint32_t h_pv, h_home2;
         press(B_HOME);
         h_home2 = frame_hash();
-        press(B_FX);
-        bad += check("FX: the PERC & VIB page", oa_page == 2);
+        oa_page = 2;                                       /* (FX no longer goes to this page, 0.9.66: it is set by hand here) */
+        bad += check("the PERC & VIB page (set by hand)", oa_page == 2);
         h_pv = frame_hash();
         bad += check("  .. a different picture", h_pv != h_home2);
         turn(EN_K1, 1);
@@ -430,8 +430,8 @@ int main(int argc, char **argv)
         bad += check("SCL again: STOP", org_patch[OP_ROT_SPEED] == 0);
         press(B_SCL);
         bad += check("SCL again: SLOW", org_patch[OP_ROT_SPEED] == 1);
-        press(B_FX); press(B_FX);
-        bad += check("FX twice from HOME: the ROTARY page (PERC & VIB first)", oa_page == 3);
+        press(B_FX);
+        bad += check("FX from HOME: the ROTARY page (PERC & VIB is off the cycle)", oa_page == 3);
         h_r = frame_hash();
         turn(EN_K1, -1);
         bad += check("ROTARY: KNOB 1 counter-clockwise switches it off", org_patch[OP_ROT] == 0);
@@ -907,7 +907,7 @@ int main(int argc, char **argv)
         for (ok = 1, i = 0; i < 9u; i++)
             ok &= org_patch[OP_UB + i] == C[i];
         bad += check("  .. another button (FX) leaves the mode and does its work; the bars picked (C: 800000000) stay",
-                     !oa_dbp && !org_dbp_mode && oa_page == 2u && ok);
+                     !oa_dbp && !org_dbp_mode && oa_page == 3u && ok);
         fm1_in.notes = 1u << 7;
         keyboard_block();
         bad += check("  .. the keys play again", kb_note[7] != KB_SILENT);
