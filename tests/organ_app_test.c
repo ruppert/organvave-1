@@ -258,7 +258,7 @@ int main(int argc, char **argv)
     }
     fm_midi_base(0);
     press(B_GLO);
-    oa_gl_row = 5;
+    oa_gl_row = 6;
     turn(EN_ALGO, 1);
     bad += check("  .. ABOUT", oa_gl == 3);
     turn(EN_ALGO, 1);

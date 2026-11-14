@@ -446,11 +446,12 @@ static void oa_sv_letter(int32_t s)
  * (settings.c set_bytes): row 7 holds FMini-1's layout for the two MIDI bytes (so they carry over) and, since 0.9.5, the marker
  * 0xC5, the lower and pedal channels; rows 8..10 hold the CC of each patch byte (0 none) */
 #define OA_NCTL 84u                                       /* the patch bytes a CC may drive (OP_UB .. OP_SPLIT_PT; OP_DRV_FAT, unused, is skipped in the list) */
-#define OA_NROW 6u
+#define OA_NROW 7u                                        /* (v0.9.69: SCREEN, the panel's colours, is row 5; ABOUT row 6) */
 static uint8_t oa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
 static uint8_t oa_gl_row;                                 /* 0 MIDI IN, 1 UPPER, 2 LOWER, 3 PEDAL, 4 MIDI CC, 5 ABOUT */
 static uint8_t oa_cc_row;                                 /* MIDI CC: the control highlighted (its patch byte) */
 static uint8_t oa_cfg_dirty;
+static uint8_t oa_scr;                                   /* SCREEN: the panel's gamma, 0 NORMAL, 1 VIVID (settings row 7, byte 7; lcd.c) */
 static uint8_t oa_ccmap[OA_NCTL];                         /* the CC (1..119) that sets each patch byte, 0 none */
 static const char *const OA_SRC[3] = {"USB", "MIDI", "ALL"};       /* fm_midi_src 0, 1, 3 */
 static uint8_t *oa_cfg_byte(uint32_t r, uint32_t i) { return &set_bytes[r % 16u][i % 32u]; }
@@ -475,6 +476,8 @@ static void oa_cfg_load(void)
         fm_midi_src = 3;
         fm_midi_base(0);
     }
+    oa_scr = *oa_cfg_byte(7, 7) == 1u ? 1u : 0u;
+    lcd_gamma(oa_scr);                                    /* the panel's colours, as saved (v0.9.69) */
     fm_bend_mode = 0;
     fm_bt = 0;
 }
@@ -493,6 +496,7 @@ static void oa_cfg_save(void)
     *oa_cfg_byte(7, 6) = fm_ch_pd;
     for (i = 0; i < OA_NCTL; i++)
         *oa_cfg_byte(8u + i / 32u, i) = oa_ccmap[i];
+    *oa_cfg_byte(7, 7) = oa_scr;
     settings_save();                                      /* (deferred while anything sounds) */
 }
 static void oa_gl_close(void)
@@ -617,7 +621,8 @@ static void scr_global(void)
         str_cpy(b, "OFF", 4);
     oa_gl_line(106, "PEDAL CHANNEL", b, oa_gl_row == 3u);
     oa_gl_line(130, "MIDI CC", ">", oa_gl_row == 4u);
-    oa_gl_line(154, "ABOUT", ">", oa_gl_row == 5u);
+    oa_gl_line(154, "SCREEN", oa_scr ? "VIVID" : "NORMAL", oa_gl_row == 5u);
+    oa_gl_line(178, "ABOUT", ">", oa_gl_row == 6u);
     oa_scrollbar(0u, OA_NROW, OA_NROW, 230, 30, 186);
     footer("SELECT: ITEM   ALGO: VALUE   GLO: BACK");
 }
@@ -1965,6 +1970,10 @@ static void oa_input(void)
                     volatile uint8_t *ch = oa_gl_row == 1u ? &fm_ch_up : oa_gl_row == 2u ? &fm_ch_lo : &fm_ch_pd;
                     *ch = (uint8_t)clamp((int32_t)*ch + d, 0, 16);
                     panic_req |= 1u;
+                    oa_cfg_dirty = 1;
+                } else if (oa_gl_row == 5u) {
+                    oa_scr = (uint8_t)clamp((int32_t)oa_scr + d, 0, 1);
+                    lcd_gamma(oa_scr);
                     oa_cfg_dirty = 1;
                 } else if (oa_gl_row == 4u)
                     oa_gl = 2;

@@ -161,6 +161,7 @@ static void lcd_power(uint32_t s)              /* MENU > SCREEN OFF (lcd.c): off
 }
 static void lcd_wake_now(void) {}
 static void lcd_init(void) {}
+static void lcd_gamma(uint32_t m) { (void)m; }   /* (the panel's gamma: lcd.c; the emulator has no panel) */
 
 #include "../../firmware/src/gfx.c"
 #include "../../firmware/src/core.h"

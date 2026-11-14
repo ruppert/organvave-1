@@ -82,6 +82,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
             host_screen[(y + j) * 240u + x + i] = p[j * w + i];
 }
 static void lcd_sync(void) {}
+static void lcd_gamma(uint32_t m) { (void)m; }   /* (the panel's gamma: lcd.c; the host has no panel) */
 
 /* ------------------------------------------------------- the firmware --- */
 #include "../firmware/src/gfx.c"
