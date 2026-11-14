@@ -662,8 +662,8 @@ static void oa_vp_draw(void)                              /* the vibrato selecto
 {
     static const char *const VIB_HY[7] = {"V-1", "V-1", "V-2", "V-3", "C-1", "C-2", "C-3"};   /* OP_VIB 0 (off) sits at V1 */
     uint32_t v = org_patch[OP_VIB] <= 6u ? org_patch[OP_VIB] : 0u;
-    cv_rect(55, 61, 130, 46, C_ORANGE);                    /* 60% of the 216 px width, 10 px taller: centred on y 84 */
-    cv_rect(57, 63, 126, 42, C_POP);
+    cv_rect(75, 61, 91, 46, C_ORANGE);                     /* 70% of the 130 px width, centred on x 120 and y 84 */
+    cv_rect(77, 63, 87, 42, C_POP);
     ctext(120, 77, &AF_N, VIB_HY[v], C_CREAM, C_POP);      /* 77: the caps (15 rows) centred on y 84, 35% of 240 */
 }
 
