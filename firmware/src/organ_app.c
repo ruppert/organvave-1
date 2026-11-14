@@ -1407,7 +1407,7 @@ static void scr_drawbars(void)
         oa_reg(r, &org_patch[OP_UB]);
         ctext(120, 203, &AF_N, r, C_CREAM, C_PANEL);
     }
-    footer(oa_man ? "SELECT: BAR   ALGORITHM: PULL   EDIT: ADVANCED" : "SELECT: BAR   ALGORITHM: PULL   EDIT: LOWER");
+    footer("SELECT: BAR   ALGORITHM: PULL   EDIT: ADVANCED");
 }
 
 /* the control's name (a patch byte): the drawbars of the manuals, the pages' labels */
@@ -1686,15 +1686,9 @@ static void oa_buttons(uint32_t pressed)
         oa_page = oa_page == 0u ? 9u : 0u;
         return;
     }
-    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: the drawbars (upper); again: the lower manual's with the pedal's two; again: ADVANCED EDIT; again: the upper's */
+    if ((pressed >> panel.btn[B_EDIT]) & 1u) {            /* EDIT: ADVANCED EDIT; again: HOME */
         oa_close_all();
-        if (oa_page == 1u && oa_man) {
-            oa_page = 8;
-            return;
-        }
-        oa_man = oa_page == 1u ? (uint8_t)(oa_man ^ 1u) : 0u;
-        oa_sel = (uint8_t)(oa_man && oa_page == 1u ? (oa_sel < 2u ? oa_sel : 2u) : 0u);
-        oa_page = 1;
+        oa_page = oa_page == 8u ? 0u : 8u;
         return;
     }
     if ((pressed >> panel.btn[B_GLO]) & 1u) {             /* GLO: the global pop-up; in ABOUT, back; again, close */
@@ -2036,7 +2030,7 @@ static void oa_leds(void)
     for (k = 0; k < NB; k++)
         led_put(nd, panel.btn[k], 1);                       /* every button's glow */
     led_put(nl, panel.btn[B_HOME], oa_page == 0u);
-    led_put(nl, panel.btn[B_EDIT], oa_page == 1u || oa_page == 8u);
+    led_put(nl, panel.btn[B_EDIT], oa_page == 8u);
     led_put(nl, panel.btn[B_FX], oa_page >= 2u && oa_page <= 7u);
     led_put(nl, panel.btn[B_SCL], org_patch[OP_ROT] != 0 && org_patch[OP_ROT_SPEED] != 0);
     led_put(nl, panel.btn[B_ENV], org_patch[OP_PERC] != 0);
